@@ -51,21 +51,25 @@ class Transport:
         if is_profile and include_profile:
             profile=self.api('/aweme/v1/web/user/profile/other/',{'sec_user_id':identity})
             if str((profile.get('user') or {}).get('sec_uid'))!=identity:raise ReadError('PROFILE_IDENTITY_MISMATCH')
-            if on_page({'body':profile,'items':[profile['user']],'cursor':cursor,'has_more':True,'page_index':0,'observed_at':time.time()})=='stop':
+            if on_page({'request_params':{'sec_user_id':identity},'body':profile,'items':[profile['user']],'cursor':cursor,'has_more':True,'page_index':0,'observed_at':time.time()})=='stop':
                 return {'pages':[],'coverage':{'unique':0,'pages':0,'stop_reason':'client_stopped','end_observed':False}}
         for index in range(max_pages):
             if is_profile:
-                body=self.api('/aweme/v1/web/aweme/post/',{'sec_user_id':identity,'max_cursor':cursor,'count':18,'locate_query':'false','show_live_replay_strategy':1})
+                request_params={'sec_user_id':identity,'max_cursor':cursor}
+                body=self.api('/aweme/v1/web/aweme/post/',{**request_params,'count':18,'locate_query':'false','show_live_replay_strategy':1})
                 items=body.get('aweme_list') or [];next_cursor=body.get('max_cursor');item_key='aweme_id'
-                if any((i.get('author') or {}).get('sec_uid')!=identity for i in items):raise ReadError('PROFILE_IDENTITY_MISMATCH')
+                # Co-created posts may have a different author. The validated
+                # profile request owns this list; retain its identity separately.
+
             else:
-                body=self.api('/aweme/v1/web/comment/list/',{'aweme_id':identity,'cursor':cursor,'count':min(50,max_items-len(seen)),'item_type':0})
+                request_params={'aweme_id':identity,'cursor':cursor}
+                body=self.api('/aweme/v1/web/comment/list/',{**request_params,'count':min(50,max_items-len(seen)),'item_type':0})
                 items=body.get('comments') or [];next_cursor=body.get('cursor');item_key='cid'
                 if any(i.get('aweme_id') is not None and str(i['aweme_id'])!=identity for i in items):raise ReadError('COMMENT_IDENTITY_MISMATCH')
             if any(not i.get(item_key) for i in items):raise ReadError('ITEM_IDENTITY_MISSING')
             seen.update(str(i[item_key]) for i in items)
             more=bool(body.get('has_more'));stalled=more and (next_cursor is None or next_cursor==cursor)
-            page={'body':body,'items':items,'cursor':next_cursor,'has_more':more,'page_index':index+1,'observed_at':time.time()}
+            page={'request_params':request_params,'body':body,'items':items,'cursor':next_cursor,'has_more':more,'page_index':index+1,'observed_at':time.time()}
             decision=on_page(page);pages.append(page)
             if decision=='stop':stop='client_stopped';break
             if not more:stop='end_observed';break
@@ -92,21 +96,26 @@ class Transport:
                 if query.get(key,['0'])!=[value]:return
             try:body=response.json()
             except Exception:return
-            pending.append(body)
+            request_params={k:query[k][0] for k in ('keyword','cursor','offset','sort_type','publish_time','filter_duration','search_range') if query.get(k)}
+            pending.append((body,request_params))
         self.browser.page.on('response',capture)
         seen=set()
         try:
             self.goto('https://www.douyin.com/search/'+quote(keyword,safe='')+'?'+urlencode({'type':'video',**expected}))
             for index in range(max_pages):
-                self.check();self.browser.page.wait_for_timeout(2000)
+                self.check()
+                for wait_index in range(20):
+                    if pending:break
+                    self.before_action()
+                    self.browser.page.wait_for_timeout(500)
                 batch=list(pending);pending.clear()
-                for body in batch:
+                for body,request_params in batch:
                     if body.get('status_code') not in (None,0):raise ReadError('UPSTREAM_REJECTED','platform')
                     items=[d['aweme_info'] for d in body.get('data') or [] if isinstance(d,dict) and d.get('aweme_info')]
                     if any(not item.get('aweme_id') for item in items):raise ReadError('ITEM_IDENTITY_MISSING')
                     seen.update(str(item['aweme_id']) for item in items)
                     more=bool(body.get('has_more',True))
-                    decision=on_page({'body':body,'items':items,'cursor':body.get('cursor'),'has_more':more,'page_index':index+1,'observed_at':time.time()})
+                    decision=on_page({'endpoint':'aweme_v1_web_search_item','request_params':request_params,'body':body,'items':items,'cursor':body.get('cursor'),'has_more':more,'page_index':index+1,'observed_at':time.time()})
                     if decision=='stop' or not more or len(seen)>=max_items:return
                 if index+1<max_pages:
                     self.check();self.browser.page.mouse.wheel(0,900)
@@ -115,7 +124,7 @@ class Transport:
 
     def mix_views(self,user_id,*,max_mixes=5,max_videos=60,on_page=lambda page:None):
         body=self.api('/aweme/v1/web/mix/list/',{'sec_user_id':user_id,'req_from':'channel_pc_web','cursor':0,'count':12})
-        if on_page({'endpoint':'aweme_v1_web_mix_list','body':body,'items':[],'cursor':'mix-list','has_more':True})=='stop':return
+        if on_page({'endpoint':'aweme_v1_web_mix_list','request_params':{'sec_user_id':user_id,'cursor':0},'body':body,'items':[],'cursor':'mix-list','has_more':True})=='stop':return
         seen=0
         for mix in (body.get('mix_infos') or [])[:max_mixes]:
             cursor=0
@@ -124,6 +133,6 @@ class Transport:
                 items=body.get('aweme_list') or []
                 seen+=sum(1 for item in items if (item.get('statistics') or {}).get('play_count'))
                 next_cursor=body.get('cursor',cursor+20)
-                if on_page({'endpoint':'aweme_v1_web_mix_aweme','body':body,'items':items,'cursor':'mix:'+str(mix['mix_id'])+':'+str(next_cursor),'has_more':bool(body.get('has_more'))})=='stop':return
+                if on_page({'endpoint':'aweme_v1_web_mix_aweme','request_params':{'mix_id':mix['mix_id'],'cursor':cursor},'body':body,'items':items,'cursor':'mix:'+str(mix['mix_id'])+':'+str(next_cursor),'has_more':bool(body.get('has_more'))})=='stop':return
                 if not body.get('has_more') or next_cursor==cursor:break
                 cursor=next_cursor

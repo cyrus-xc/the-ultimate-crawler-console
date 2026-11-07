@@ -22,7 +22,7 @@ def page(value):
               'aweme_v1_web_user_profile_other' if 'user' in body else
               'aweme_v1_web_comment_list' if 'comments' in body else
               'aweme_v1_web_aweme_post' if 'aweme_list' in body else 'aweme_v1_web_search_item')
-    value['records']=[{'endpoint':value.get('endpoint',endpoint),'body':body,'captured_at':value.get('observed_at',time.time()),'status':200}]
+    value['records']=[{'endpoint':value.get('endpoint',endpoint),'body':body,'captured_at':value.get('observed_at',time.time()),'status':200,'request_params':{k:v for k,v in value.get('request_params',{}).items() if k in {'keyword','sec_user_id','aweme_id','cursor','max_cursor','offset','sort_type','publish_time','filter_duration','search_range','mix_id'}}}]
     emit({'type':'page','data':value})
     return answer().get('action','stop')
 def shutdown(*_):raise KeyboardInterrupt()
@@ -130,12 +130,12 @@ def main():
                     if user:data['user_id']=user.group(1)
                     page({'body':data,'items':[],'cursor':None,'has_more':False})
                 elif operation=='post.detail':
-                    body=transport.detail(target['post_id']);page({'body':body,'items':[body['aweme_detail']],'cursor':None,'has_more':False})
+                    body=transport.detail(target['post_id']);page({'request_params':{'aweme_id':target['post_id']},'body':body,'items':[body['aweme_detail']],'cursor':None,'has_more':False})
                 elif operation=='profile.get':
                     transport.goto('https://www.douyin.com/user/'+target['user_id'])
                     body=transport.api('/aweme/v1/web/user/profile/other/',{'sec_user_id':target['user_id']})
                     if str((body.get('user') or {}).get('sec_uid'))!=target['user_id']:raise ReadError('PROFILE_IDENTITY_MISMATCH')
-                    decision=page({'body':body,'items':[body['user']],'cursor':None,'has_more':False})
+                    decision=page({'request_params':{'sec_user_id':target['user_id']},'body':body,'items':[body['user']],'cursor':None,'has_more':False})
                     if decision!='stop' and body['user'].get('mix_count'):transport.mix_views(target['user_id'],on_page=page)
                 elif operation=='search.posts':
                     transport.search(target['keyword'],max_items=params.get('max_items',50),max_pages=request['limits']['max_pages'],sort=params.get('sort'),filters=params.get('filters'),on_page=page)

@@ -121,6 +121,18 @@ Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原�
 
 最终抖音有界实测：二维码已通过 DOM 登录弹窗检查，正常 `ACTION_VIEW` 和手机确认成功将网页推进到平台的短信身份验证。证据为私有 `runtime/douyin-login-transport.json` 与 `runtime/douyin-auth-state.png`；诊断只存登录端点路径（不含查询参数）、HTTP 状态、白名单业务码及状态，不存二维码载荷、凭证或原始响应。错误码 `2046` 与短信验证页面在本次同时被观察到，不据此臆测其他场景的错误含义。
 
-当前验证页面已通过控制台交给用户，保留运行中的浏览器与控制会话，等待用户完成短信验证后点击确认继续并结束接管。此时不得重启后台、关闭 worker 或重新导航，以免丢失验证上下文。代码已增加实际短信验证墙的 `VERIFICATION_REQUIRED` 分类，且“打开/定位”在已有抖音页面时只聚焦，不重载；这些最后修改在下一次 worker 启动时生效，本次没有为加载代码中断用户的验证页面。没有自动接收、发送短信或绕过身份验证。
+用户已完成短信验证，控制台确认登录并正常结束接管。随后精确重启抖音 worker，认证保持有效，验证墙识别与保留当前页面的聚焦行为已经加载。未自动接收、发送短信或绕过身份验证。Vimium C 插件曾拦截用户数字输入，暂停插件后恢复；没有为此更改 RFB 键盘协议。
 
-针对这次诊断与修复，`python -B -m unittest discover -s test -p 'test_login_diagnostics.py'`（4 项）、`python -B -m unittest discover -s test -p 'test_douyin_web_worker.py'`（5 项）及定向 `git diff --check` 均 PASS。验证通过前，抖音 Web 不应恢复爬虫消费；用户完成验证后仍需真实登录检查与实际采集验收。
+针对这次诊断与修复，`python -B -m unittest discover -s test -p 'test_login_diagnostics.py'`（4 项）、`python -B -m unittest discover -s test -p 'test_douyin_web_worker.py'`（5 项）及定向 `git diff --check` 均 PASS。上述为登录诊断阶段记录；用户完成验证后的验收如下。
+
+
+## 登录完成后的真实端到端验收（2026-11-08）
+
+- 后台真实认证通过，精确重启抖音 worker 后仍认证通过；无须重启 XHS 或手机消费者。
+- 正式队列搜索曾返回 16 条（`douyin-search-endpoint-fixed.json`），详情 1 条、评论 5 条、主页 21 帖及 1 条用户资料成功。最新另一次搜索响应为 HTTP 成功、status_code=0、has_more=0、data=[]，独立保存并物化为 0 条，不以旧的 16 条覆盖。
+- 实际 `DouyinQueueCollector` → `douyin.materialize` 重放确认四类结果数量一致；关键词、帖子/作者归属、评论关联和请求游标均正确，原始响应及采集时间未改变。原始证据仅保存在私有 `runtime/deployment-smoke/`。
+- 修复搜索响应 endpoint 误判，增加受限的结构化 `request_params`；pipeline 优先使用这些参数，兼容旧录制 URL，不伪造已观察链接。请求游标与下一页游标分开保存。
+- 主页按已验证请求的列表 owner 归属，允许合法共创帖保留不同原作者；错误的用户资料身份仍拒绝。搜索等待响应最长 10 秒，并在等待中检查操作权限，避免冷启动固定等待 2 秒的误报。
+- 后台全量 Python 50 项 PASS；Node 未修改，前次全量 155 项 PASS。主项目相关回归：Douyin 79、DouyinKolPerformance 71、DouyinCaseStudy 36、CampaignWatch 279，均 PASS。
+
+此为小量、单页实测，不推断所有排序、搜索条件或多页场景均完成真机验收；其他设备能力限制仍见手机验收记录。

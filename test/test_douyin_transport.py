@@ -22,8 +22,20 @@ class DouyinTests(unittest.TestCase):
         result=t.pages('post.comments',{'post_id':'p'},max_items=50,max_pages=1)
         self.assertEqual(result['coverage']['stop_reason'],'page_limit');self.assertFalse(result['coverage']['end_observed'])
     def test_wrong_profile_rejected(self):
-        t=OfflineTransport([{'aweme_list':[{'aweme_id':'1','author':{'sec_uid':'other'}}],'has_more':False}])
-        with self.assertRaisesRegex(ReadError,'PROFILE_IDENTITY_MISMATCH'):t.pages('profile.posts',{'user_id':'u'},max_items=10,max_pages=1)
+        t=OfflineTransport([{'user':{'sec_uid':'other'}}])
+        observed=[]
+        with self.assertRaisesRegex(ReadError,'PROFILE_IDENTITY_MISMATCH'):
+            t.pages('profile.posts',{'user_id':'u'},max_items=10,max_pages=1,include_profile=True,on_page=observed.append)
+        self.assertEqual(observed,[])
+        self.assertEqual(len(t.calls),1)
+        self.assertEqual(t.calls[0][1]['sec_user_id'],'u')
+    def test_co_created_profile_post_preserves_list_owner_and_original_author(self):
+        t=OfflineTransport([{'user':{'sec_uid':'u'}},{'aweme_list':[{'aweme_id':'1','author':{'sec_uid':'other'}}],'max_cursor':18,'has_more':False}])
+        observed=[]
+        t.pages('profile.posts',{'user_id':'u'},max_items=10,max_pages=1,include_profile=True,on_page=observed.append)
+        self.assertEqual(observed[0]['items'][0]['sec_uid'],'u')
+        self.assertEqual(observed[1]['request_params'],{'sec_user_id':'u','max_cursor':0})
+        self.assertEqual(observed[1]['items'][0]['author']['sec_uid'],'other')
     def test_stalled_cursor_does_not_loop_or_claim_end(self):
         t=OfflineTransport([{'comments':[],'cursor':0,'has_more':True}])
         result=t.pages('post.comments',{'post_id':'p'},max_items=50,max_pages=3)
