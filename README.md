@@ -26,3 +26,16 @@ Python client: `clients/python/crawler_queue.py`. The client never implements br
 ## Migration
 
 See [execution plan](docs/EXECUTION_PLAN_ZH.md) and [source manifest](docs/migration-manifest.json). Source hashes refer to the actual dirty xhs-analysis worktree, not only its HEAD. Preserve existing response readers, normalizers, evidence and cache semantics. The change to phone collection replaces App internal-method request triggering with normal deep-link navigation/taps/swipes; it does not replace structured interface response reads with OCR.
+
+### Passive phone runtime
+
+`adapters/xhs-phone/runtime.js` owns version checks, the explicitly selected
+ADB connection, a dynamically allocated localhost forward, and any Frida server
+it starts. Supply a local Frida 16.7.19 Android arm64 binary and its SHA-256;
+`adapters/xhs-phone/requirements.txt` pins the matching Python dependency.
+Runtime installers/binaries and login state are not source-controlled.
+`capture.js`/`capture_cli.py` coordinate a UI action after the observer is ready,
+then return its structured response through a private stdio channel. They do not
+load the former active App invocation agent. The caller owns the device lease
+through capture drain and runtime cleanup. The standalone HTTP server still has
+no automatically enabled live consumers; these modules are not a deployment switch.

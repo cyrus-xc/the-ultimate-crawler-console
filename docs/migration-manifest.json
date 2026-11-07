@@ -1440,6 +1440,27 @@
       "sha256": "99e216bf453d548e879a4dd8654f4a7e01421a9970895b253c4f56447de07e31",
       "category": "douyin_web",
       "treatment": "extract_collection_primitives_keep_business_in_pipeline"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/note_links.py",
+      "destination": "adapters/xhs-phone/note_links.py",
+      "sha256": "2a2e7dffacb7062aef241cf630292a2621be83ef7f886997d42402ccbdc26d18",
+      "treatment": "copied_identity_and_observed_link_validation",
+      "category": "xhs_phone"
+    },
+    {
+      "source": "/home/pcd/android-lab/configs/native-app-9.51.0.json",
+      "destination": "contracts/xhs-app-9.51.0.json",
+      "sha256": "f7f680dbeca9c6a5b78bbf21b6ffdabf9ce94baaf3821647b35b1bd5e045c1f7",
+      "treatment": "extracted_passive_metadata_and_endpoint_contract_only",
+      "category": "xhs_phone"
+    },
+    {
+      "source": "/home/pcd/android-lab/scripts/native-note-api-server.cjs",
+      "destination": "adapters/xhs-phone/runtime.js",
+      "sha256": "ec39f8a3b6a3219b53adf0b74e6b80fabc5bd96c37fded3e2157001b80206059",
+      "treatment": "extracted_runtime_lifecycle_only_no_active_invocation",
+      "category": "xhs_phone"
     }
   ]
 }

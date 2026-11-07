@@ -11,7 +11,7 @@ def clean(value, key=''):
     if SECRET.search(key):
         return '[REDACTED]'
     if isinstance(value, dict):
-        return {k: clean(v, k) for k, v in value.items()}
+        return {k: clean(v, k) for k, v in value.items() if k.lower() not in {'xsec_token','xsectoken'}}
     if isinstance(value, list):
         return [clean(v) for v in value]
     if isinstance(value, str):

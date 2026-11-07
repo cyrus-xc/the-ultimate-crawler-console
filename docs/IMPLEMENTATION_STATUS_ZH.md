@@ -12,7 +12,7 @@
 
 验证：
 
-- 新后台 `npm test`：55 项 Node 和 21 项 Python 离线测试 PASS。只使用 fake adapters；付费 gates 强制关闭。
+- 新后台 `npm test`：65 项 Node 和 23 项 Python 离线测试 PASS。只使用 fake adapters；付费 gates 强制关闭。
 - XHS 源码 `go test ./cmd/crawler ./crawler ./configs ./cookies ./browser`：PASS；未启用真实浏览器 opt-in fixture。
 - 原 pipeline 和 console 未修改运行代码，本阶段尚未执行其全量回归。最终迁移验收仍须执行原计划全部命令。
 
@@ -31,3 +31,5 @@ Q10 已确认并实现基础协议：Python wait_with_decisions 将按单元累�
 Q11 已确认：决策增加 phase/subject_id/capture_share，false 分享选择不等于停止；schema v4 保留 v3 未决状态。新增队列、HTTP、worker、Python 客户端及迁移测试。最多点赞排序完整流程实测通过；最多评论和最多收藏随后也通过相同流程，均为 HTTP 200、20 条、新鲜 Cronet 响应。
 
 2026-11-08：OnePlus（c7dee0b3，小红书 9.51.0）五种搜索排序均通过同一 UI 驱动流程：综合、最新、最多点赞、最多评论、最多收藏。每次都校验真实请求的排序和无额外筛选，HTTP 200，20 条，新鲜 Cronet 响应。证据保留在本机私有 smoke 目录，未提交原始响应/截图。这不代表 Redmi、连续分页、主页、评论或正式队列消费者已经通过。
+
+独立手机运行时已加入：runtime.js 校验 App 版本、APK 摘要、工具摘要和前台 PID；仅清理自身 forward/新启动服务，并检查 PID 创建时刻。capture.js/capture_cli.py 管理被动 observer 与 UI 触发，取消等待已发出的动作 drain，保留 Unicode 响应。新运行时已在 OnePlus 通过独立端到端搜索验证（time_descending、20 条、HTTP 200、新鲜 Cronet 响应），未调用旧 PhoneBackend 或主动 App API；实测仍持有旧工具全局兼容锁。新服务尚未注册正式消费者，多手机并发与分页仍待接入验证。

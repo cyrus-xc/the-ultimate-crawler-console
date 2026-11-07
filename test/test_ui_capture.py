@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adapters/xhs-phone'))
 from ui_capture import UiResponseCapture, CaptureError, semantic_request
+from note_links import valid_note_url
 N='a'*24
 CONTRACT={'http_method':'GET','path':'/api/sns/v1/note/imagefeed','allowed_hosts':['example.test'],
           'parameters':[{'name':'note_id','type':'java.lang.String'}]}
@@ -82,4 +83,17 @@ class CaptureTests(unittest.TestCase):
         response['request']['query'][-1]['value']=response['request']['query'][-1]['value'].replace('不限','综合')
         result=capture.read('search',contract,values,lambda:session.scripts[-1].emit(response))
         self.assertEqual(result['effective_sort'],'time_descending')
+    def test_share_link_restored_only_for_observed_matching_host_and_note(self):
+        for host,accepted in [('www.xiaohongshu.com',True),('www.xiaohongshu.com.evil.test',False)]:
+            session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+            link='https://'+host+'/explore/'+N+'?xsec_token=fixture-only'
+            def trigger():
+                script=session.scripts[-1];script.takeshare=lambda observation:link;script.emit(wire())
+            result=capture.read('image_detail',CONTRACT,{'note_id':N},trigger,valid_note_url=valid_note_url)
+            note=result['response']['data'][0]['note_list'][0]
+            self.assertEqual(note.get('share_info',{}).get('link'),link if accepted else None)
+    def test_standalone_access_tokens_are_removed_before_evidence_storage(self):
+        from runtime_redaction import clean
+        value=clean({'data':{'xsec_token':'fixture-only','xsecToken':'fixture-only','id':N}})
+        self.assertEqual(value,{'data':{'id':N}})
 if __name__=='__main__':unittest.main()
