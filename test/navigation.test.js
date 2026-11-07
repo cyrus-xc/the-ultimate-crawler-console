@@ -52,3 +52,51 @@ test('page navigation stops at the first observed response instead of blind mult
  const nav=new XhsNavigation({}, {guard:()=>{}});let swipes=0;nav.swipe=async()=>{swipes++;};await nav.nextPage(()=>swipes===3);assert.equal(swipes,3);
  swipes=0;await assert.rejects(nav.nextPage(()=>false),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});assert.equal(swipes,12);
 });
+
+test('profile restore uses the exact target deep link and checks profile UI before swiping',async()=>{
+ const commands=[],views=[[node('首页')],[node('笔记'),node('粉丝')]];
+ const nav=new XhsNavigation({shell:async(...a)=>commands.push(a),ui:async()=>views.shift(),wait:async()=>{}},{guard:()=>{}});
+ await nav.restoreProfile('a'.repeat(24));assert.equal(commands[0][5],'xhsdiscover://user/'+ 'a'.repeat(24));
+ const wrong=new XhsNavigation({shell:async()=>{},ui:async()=>[node('首页'),node('发现')],wait:async()=>{}},{guard:()=>{}});
+ await assert.rejects(wrong.restoreProfile('a'.repeat(24)),{code:'PROFILE_RESTORE_UNCONFIRMED'});
+});
+test('restored profile replay has an explicit swipe bound and stops before touching on ready',async()=>{
+ const nav=new XhsNavigation({}, {guard:()=>{}});let swipes=0;nav.swipe=async()=>{swipes++;};
+ await nav.nextPage(()=>true,{maxSwipes:24});assert.equal(swipes,0);
+ await assert.rejects(nav.nextPage(()=>false,{maxSwipes:24}),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});assert.equal(swipes,24);
+ await assert.rejects(nav.nextPage(()=>false,{maxSwipes:121}),{code:'INVALID_PAGE_SWIPE_LIMIT'});
+});
+const oplusWarning=()=>[
+ {...node('“小红书”异常'),'package':'com.oplus.battery'},
+ {...node('“小红书”运行异常，建议前往软件商店更新至最新版本。'),'package':'com.oplus.battery'},
+ {...node('取消','android.widget.Button'),'package':'com.oplus.battery',clickable:'true',enabled:'true'},
+ {...node('更新','android.widget.Button'),'package':'com.oplus.battery',clickable:'true',enabled:'true'},
+];
+test('known OnePlus XHS abnormal warning is cancelled and UI is read again',async()=>{
+ const views=[oplusWarning(),[node('笔记'),node('粉丝')]],taps=[];
+ const nav=new XhsNavigation({ui:async()=>views.shift(),tap:async n=>taps.push(n),wait:async()=>{}},{guard:()=>{}});
+ assert.deepEqual((await nav.ui()).map(n=>n.text),['笔记','粉丝']);assert.equal(taps.length,1);assert.equal(taps[0].text,'取消');
+});
+test('OnePlus warning handler never accepts other packages, apps, or generic update dialogs',async()=>{
+ for(const mutate of [ns=>ns.map(n=>({...n,package:'other.package'})),ns=>ns.map(n=>({...n,text:n.text.replaceAll('小红书','其他应用')})),ns=>ns.filter(n=>!n.text.includes('运行异常'))]){
+  const nodes=mutate(oplusWarning()),taps=[];
+  const nav=new XhsNavigation({ui:async()=>nodes,tap:async n=>taps.push(n),wait:async()=>{}},{guard:()=>{}});
+  assert.equal(await nav.ui(),nodes);assert.equal(taps.length,0);
+ }
+});
+test('known warning with no unique enabled cancel stops without tapping update',async()=>{
+ for(const nodes of [oplusWarning().filter(n=>n.text!=='取消'),[...oplusWarning(),oplusWarning()[2]],oplusWarning().map(n=>n.text==='取消'?{...n,enabled:'false'}:n)]){
+  let taps=0;const nav=new XhsNavigation({ui:async()=>nodes,tap:async()=>{taps++;},wait:async()=>{}},{guard:()=>{}});
+  await assert.rejects(nav.ui(),{code:'APP_WARNING_CANCEL_UNAVAILABLE'});assert.equal(taps,0);
+ }
+});
+test('persistent OnePlus warning is not clicked repeatedly',async()=>{
+ let taps=0;const nav=new XhsNavigation({ui:async()=>oplusWarning(),tap:async()=>{taps++;},wait:async()=>{}},{guard:()=>{}});
+ await assert.rejects(nav.ui(),{code:'APP_WARNING_DISMISS_FAILED'});assert.equal(taps,1);
+});
+
+test('read-only profile assertion never dismisses an overlay or navigates',async()=>{
+ let inputs=0;const adb={ui:async()=>[node('笔记'),node('粉丝')],tap:async()=>{inputs++;},shell:async()=>{inputs++;}};
+ const nav=new XhsNavigation(adb,{guard:()=>{}});await nav.assertProfile();assert.equal(inputs,0);
+ adb.ui=async()=>oplusWarning();await assert.rejects(nav.assertProfile(),{code:'PROFILE_RESTORE_UNCONFIRMED'});assert.equal(inputs,0);
+});

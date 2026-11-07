@@ -45,3 +45,18 @@ test('observer response feedback reaches an ongoing UI action before completion'
  const result=await captureResponse({...options,trigger:async control=>{assert.equal(control.responseReady(),false);child.stdout.write(JSON.stringify({event:'response_ready'})+'\n');await new Promise(r=>setImmediate(r));saw=control.responseReady();}});
  assert.equal(saw,true);assert.equal(result.status,200);
 });
+
+test('navigation exhaustion returns observer diagnostics before capture cleanup',async()=>{
+ const {options,child}=fixture();let initial=true,reported=false;
+ child.stdin=new Writable({write(data,encoding,done){
+  if(initial){initial=false;setImmediate(()=>child.stdout.write(JSON.stringify({event:'perform_action'})+'\n'));}
+  else{
+   const action=JSON.parse(String(data));assert.equal(action.action,'failed');assert.equal(action.code,'PHONE_PAGE_RESPONSE_UNOBSERVED');reported=true;
+   child.stdout.write(JSON.stringify({event:'error',code:action.code,diagnostics:{events:{response_json:1},observed_requests:[{requested_page_match:false,target_match_without_pagination:true}]}})+'\n');
+  }
+  done();
+ }});
+ await assert.rejects(captureResponse({...options,trigger:async()=>{throw Object.assign(Error('unobserved'),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});}}),e=>{
+  assert.equal(e.code,'PHONE_PAGE_RESPONSE_UNOBSERVED');assert.equal(e.diagnostics.events.response_json,1);return true;
+ });assert.equal(reported,true);
+});

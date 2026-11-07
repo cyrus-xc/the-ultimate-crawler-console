@@ -7,7 +7,7 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
  if(!values||typeof values!=='object'||Array.isArray(values)||Buffer.byteLength(encoded)>1024*1024)throw error('INVALID_CAPTURE_INPUT');
  await guard();if(signal?.aborted)throw signal.reason;
  const child=spawnProcess(python,['-B',path.join(__dirname,'capture_cli.py'),'--contract',contractPath,'--endpoint',endpoint,'--pid',String(pid),'--operation',operation,'--timeout',String(timeoutSeconds)],{stdio:['pipe','pipe','ignore'],env:{...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'}});
- const decoder=new StringDecoder('utf8');let buffer='',bytes=0,result=null,failure=null,action=null,actionDone=false,responseReady=false,killTimer;
+ const decoder=new StringDecoder('utf8');let buffer='',bytes=0,result=null,failure=null,action=null,actionDone=false,responseReady=false,killTimer,actionFailure=null;
  const stop=reason=>{if(!failure)failure=reason;child.kill('SIGTERM');if(!killTimer)killTimer=setTimeout(()=>child.kill('SIGKILL'),2000);};
  const abort=()=>stop(signal.reason||error('STOP_REQUESTED'));
  const timer=setTimeout(()=>stop(error('CAPTURE_TIMEOUT')),timeoutSeconds*1000+10000);
@@ -22,7 +22,12 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
    if(failure)continue;
    if(message.event==='perform_action'){
     if(action){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}
-    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger({responseReady:()=>responseReady});await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(stop);
+    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger({responseReady:()=>responseReady});await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(reason=>{
+     if(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED'].includes(reason?.code)){
+      // Let the observer return bounded packet diagnostics before it detaches.
+      actionFailure=reason;child.stdin.write(JSON.stringify({action:'failed',code:reason.code})+'\n');
+     }else stop(reason);
+    });
    }else if(message.event==='response_ready'){
     if(!action){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}responseReady=true;
    }else if(message.event==='result'){
@@ -37,6 +42,7 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
   // Do not release a device lease while a triggered ADB action is still draining.
   if(action)await action;
   if(failure)throw failure;
+  if(actionFailure)throw actionFailure;
   if(code!==0||!result)throw error('CAPTURE_FAILED');
   return result;
  }finally{clearTimeout(timer);clearTimeout(killTimer);signal?.removeEventListener('abort',abort);}

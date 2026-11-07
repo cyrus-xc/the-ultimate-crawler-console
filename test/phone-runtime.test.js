@@ -3,19 +3,20 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {PhoneRuntime,processStart}=require('../adapters/xhs-phone/runtime');
 function fixture(t,{running=true}={}){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'phone-runtime-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const binary=path.join(dir,'frida');fs.writeFileSync(binary,'fixture');const sha=crypto.createHash('sha256').update('fixture').digest('hex');
- const calls=[],state={running,start:'12345',version:'9.51.0',removeFail:false};
+ const calls=[],state={running,start:'12345',version:'9.51.0',removeFail:false,appPid:'123',forward:false};
  const stat=()=>`900 (frida server) ${['S',...Array(18).fill('0'),state.start].join(' ')}`;
  const adb={serial:'s',devices:async()=>[{serial:'s',state:'device'}],wait:async()=>{},shell:async(...args)=>{
   calls.push(args);
-  if(args[0]==='pidof')return args[1]==='com.xingin.xhs'?'123':state.running?'900':'';
+  if(args[0]==='pidof')return args[1]==='com.xingin.xhs'?state.appPid:state.running?'900':'';
   if(args[0]==='dumpsys'&&args[1]==='package')return 'versionName='+state.version;
-  if(args[0]==='dumpsys')return 'mResumedActivity: ActivityRecord{abc u0 com.xingin.xhs/.Main}\n * Hist #0: ActivityRecord{abc u0 com.xingin.xhs/.Main}\n app=ProcessRecord{xyz 123:com.xingin.xhs/u0}';
+  if(args[0]==='dumpsys')return `mResumedActivity: ActivityRecord{abc u0 com.xingin.xhs/.Main}\n * Hist #0: ActivityRecord{abc u0 com.xingin.xhs/.Main}\n app=ProcessRecord{xyz ${state.appPid}:com.xingin.xhs/u0}`;
+  if(args[0]==='am'&&args[1]==='force-stop'){state.appPid='456';return '';}
   if(args[0]==='pm')return 'package:/data/app/~~pkg==/base.apk';
   if(args[0]==='cat')return 'com.xingin.xhs\0';
   return '';
  },command:async args=>{
   calls.push(args);
-  if(args[0]==='forward'){if(args[1]==='tcp:0')return '41000';if(args[1]==='--remove'&&state.removeFail)throw Error('remove');return '';}
+  if(args[0]==='forward'){if(args[1]==='tcp:0'){state.forward=true;return '41000';}if(args[1]==='--list')return state.forward?'s tcp:41000 tcp:27043':'';if(args[1]==='--remove'&&state.removeFail)throw Error('remove');return '';}
   const cmd=args[3]||'';
   if(cmd.includes('sha256sum'))return sha+' file';
   if(cmd.includes(' -l ')){state.running=true;return '';}
@@ -44,4 +45,20 @@ test('one cleanup failure does not skip other owned cleanup',async t=>{
 });
 test('passive mode still enforces App version before runtime setup',async t=>{
  const {runtime,calls,state}=fixture(t);state.version='unknown';await assert.rejects(runtime.ensure(),{code:'APP_VERSION_MISMATCH'});assert.ok(!calls.some(a=>a[0]==='forward'||a[0]==='push'));
+});
+
+test('warm App recovery restarts only XHS, reacquires its PID and retains owned forward/runtime',async t=>{
+ const {runtime,calls}=fixture(t,{running:false});const first=await runtime.ensure(),server=runtime.ownedServer;
+ const recovered=await runtime.restartApp();
+ assert.equal(first.pid,123);assert.equal(recovered.pid,456);assert.equal(recovered.endpoint,first.endpoint);assert.equal(runtime.ownedServer,server);
+ assert.deepEqual(calls.filter(a=>a[0]==='am'),[['am','force-stop','com.xingin.xhs']]);
+ assert.equal(calls.filter(a=>a[0]==='forward'&&a[1]==='tcp:0').length,1);
+ assert.ok(!calls.some(a=>a.includes('clear')||a.includes('uninstall')));
+ await runtime.close();assert.equal(calls.filter(a=>a[0]==='forward'&&a[1]==='--remove').length,1);
+ assert.equal(calls.filter(a=>(a[3]||'').includes('kill 900')).length,1);
+});
+test('warm App recovery refuses an unknown version before stopping the App',async t=>{
+ const {runtime,state,calls}=fixture(t);await runtime.ensure();state.version='changed';
+ await assert.rejects(runtime.restartApp(),{code:'APP_VERSION_MISMATCH'});
+ assert.ok(!calls.some(a=>a[0]==='am'));await runtime.close();
 });

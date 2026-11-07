@@ -74,6 +74,14 @@ class PhoneRuntime {
   }
   throw fail('APP_NOT_READY');
  }
+ async restartApp(){
+  // A bounded caller-selected recovery for a warm cached profile. This is an
+  // ordinary process restart, never package/data clearing or credential reset.
+  // Keep the same guarded transport, runtime ownership and explicit forward.
+  await this.verifyApp();
+  await this.adb.shell('am','force-stop','com.xingin.xhs');
+  return this.ensure();
+ }
  async close(){
   // The caller keeps its device lease through cleanup. A supervisor may provide
   // a lease-only cleanupAdb so cancellation cannot suppress owned cleanup.

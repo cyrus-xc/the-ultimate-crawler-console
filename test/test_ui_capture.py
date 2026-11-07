@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adapters/xhs-phone'))
-from ui_capture import UiResponseCapture, CaptureError, semantic_request
+from ui_capture import UiResponseCapture, CaptureError, semantic_request, posted_page_groups
 from note_links import valid_note_url
 N='a'*24
 CONTRACT={'http_method':'GET','path':'/api/sns/v1/note/imagefeed','allowed_hosts':['example.test'],
@@ -117,6 +117,38 @@ class CaptureTests(unittest.TestCase):
         result=capture.read('user_info',user_contract,{'query':{'user_id':N}},trigger,related_contracts={'user_posted':posted_contract})
         self.assertEqual(result['related']['user_posted']['response']['data']['notes'][0]['id'],'b'*24)
 
+    def test_profile_navigation_retains_prefetched_posted_pages(self):
+        user_contract={**CONTRACT,'path':'/api/sns/v3/user/info','parameters':[{'name':'query','type':'java.util.Map'}]}
+        posted_contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
+        info={'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':user_contract['path'],'query':[{'name':'user_id','value':N}]},'status':200,'body':{'code':0,'success':True,'data':{'userid':N}}}
+        def posted(cursor,note):
+            return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':posted_contract['path'],'query':[{'name':'user_id','value':N},{'name':'cursor','value':cursor}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':note,'cursor':note,'user':{'userid':N}}],'has_more':True}}}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            for value in [info,posted('', 'b'*24),posted('unobserved-gap','d'*24),posted('b'*24,'c'*24)]:session.scripts[-1].emit(value)
+        result=capture.read('user_info',user_contract,{'query':{'user_id':N}},trigger,related_contracts={'user_posted':posted_contract})
+        first=result['related']['user_posted']
+        self.assertEqual(first['response']['data']['notes'][0]['id'],'b'*24)
+        self.assertEqual(len(first.get('related_pages',[])),1, 'profile navigation discarded a captured next page')
+        self.assertEqual(first['related_pages'][0]['response']['data']['notes'][0]['id'],'c'*24)
+
+    def test_navigation_failure_retains_safe_page_mismatch_diagnostics(self):
+        contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
+        response={'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':contract['path'],'query':[{'name':'user_id','value':N},{'name':'cursor','value':'already-prefetched'},{'name':'xsec_token','value':'private-fixture'}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[],'has_more':False}}}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            session.scripts[-1].emit(response)
+            raise CaptureError('PHONE_PAGE_RESPONSE_UNOBSERVED')
+        with self.assertRaises(CaptureError) as caught:
+            capture.read('user_posted',contract,{'user_id':N,'cursor':'expected'},trigger)
+        self.assertEqual(str(caught.exception),'PHONE_PAGE_RESPONSE_UNOBSERVED')
+        observed=caught.exception.diagnostics['observed_requests'][0]
+        self.assertFalse(observed['requested_page_match'])
+        self.assertTrue(observed['target_match_without_pagination'])
+        self.assertNotIn('private-fixture',str(caught.exception.diagnostics))
+        self.assertNotIn('already-prefetched',str(caught.exception.diagnostics))
+        self.assertTrue(session.scripts[-1].unloaded)
+
     def test_response_feedback_stops_ui_loop_before_action_returns(self):
         session=Session();ready=[];capture=UiResponseCapture(session,clock_ms=lambda:2)
         def trigger():
@@ -127,13 +159,38 @@ class CaptureTests(unittest.TestCase):
     def test_prefetched_target_page_is_preserved_but_foreign_user_is_not(self):
         contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
         def posted(cursor,note,user=N):
-            return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':contract['path'],'query':[{'name':'user_id','value':user},{'name':'cursor','value':cursor}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':note,'user':{'userid':user}}],'has_more':True}}}
+            return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':contract['path'],'query':[{'name':'user_id','value':user},{'name':'cursor','value':cursor}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':note,'cursor':'next' if cursor=='' else 'last','user':{'userid':user}}],'has_more':True}}}
         session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
         def trigger():
             for value in [posted('', 'b'*24),posted('next','c'*24),posted('', 'e'*24,'d'*24)]:session.scripts[-1].emit(value)
         result=capture.read('user_posted',contract,{'user_id':N,'cursor':''},trigger)
         self.assertEqual(len(result['related_pages']),1)
         self.assertEqual(result['related_pages'][0]['response']['data']['notes'][0]['id'],'c'*24)
+
+    def test_profile_replay_pages_are_retained_without_regressing_or_skipping_cursor(self):
+        contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
+        def posted(cursor,note,next_cursor,user=N):
+            return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':contract['path'],'query':[{'name':'user_id','value':user},{'name':'cursor','value':cursor}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':note,'cursor':next_cursor,'user':{'userid':user}}],'has_more':True}}}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            for value in [posted('', 'b'*24,'page2'),posted('page2','c'*24,'page3'),posted('page3','d'*24,'page4'),posted('unobserved-gap','e'*24,'gap-next'),posted('page4','f'*24,'wrong-next','0'*24)]:
+                session.scripts[-1].emit(value)
+        result=capture.read('user_posted',contract,{'user_id':N,'cursor':'page2'},trigger)
+        self.assertEqual(result['response']['data']['notes'][0]['id'],'c'*24)
+        self.assertEqual([p['response']['data']['notes'][0]['id'] for p in result['related_pages']],['d'*24])
+        self.assertEqual([p['response']['data']['notes'][0]['id'] for p in result['replayed_pages']],['b'*24,'e'*24])
+
+    def test_contiguous_profile_chain_retains_but_does_not_follow_cursor_cycles(self):
+        def page(request,cursor):
+            return {'request':{'query':[{'name':'cursor','value':request}]},'response':{'data':{'cursor':cursor,'notes':[],'has_more':True}}}
+        for destination in ['a','b']:
+            cyclic=page('b',destination)
+            following,replayed=posted_page_groups(page('a','b')['response'],[cyclic],'a')
+            self.assertEqual(following,[])
+            self.assertEqual(replayed,[cyclic])
+        valid=page('b','c');cyclic=page('c','b')
+        following,replayed=posted_page_groups(page('a','b')['response'],[valid,cyclic],'a')
+        self.assertEqual(following,[valid]);self.assertEqual(replayed,[cyclic])
 
     def test_standalone_access_tokens_are_removed_before_evidence_storage(self):
         from runtime_redaction import clean

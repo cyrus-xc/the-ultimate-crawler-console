@@ -79,6 +79,24 @@ def verify_payload(operation, values, wire, contract):
             raise CaptureError('NATIVE_TOPIC_SHAPE_MISMATCH')
     return body
 
+def posted_page_groups(first_body, pages, first_cursor=None):
+    """Partition observed pages without treating replay/gaps as cursor progress."""
+    remaining=list(pages);following=[];previous=first_body
+    visited={str(first_cursor)} if first_cursor is not None else set()
+    while True:
+        data=previous.get('data') or {};notes=data.get('notes') or []
+        cursor=data.get('cursor') or data.get('start') or (notes[-1].get('cursor') if notes else None)
+        if not cursor or str(cursor) in visited or data.get('has_more') is False:break
+        visited.add(str(cursor))
+        next_page=next((page for page in remaining if
+            {q['name']:q['value'] for q in page.get('request',{}).get('query',[])}.get('cursor')==str(cursor)),None)
+        if next_page is None:break
+        next_data=next_page['response'].get('data') or {};next_notes=next_data.get('notes') or []
+        next_cursor=next_data.get('cursor') or next_data.get('start') or (next_notes[-1].get('cursor') if next_notes else None)
+        if next_cursor and str(next_cursor) in visited:break
+        remaining.remove(next_page);following.append(next_page);previous=next_page['response']
+    return following,remaining
+
 class UiResponseCapture:
     def __init__(self, session, *, script_path=None, clock_ms=None, monotonic=time.monotonic):
         self.session = session
@@ -158,7 +176,24 @@ class UiResponseCapture:
             # the clock calibration (a device clock ahead must not admit them).
             responses.clear();cronet.clear()
             start = self.clock_ms();action_start[0] = start
-            guard();trigger()
+            def diagnostics():
+                broad_values = copy.deepcopy(values)
+                for key in ('cursor','start','page','page_context','search_id','search_session_id'):
+                    broad_values.pop(key,None)
+                    if isinstance(broad_values.get('query'),dict):broad_values['query'].pop(key,None)
+                broad_contract = copy.deepcopy(matching_contract)
+                broad_contract['parameters'] = [p for p in broad_contract['parameters'] if p['name'] in broad_values]
+                return {'events':event_counts,'observed_requests':[
+                    {'path':r.get('request',{}).get('path'),'host':r.get('request',{}).get('host'),'status':r.get('status'),
+                     'query_names':[q.get('name') for q in r.get('request',{}).get('query',[])],
+                     'requested_page_match':request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},matching_contract,values),
+                     'target_match_without_pagination':request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},broad_contract,broad_values)}
+                    for r in (responses+cronet)[:20]]}
+            guard()
+            try:trigger()
+            except CaptureError as error:
+                error.diagnostics=diagnostics()
+                raise
             while True:
                 guard()
                 if errors:
@@ -207,6 +242,9 @@ class UiResponseCapture:
                             extra_query=sorted((q['name'],q['value']) for q in extra.get('request',{}).get('query',[]))
                             extra_lower=[e for e in cronet if e.get('request',{}).get('path')==extra['request']['path'] and sorted((q['name'],q['value']) for q in e.get('request',{}).get('query',[]))==extra_query]
                             extras.append({'operation':operation,'input':clean(broad_values),'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'device_captured_at_ms':extra.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'transport_evidence':classify_transport(extra,start,now,extra_lower),'trigger':'ui'})
+                        if operation=='user_posted':
+                            extras,replayed=posted_page_groups(body,extras,values.get('cursor'))
+                            if replayed:result['replayed_pages']=replayed
                         if extras:result['related_pages']=extras
                         if related_errors:result['related_errors']=related_errors
                     # A profile navigation emits header and first notes in the
@@ -225,7 +263,28 @@ class UiResponseCapture:
                                     extra = candidates[0]
                                     extra_body = verify_payload('user_posted', related_values, extra, related_contract)
                                     extra_lower = [e for e in cronet if request_target_matches(e.get('request', {}), related_contract, related_values)]
-                                    result['related'] = {'user_posted': {'operation':'user_posted','input':related_values,'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'transport_evidence':classify_transport(extra,start,self.clock_ms(),extra_lower),'trigger':'ui'}}
+                                    first = {'operation':'user_posted','input':related_values,'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'transport_evidence':classify_transport(extra,start,self.clock_ms(),extra_lower),'trigger':'ui'}
+                                    # Preserve all verified same-user observations, but only
+                                    # contiguous successor cursors may advance pagination.
+                                    broad_values={'user_id':related_values['user_id']}
+                                    broad_contract=copy.deepcopy(related_contract)
+                                    broad_contract['parameters']=[p for p in broad_contract['parameters'] if p['name']=='user_id']
+                                    observed=[]
+                                    for page in responses:
+                                        if page is extra or not isinstance(page.get('at'),(int,float)) or not start<=page['at']<=self.clock_ms():continue
+                                        if not request_matches(page,broad_contract,broad_values):continue
+                                        try:page_body=verify_payload('user_posted',broad_values,page,related_contract)
+                                        except CaptureError as error:
+                                            first.setdefault('related_errors',[]).append(str(error));continue
+                                        page_values={**broad_values,'cursor':{q['name']:q['value'] for q in page['request'].get('query',[])}.get('cursor')}
+                                        lower=[e for e in cronet if request_target_matches(e.get('request',{}),related_contract,page_values)]
+                                        observed.append({'operation':'user_posted','input':page_values,'response':page_body,'request':page['request'],
+                                            'status':page['status'],'captured_at_ms':page['at'],
+                                            'transport_evidence':classify_transport(page,start,self.clock_ms(),lower),'trigger':'ui'})
+                                    pages,replayed=posted_page_groups(extra_body,observed,'')
+                                    if pages:first['related_pages']=pages
+                                    if replayed:first['replayed_pages']=replayed
+                                    result['related']={'user_posted':first}
                                     break
                                 if self.monotonic() >= related_deadline:
                                     break
@@ -233,7 +292,7 @@ class UiResponseCapture:
                     return result
                 remaining=deadline-self.monotonic()
                 if remaining<=0:
-                    raise CaptureError('CAPTURE_TIMEOUT', {'events':event_counts,'observed_requests':[{'path':r.get('request',{}).get('path'),'host':r.get('request',{}).get('host'),'status':r.get('status'),'query_names':[q.get('name') for q in r.get('request',{}).get('query',[])]} for r in (responses+cronet)[:20]]})
+                    raise CaptureError('CAPTURE_TIMEOUT', diagnostics())
                 changed.wait(min(0.1,remaining));changed.clear()
         finally:
             try:

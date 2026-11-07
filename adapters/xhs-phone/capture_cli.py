@@ -5,7 +5,7 @@ import re
 import sys
 import threading
 from pathlib import Path
-from ui_capture import UiResponseCapture
+from ui_capture import UiResponseCapture, CaptureError
 from note_links import valid_note_url
 
 emit_lock=threading.Lock()
@@ -54,7 +54,10 @@ def main():
             identity.unload()
         def trigger():
             emit({'event':'perform_action'})
-            if json.loads(sys.stdin.readline()).get('action')!='done':
+            action=json.loads(sys.stdin.readline())
+            if action.get('action')=='failed' and action.get('code') in {'PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED'}:
+                raise CaptureError(action['code'])
+            if action.get('action')!='done':
                 raise RuntimeError('ACTION_NOT_CONFIRMED')
         result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url,related_contracts={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else None,notify_response=lambda:emit({'event':'response_ready'}))
         emit({'event':'result','result':result})

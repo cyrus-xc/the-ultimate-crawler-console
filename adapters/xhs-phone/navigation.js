@@ -6,6 +6,15 @@ const SORT_LABELS={general:'综合',time_descending:'最新',popularity_descendi
 const label=n=>String(n?.text||n?.['content-desc']||'').trim();
 const failed=code=>{throw new DevicePause(code,code);};
 function choose(nodes,predicate,code){const found=nodes.filter(predicate);if(found.length!==1)failed(code);return found[0];}
+function isProfileUi(nodes){
+ const labels=nodes.map(label);
+ return labels.some(t=>/^(?:已选定)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(t))
+  &&labels.some(t=>/^粉丝$|^Followers$|^팔로워$|^小红书号[：:]|^RED ID[：:]/i.test(t));
+}
+function knownOplusWarning(nodes){
+ const own=nodes.filter(n=>n.package==='com.oplus.battery');
+ return own.some(n=>label(n)==='“小红书”异常')&&own.some(n=>label(n)==='“小红书”运行异常，建议前往软件商店更新至最新版本。');
+}
 class XhsNavigation {
   constructor(adb,{guard,writeClipboard=writeAndroidClipboard,locator,clipboardPort}={}) {
     if(typeof guard!=='function')throw new Error('Device lease guard required');
@@ -13,7 +22,18 @@ class XhsNavigation {
     this.clipboardPort=clipboardPort;this.locator=locator||new UiLocator({serial:adb.serial||'offline',appVersion:'unverified'});this.pendingSort=null;
   }
   async action(fn){await this.guard();return await fn();}
-  async ui(){await this.guard();return this.adb.ui();}
+  async ui(){
+    await this.guard();let nodes=await this.adb.ui();
+    if(!knownOplusWarning(nodes))return nodes;
+    // OnePlus can show this exact battery-manager warning after an ordinary
+    // XHS restart. Dismiss only its unique Cancel; never update the App or
+    // generalize this into handling unknown authentication/system dialogs.
+    const cancel=choose(nodes,n=>n.package==='com.oplus.battery'&&label(n)==='取消'
+      &&n.class==='android.widget.Button'&&n.clickable==='true'&&n.enabled==='true'&&n.center,'APP_WARNING_CANCEL_UNAVAILABLE');
+    await this.tap(cancel);await this.adb.wait(350);await this.guard();nodes=await this.adb.ui();
+    if(knownOplusWarning(nodes))failed('APP_WARNING_DISMISS_FAILED');
+    return nodes;
+  }
   async shell(...args){return this.action(()=>this.adb.shell(...args));}
   async tap(node){return this.action(()=>this.adb.tap(node));}
   async search(keyword,{submit=true}={}) {
@@ -94,6 +114,20 @@ class XhsNavigation {
     await this.shell('am','start','-a','android.intent.action.VIEW','-d',`xhsdiscover://user/${userId}`,'-p','com.xingin.xhs');
     await this.adb.wait(350);await this.ui();
   }
+  async assertProfile(){
+    // Read only: a recovery eligibility check must never dismiss an overlay.
+    await this.guard();
+    if(!isProfileUi(await this.adb.ui()))failed('PROFILE_RESTORE_UNCONFIRMED');
+  }
+  async restoreProfile(userId){
+    await this.openProfile(userId);
+    for(let attempt=0;attempt<3;attempt++){
+      // UI establishes the page type; the capture validates the requested UID.
+      if(isProfileUi(await this.ui()))return;
+      if(attempt<2)await this.adb.wait(350);
+    }
+    failed('PROFILE_RESTORE_UNCONFIRMED');
+  }
   async openPlace(observedUrl){
     let url;try{url=new URL(observedUrl);}catch{failed('PLACE_OBSERVED_URL_REQUIRED');}
     if(url.protocol!=='https:'||!['www.xiaohongshu.com','xiaohongshu.com'].includes(url.hostname)||url.username||url.password)failed('PLACE_OBSERVED_URL_REQUIRED');
@@ -115,9 +149,10 @@ class XhsNavigation {
     for(let attempt=0;attempt<8;attempt++){if(responseReady())return;await this.refresh();}
     if(!responseReady())failed('PHONE_FIRST_PAGE_UNOBSERVED');
   }
-  async nextPage(responseReady=()=>false){
-    for(let attempt=0;attempt<12;attempt++){await this.swipe();if(responseReady())return;}
-    failed('PHONE_PAGE_RESPONSE_UNOBSERVED');
+  async nextPage(responseReady=()=>false,{maxSwipes=12}={}){
+    if(!Number.isInteger(maxSwipes)||maxSwipes<1||maxSwipes>120)failed('INVALID_PAGE_SWIPE_LIMIT');
+    for(let attempt=0;attempt<maxSwipes;attempt++){if(responseReady())return;await this.swipe();}
+    if(!responseReady())failed('PHONE_PAGE_RESPONSE_UNOBSERVED');
   }
   async swipe(){
     const nodes=await this.ui();const width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0));const height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
