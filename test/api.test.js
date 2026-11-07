@@ -21,3 +21,13 @@ test('rejects missing credentials and direct browser origins without exposing re
 test('request ownership enforced before lookup results',async t=>{
   const {url,store}=await setup(t);const r=store.submit(request,'other');assert.equal((await fetch(url+'/v1/requests/'+r.id+'/results',{headers})).status,404);
 });
+
+test('durable SSE replays events and closes cleanly when reader disconnects',async t=>{
+ const {url,store}=await setup(t);const r=store.submit(request,'pipeline');const response=await fetch(url+'/v1/requests/'+r.id+'/events',{headers:{...headers,accept:'text/event-stream'}});
+ assert.equal(response.headers.get('content-type'),'text/event-stream');const reader=response.body.getReader();const first=await reader.read();assert.match(new TextDecoder().decode(first.value),/event: request.accepted/);await reader.cancel();
+});
+test('manual business decisions go through authenticated request-scoped endpoint',async t=>{
+ const {url,store}=await setup(t);store.register({id:'p',serial:'s',kind:'android',capabilities:[{platform:'xiaohongshu',operation:'post.detail'}]});
+ const r=store.submit({...request,continuation:{mode:'manual'}},'pipeline'),c=store.claim();store.commit(c,{checkpoint:{page:1}});const d=store.requestDecision(c);
+ const response=await fetch(url+'/v1/requests/'+r.id+'/decisions/'+d.id,{method:'POST',headers,body:JSON.stringify({action:'stop'})});assert.equal(response.status,200);assert.equal((await response.json()).action,'stop');
+});

@@ -16,7 +16,7 @@ function keys(value, allowed) {
 function integer(n, min, max) { if (!Number.isSafeInteger(n) || n < min || n > max) throw problem('INVALID_LIMIT'); return n; }
 function identifier(x) { return typeof x === 'string' && x.length > 0 && x.length <= 512 && !/[\x00-\x1f]/.test(x); }
 function normalize(input) {
-  keys(input, ['schema_version','idempotency_key','platform','operation','effort','targets','params','limits','routing','cache','context']);
+  keys(input, ['schema_version','idempotency_key','platform','operation','effort','targets','params','limits','routing','cache','context','continuation']);
   if (input.schema_version !== VERSION || !identifier(input.idempotency_key)) throw problem('INVALID_REQUEST');
   if (!['xiaohongshu','douyin'].includes(input.platform) || !OPERATIONS.includes(input.operation)) throw problem('UNSUPPORTED_OPERATION');
   if (!['full','half','auto'].includes(input.effort || 'auto')) throw problem('INVALID_EFFORT');
@@ -58,6 +58,11 @@ function normalize(input) {
   const context = input.context || {};
   keys(context,['pipeline','run_id','stage','source_revision']);
   if (Object.values(context).some(x=>!identifier(x))) throw problem('INVALID_CONTEXT');
+  if(input.continuation!==undefined){
+    keys(input.continuation,['mode','timeout_seconds']);
+    if(!['automatic','manual'].includes(input.continuation.mode))throw problem('INVALID_CONTINUATION');
+    if(input.continuation.timeout_seconds!==undefined)integer(input.continuation.timeout_seconds,1,3600);
+  }
   const unique = [...new Map(targets.map(t=>[canonical(t),t])).values()];
   return {...input,effort:input.effort||'auto',targets:unique,params,limits,routing,cache,context};
 }

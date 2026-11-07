@@ -1410,6 +1410,36 @@
       "sha256": "ab62b3ff79af073304f9fee5c178a0c1a7ab6db7606dd86a54b4e159989192db",
       "treatment": "copied_actual_worktree_source",
       "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/crawler/browser.py",
+      "sha256": "76deda7e258b7f24e52b59f35719627f0a06a921d8ba047ef1e1272bf488e1ee",
+      "category": "douyin_web",
+      "treatment": "extract_collection_primitives_keep_business_in_pipeline"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/crawler/guard.py",
+      "sha256": "97dad38e68a537513db43f169f9f69a48ee7a45b67ec6dd39876e7ea97edc3c9",
+      "category": "douyin_web",
+      "treatment": "extract_collection_primitives_keep_business_in_pipeline"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/parse.py",
+      "sha256": "6f7f7621a5ec585e069aaad6b988d8f1b608ab6558d997ac23848d0f966370b7",
+      "category": "douyin_web",
+      "treatment": "extract_collection_primitives_keep_business_in_pipeline"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/collect.py",
+      "sha256": "458d98ad463c0fd2fdf96237a41a3e8b0eebfce0b064e2497b58bab26a3b3a8d",
+      "category": "douyin_web",
+      "treatment": "extract_collection_primitives_keep_business_in_pipeline"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/evidence_store.py",
+      "sha256": "99e216bf453d548e879a4dd8654f4a7e01421a9970895b253c4f56447de07e31",
+      "category": "douyin_web",
+      "treatment": "extract_collection_primitives_keep_business_in_pipeline"
     }
   ]
 }

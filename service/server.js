@@ -34,6 +34,11 @@ function createServer({store,token,scope='pipeline'}) {
       if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices()});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
       if(url.pathname==='/v1/requests'&&req.method==='POST')return send(202,store.submit(await body(req),scope));
+      const decision=url.pathname.match(/^\/v1\/requests\/([0-9a-f-]+)\/decisions\/([0-9a-f-]+)$/);
+      if(decision&&req.method==='POST'){
+        store.request(decision[1],scope);const input=await body(req);
+        return send(200,store.decide(decision[1],decision[2],input.action));
+      }
       const match=url.pathname.match(/^\/v1\/requests\/([0-9a-f-]+)(?:\/(results|events|pause|resume|cancel|retry))?$/);
       if(!match)throw problem('NOT_FOUND',404);
       const [,id,action]=match,r=store.request(id,scope);
@@ -42,6 +47,18 @@ function createServer({store,token,scope='pipeline'}) {
         const items=store.results(id,cursor(url));return send(200,{items,next_cursor:items.at(-1)?.seq??cursor(url)});
       }
       if(req.method==='GET'&&action==='events'){
+        if((req.headers.accept||'').includes('text/event-stream')){
+          if(req.headers['last-event-id']&&!url.searchParams.has('after'))url.searchParams.set('after',req.headers['last-event-id']);
+          let after=cursor(url);res.setHeader('Content-Type','text/event-stream');res.setHeader('X-Accel-Buffering','no');res.writeHead(200);res.flushHeaders();
+          const pump=()=>{
+            if(res.destroyed)return;
+            if(res.writableLength>1024*1024){res.destroy();return;}
+            try{for(const event of store.events(id,after)){res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);after=event.seq;}}
+            catch{res.end();}
+          };
+          const interval=setInterval(pump,250),heartbeat=setInterval(()=>{if(!res.destroyed)res.write(': heartbeat\n\n');},10000);
+          interval.unref();heartbeat.unref();res.on('close',()=>{clearInterval(interval);clearInterval(heartbeat);});pump();return;
+        }
         const events=store.events(id,cursor(url));return send(200,{events,next_cursor:events.at(-1)?.seq??cursor(url)});
       }
       if(req.method==='POST'&&['pause','resume','cancel','retry'].includes(action))return send(200,store.transition(id,action));

@@ -100,3 +100,32 @@ test('explicit sorting requires declared matching capability, never silently def
   s.register({id:'phone2',serial:'s2',kind:'android',capabilities:[{platform:'xiaohongshu',operation:'search.posts',sorts:['general','time_descending']}]});
   s.submit(input({operation:'search.posts',targets:[{keyword:'coffee'}],params:{sort:'time_descending'}}));assert.equal(s.claim().device_id,'phone2');
 });
+
+test('each phone gets a stable distinct clipboard port for simultaneous Unicode input',t=>{
+ const s=setup(t);phone(s,1);phone(s,2);const first=s.devices();assert.notEqual(first[0].clipboard_port,first[1].clipboard_port);phone(s,1);assert.equal(s.devices()[0].clipboard_port,first[0].clipboard_port);
+});
+
+test('v1 database gains stable phone ports without deleting device state',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crawler-upgrade-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'queue.db');
+ const Database=require('better-sqlite3'),old=new Database(file);old.exec(`CREATE TABLE devices(id TEXT PRIMARY KEY,kind TEXT NOT NULL,serial TEXT,capabilities TEXT NOT NULL,health TEXT NOT NULL,faults TEXT NOT NULL DEFAULT '{}',generation INTEGER NOT NULL DEFAULT 0,quarantined INTEGER NOT NULL DEFAULT 0);
+ INSERT INTO devices(id,kind,serial,capabilities,health,quarantined) VALUES ('phone','android','serial','[]','unavailable',1); PRAGMA user_version=1;`);old.close();
+ const s=new Store(file);t.after(()=>s.close());assert.equal(s.devices()[0].health,'unavailable');assert.equal(s.devices()[0].quarantined,1);assert.equal(s.devices()[0].clipboard_port,38617);assert.equal(s.db.pragma('user_version',{simple:true}),3);
+});
+
+test('business decisions are checkpoint-bound, idempotent and preserve paused unit state',t=>{
+ const s=setup(t);phone(s);const r=s.submit(input({continuation:{mode:'manual'}})),c=s.claim();
+ s.commit(c,{checkpoint:{page:1},items:[{key:'n',value:{body:'evidence'}}]});const d=s.requestDecision(c);assert.equal(s.request(r.id).units[0].state,'waiting_decision');
+ assert.throws(()=>s.commit(c,{checkpoint:{page:2}}),{code:'BUSINESS_DECISION_REQUIRED'});
+ s.transition(r.id,'pause');s.stopped(c);s.decide(r.id,d.id,'continue');assert.equal(s.request(r.id).state,'paused');assert.equal(s.request(r.id).units[0].state,'queued');
+ assert.equal(s.decide(r.id,d.id,'continue').action,'continue');assert.throws(()=>s.decide(r.id,d.id,'stop'),{code:'DECISION_CONFLICT'});
+});
+
+test('a delayed decision cannot authorize a different checkpoint',t=>{
+ const s=setup(t);phone(s);const r=s.submit(input({continuation:{mode:'manual'}})),c=s.claim();
+ s.commit(c,{checkpoint:{page:1}});const d=s.requestDecision(c);
+ // Model a recovered adapter advancing its durable checkpoint after failure.
+ s.db.prepare('UPDATE units SET checkpoint=? WHERE id=?').run(JSON.stringify({page:2}),c.unit_id);
+ assert.throws(()=>s.decide(r.id,d.id,'continue'),{code:'DECISION_STALE'});
+ assert.equal(s.request(r.id).decisions.length,0);
+ assert.equal(s.request(r.id).units[0].state,'waiting_decision');
+});

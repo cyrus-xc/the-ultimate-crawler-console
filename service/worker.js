@@ -19,7 +19,7 @@ class LocalWorker {
     return count;
   }
   async execute(claim,adapter) {
-    const controller=new AbortController();let stopping=false,timeout,drained=false;
+    const controller=new AbortController();let stopping=false,timeout,drained=false;let decisionPending=false,businessStopped=false;
     const stop=(reason)=>{if(stopping)return;stopping=true;controller.abort(reason);
       timeout=setTimeout(()=>{
         if(drained)return;
@@ -44,8 +44,18 @@ class LocalWorker {
       const resume=resumePlan(claim,adapter.version);
       await adapter.execute({claim,resume,signal:controller.signal,guard,
         // Check the fence immediately before EVERY input, not only before execute().
-        input:async fn=>{guard();return await fn();},
-        commit:page=>{guard();this.store.commit(claim,{...page,done:false});}});
+        input:async fn=>{guard();if(businessStopped)throw Object.assign(Error('BUSINESS_STOPPED'),{code:'BUSINESS_STOPPED',scope:'item'});if(decisionPending)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});if(this.store.db.prepare('SELECT state FROM units WHERE id=?').get(claim.unit_id).state!=='running')throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});return await fn();},
+        waitForDecision:async()=>{
+          if(claim.payload.continuation?.mode!=='manual')return 'continue';
+          guard();const d=this.store.requestDecision(claim);
+          while(true){
+            guard();const current=this.store.decision(d.id);if(current.action){decisionPending=false;businessStopped=current.action==='stop';return current.action;}
+            if(current.deadline<=this.store.now())throw Object.assign(Error('BUSINESS_DECISION_TIMEOUT'),{code:'BUSINESS_DECISION_TIMEOUT',scope:'item'});
+            await new Promise(resolve=>setTimeout(resolve,50));
+          }
+        },
+        commit:page=>{guard();if(decisionPending||businessStopped)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});this.store.commit(claim,{...page,done:false});decisionPending=claim.payload.continuation?.mode==='manual';}});
+      if(decisionPending)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});
       drained=true;
       if(stopping)throw controller.signal.reason;
       guard();

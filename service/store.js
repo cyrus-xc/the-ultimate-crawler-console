@@ -7,25 +7,40 @@ const parse = value => value == null ? null : JSON.parse(value);
 class Store {
   constructor(filename=':memory:', {now=Date.now,leaseMs=30000}={}) {
     this.now=now; this.leaseMs=leaseMs; this.db=new Database(filename);
+    if(this.db.pragma('user_version',{simple:true})>3){this.db.close();throw problem('DATABASE_VERSION_UNSUPPORTED',500);}
     this.db.pragma('journal_mode = WAL'); this.db.pragma('foreign_keys = ON'); this.db.pragma('busy_timeout = 5000');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,scope TEXT NOT NULL,key TEXT NOT NULL,hash TEXT NOT NULL,payload TEXT NOT NULL,
         state TEXT NOT NULL,reason TEXT,created INTEGER NOT NULL,updated INTEGER NOT NULL,queued_at INTEGER NOT NULL,last_dispatch INTEGER NOT NULL DEFAULT 0, UNIQUE(scope,key));
       CREATE TABLE IF NOT EXISTS units(id TEXT PRIMARY KEY,request_id TEXT NOT NULL REFERENCES requests(id),target TEXT NOT NULL,
         state TEXT NOT NULL,checkpoint TEXT,error TEXT,started INTEGER);
-      CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY,kind TEXT NOT NULL,serial TEXT,capabilities TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY,kind TEXT NOT NULL,serial TEXT,clipboard_port INTEGER,capabilities TEXT NOT NULL,
         health TEXT NOT NULL,faults TEXT NOT NULL DEFAULT '{}',generation INTEGER NOT NULL DEFAULT 0,quarantined INTEGER NOT NULL DEFAULT 0);
       CREATE UNIQUE INDEX IF NOT EXISTS device_serial ON devices(serial) WHERE serial IS NOT NULL;
       CREATE TABLE IF NOT EXISTS leases(device_id TEXT PRIMARY KEY REFERENCES devices(id),token TEXT UNIQUE NOT NULL,owner TEXT NOT NULL,
         generation INTEGER NOT NULL,expires INTEGER NOT NULL,attempt_id TEXT);
       CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,unit_id TEXT NOT NULL REFERENCES units(id),device_id TEXT NOT NULL REFERENCES devices(id),
         state TEXT NOT NULL,started INTEGER NOT NULL,finished INTEGER,error TEXT);
+      CREATE TABLE IF NOT EXISTS decisions(id TEXT PRIMARY KEY,unit_id TEXT NOT NULL REFERENCES units(id),checkpoint_hash TEXT NOT NULL,
+        action TEXT,created INTEGER NOT NULL,deadline INTEGER NOT NULL, UNIQUE(unit_id,checkpoint_hash));
       CREATE TABLE IF NOT EXISTS results(seq INTEGER PRIMARY KEY AUTOINCREMENT,request_id TEXT NOT NULL REFERENCES requests(id),
         unit_id TEXT NOT NULL REFERENCES units(id),item_key TEXT NOT NULL,payload TEXT NOT NULL,attempt_id TEXT NOT NULL, UNIQUE(unit_id,item_key));
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,request_id TEXT REFERENCES requests(id),type TEXT NOT NULL,
         payload TEXT NOT NULL,created INTEGER NOT NULL);
-      PRAGMA user_version = 1;
+
     `);
+    this.tx(()=>{
+      if(!this.db.prepare('PRAGMA table_info(devices)').all().some(c=>c.name==='clipboard_port'))this.db.exec('ALTER TABLE devices ADD COLUMN clipboard_port INTEGER');
+      if(!this.db.prepare('PRAGMA table_info(requests)').all().some(c=>c.name==='queued_at')){
+        this.db.exec('ALTER TABLE requests ADD COLUMN queued_at INTEGER NOT NULL DEFAULT 0; UPDATE requests SET queued_at=created');
+      }
+      for(const d of this.db.prepare("SELECT id FROM devices WHERE kind='android' AND clipboard_port IS NULL ORDER BY id").all()){
+        const next=this.db.prepare('SELECT coalesce(max(clipboard_port),38616)+1 port FROM devices').get().port;
+        if(next>65535)throw problem('CLIPBOARD_PORT_CAPACITY',500);
+        this.db.prepare('UPDATE devices SET clipboard_port=? WHERE id=?').run(next,d.id);
+      }
+      this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS device_clipboard_port ON devices(clipboard_port); PRAGMA user_version = 3');
+    });
   }
   close(){this.db.close();}
   tx(fn){return this.db.transaction(fn).immediate();}
@@ -34,6 +49,7 @@ class Store {
     const row=this.db.prepare('SELECT * FROM requests WHERE id=?').get(id);
     if(!row || (scope!==undefined && row.scope!==scope)) throw problem('REQUEST_NOT_FOUND',404);
     return {id:row.id,state:row.state,reason:row.reason,created:row.created,updated:row.updated,payload:parse(row.payload),
+      decisions:this.db.prepare('SELECT d.id,d.unit_id,d.action,d.deadline,d.checkpoint_hash,u.checkpoint FROM decisions d JOIN units u ON u.id=d.unit_id WHERE u.request_id=? ORDER BY d.created').all(id).filter(d=>d.action!==null||d.checkpoint_hash===digest(parse(d.checkpoint))).map(({checkpoint,...d})=>d),
       units:this.db.prepare('SELECT id,state,target,checkpoint,error FROM units WHERE request_id=? ORDER BY rowid').all(id)
         .map(u=>({...u,target:parse(u.target),checkpoint:parse(u.checkpoint),error:parse(u.error)}))};
   }
@@ -60,8 +76,10 @@ class Store {
       if(prior && (prior.kind!==kind || prior.serial!==serial))throw problem('DEVICE_IDENTITY_CONFLICT',409);
       // Registration must not clear a fault or quarantine, nor grant capabilities while held.
       if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(id))throw problem('DEVICE_BUSY',409);
-      this.db.prepare(`INSERT INTO devices(id,kind,serial,capabilities,health) VALUES (?,?,?,?,'ready')
-        ON CONFLICT(id) DO UPDATE SET capabilities=excluded.capabilities`).run(id,kind,serial,canonical(capabilities));
+      const clipboardPort=prior?.clipboard_port??(kind==='android'?this.db.prepare('SELECT coalesce(max(clipboard_port),38616)+1 port FROM devices').get().port:null);
+      if(clipboardPort>65535)throw problem('CLIPBOARD_PORT_CAPACITY',409);
+      this.db.prepare(`INSERT INTO devices(id,kind,serial,clipboard_port,capabilities,health) VALUES (?,?,?,?,?,'ready')
+        ON CONFLICT(id) DO UPDATE SET capabilities=excluded.capabilities`).run(id,kind,serial,clipboardPort,canonical(capabilities));
       this.event(null,'device.registered',{device_id:id}); return id;
     });
   }
@@ -102,7 +120,7 @@ class Store {
   }
   settle(id) {
     const r=this.request(id);if(TERMINAL.has(r.state))return;
-    const active=r.units.some(u=>u.state==='running');
+    const active=r.units.some(u=>['running','waiting_decision'].includes(u.state));
     if(r.state==='pausing'||r.state==='cancelling') {
       if(!active)this.state(id,r.state==='pausing'?'paused':'cancelled'); return;
     }
@@ -121,7 +139,7 @@ class Store {
         const r=this.request(row.id),p=r.payload;
         const units=this.db.prepare("SELECT * FROM units WHERE request_id=? AND state='queued' ORDER BY rowid").all(r.id);
         if(!units.length)continue;
-        const running=r.units.filter(u=>u.state==='running').length;
+        const running=r.units.filter(u=>['running','waiting_decision'].includes(u.state)).length;
         if(this.now()-row.queued_at>=p.limits.queue_timeout_seconds*1000 && !running) {
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE request_id=? AND state='queued'").run(canonical({code:'QUEUE_DEADLINE'}),r.id);this.settle(r.id);continue;
         }
@@ -159,12 +177,13 @@ class Store {
     const a=this.db.prepare('SELECT * FROM attempts WHERE id=? AND unit_id=? AND device_id=?').get(claim.attempt_id,claim.unit_id,claim.device_id);
     if(!a || a.state!=='running' || lease.attempt_id!==a.id || lease.owner!==claim.request_id)throw problem('ATTEMPT_LOST',409);
     const u=this.db.prepare('SELECT * FROM units WHERE id=? AND request_id=?').get(claim.unit_id,claim.request_id);
-    if(!u || u.state!=='running')throw problem('ATTEMPT_LOST',409);
+    if(!u || !['running','waiting_decision'].includes(u.state))throw problem('ATTEMPT_LOST',409);
     return a;
   }
   commit(claim,{items=[],checkpoint=null,done=false}={}) {
     return this.tx(()=>{
       this.active(claim);
+      if(this.db.prepare('SELECT state FROM units WHERE id=?').get(claim.unit_id).state==='waiting_decision')throw problem('BUSINESS_DECISION_REQUIRED',409);
       if(!Array.isArray(items) || items.some(i=>!identifier(i.key)||!i.value||typeof i.value!=='object'))throw problem('INVALID_RESULTS');
       // First committed evidence wins; later attempts cannot change observation clocks.
       for(const item of items)this.db.prepare('INSERT OR IGNORE INTO results(request_id,unit_id,item_key,payload,attempt_id) VALUES (?,?,?,?,?)')
@@ -203,6 +222,39 @@ class Store {
         this.state(id,'queued');
       } else if(!['pause','resume','cancel','retry'].includes(action))throw problem('INVALID_ACTION');
       this.settle(id);return this.request(id);
+    });
+  }
+  requestDecision(claim) {
+    return this.tx(()=>{
+      this.active(claim);
+      const unit=this.db.prepare('SELECT checkpoint FROM units WHERE id=?').get(claim.unit_id);
+      if(unit.checkpoint===null)throw problem('CHECKPOINT_REQUIRED',409);
+      const hash=digest(parse(unit.checkpoint));
+      let d=this.db.prepare('SELECT * FROM decisions WHERE unit_id=? AND checkpoint_hash=?').get(claim.unit_id,hash);
+      if(!d){
+        const id=randomUUID(),deadline=this.now()+(claim.payload.continuation?.timeout_seconds||300)*1000;
+        this.db.prepare('INSERT INTO decisions(id,unit_id,checkpoint_hash,created,deadline) VALUES (?,?,?,?,?)').run(id,claim.unit_id,hash,this.now(),deadline);
+        d=this.db.prepare('SELECT * FROM decisions WHERE id=?').get(id);
+        this.event(claim.request_id,'business.decision_required',{decision_id:id,unit_id:claim.unit_id,checkpoint_hash:hash,deadline});
+      }
+      if(!d.action)this.db.prepare("UPDATE units SET state='waiting_decision' WHERE id=?").run(claim.unit_id);
+      return d;
+    });
+  }
+  decision(id){const d=this.db.prepare('SELECT * FROM decisions WHERE id=?').get(id);if(!d)throw problem('DECISION_NOT_FOUND',404);return d;}
+  decide(requestId,id,action){
+    if(!['continue','stop'].includes(action))throw problem('INVALID_DECISION');
+    return this.tx(()=>{
+      const r=this.request(requestId),d=this.decision(id);
+      if(!r.units.some(u=>u.id===d.unit_id))throw problem('DECISION_NOT_FOUND',404);
+      if(d.action){if(d.action!==action)throw problem('DECISION_CONFLICT',409);return d;}
+      if(TERMINAL.has(r.state)||d.deadline<=this.now())throw problem('DECISION_EXPIRED',409);
+      const unit=r.units.find(u=>u.id===d.unit_id);
+      if(d.checkpoint_hash!==digest(unit.checkpoint))throw problem('DECISION_STALE',409);
+      if(unit.state!=='waiting_decision'&&!(r.state==='paused'&&unit.state==='queued'))throw problem('DECISION_NOT_WAITING',409);
+      this.db.prepare('UPDATE decisions SET action=? WHERE id=?').run(action,id);
+      this.db.prepare("UPDATE units SET state='running' WHERE id=? AND state='waiting_decision'").run(d.unit_id);
+      this.event(requestId,'business.decision',{decision_id:id,action});return this.decision(id);
     });
   }
   // Worker must stop device inputs BEFORE acknowledging a pause/cancellation.
