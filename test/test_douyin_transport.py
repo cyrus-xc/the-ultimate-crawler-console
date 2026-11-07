@@ -28,4 +28,11 @@ class DouyinTests(unittest.TestCase):
         t=OfflineTransport([{'comments':[],'cursor':0,'has_more':True}])
         result=t.pages('post.comments',{'post_id':'p'},max_items=50,max_pages=3)
         self.assertEqual(result['coverage']['stop_reason'],'cursor_stalled');self.assertFalse(result['coverage']['end_observed'])
+    def test_local_stop_retains_page_and_never_fetches_next_cursor(self):
+        t=OfflineTransport([{'comments':[{'cid':'1'}],'cursor':20,'has_more':True}])
+        result=t.pages('post.comments',{'post_id':'p'},max_items=50,max_pages=3,on_page=lambda page:'stop')
+        self.assertEqual(len(t.calls),1)
+        self.assertEqual(result['pages'][0]['cursor'],20)
+        self.assertEqual(result['coverage']['stop_reason'],'client_stopped')
+        self.assertFalse(result['coverage']['end_observed'])
 if __name__=='__main__':unittest.main()

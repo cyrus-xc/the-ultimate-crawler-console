@@ -42,7 +42,7 @@ class LocalWorker {
     },this.heartbeatMs);
     try {
       const resume=resumePlan(claim,adapter.version);
-      await adapter.execute({claim,resume,signal:controller.signal,guard,
+      const context={claim,resume,signal:controller.signal,guard,
         // Check the fence immediately before EVERY input, not only before execute().
         input:async fn=>{guard();if(businessStopped)throw Object.assign(Error('BUSINESS_STOPPED'),{code:'BUSINESS_STOPPED',scope:'item'});if(decisionPending)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});if(this.store.db.prepare('SELECT state FROM units WHERE id=?').get(claim.unit_id).state!=='running')throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});return await fn();},
         waitForDecision:async()=>{
@@ -54,7 +54,12 @@ class LocalWorker {
             await new Promise(resolve=>setTimeout(resolve,50));
           }
         },
-        commit:page=>{guard();if(decisionPending||businessStopped)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});this.store.commit(claim,{...page,done:false});decisionPending=claim.payload.continuation?.mode==='manual';}});
+        commit:page=>{guard();if(decisionPending||businessStopped)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});this.store.commit(claim,{...page,done:false});decisionPending=claim.payload.continuation?.mode==='manual';}};
+      // A process/device restart cannot bypass an unresolved local decision.
+      if(claim.checkpoint&&claim.payload.continuation?.mode==='manual'){
+        decisionPending=true;await context.waitForDecision();
+      }
+      if(!businessStopped)await adapter.execute(context);
       if(decisionPending)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});
       drained=true;
       if(stopping)throw controller.signal.reason;

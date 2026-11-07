@@ -61,7 +61,8 @@ class Transport:
             seen.update(str(i[item_key]) for i in items)
             more=bool(body.get('has_more'));stalled=more and (next_cursor is None or next_cursor==cursor)
             page={'body':body,'items':items,'cursor':next_cursor,'has_more':more,'page_index':index+1,'observed_at':time.time()}
-            on_page(page);pages.append(page)
+            decision=on_page(page);pages.append(page)
+            if decision=='stop':stop='client_stopped';break
             if not more:stop='end_observed';break
             if len(seen)>=max_items:stop='item_limit';break
             if stalled:stop='cursor_stalled';break

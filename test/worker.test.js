@@ -41,3 +41,13 @@ test('stop decision prevents subsequent adapter input',async t=>{
  }}]]));worker.dispatch();s.decide(r.id,s.request(r.id).decisions[0].id,'stop');
  await Promise.all(worker.active.values());assert.equal(touched,false);assert.equal(s.request(r.id).units[0].error.code,'BUSINESS_STOPPED');
 });
+
+test('replacement device waits on saved business decision before touching hardware',async t=>{
+ const s=setup(t);s.register({id:'p2',serial:'s2',kind:'android',capabilities:[{platform:'xiaohongshu',operation:'profile.posts'}]});
+ const r=s.submit({...input,continuation:{mode:'manual'}}),claim=s.claim(),resume=resumePlan(claim,'1');
+ s.commit(claim,{checkpoint:{binding:resume.binding,device_id:'p',adapter_version:'1',cursor:'next',seen_ids:['n']}});
+ const d=s.requestDecision(claim);s.fail(claim,{code:'DISCONNECTED',scope:'device'});
+ let touched=false;const worker=new LocalWorker(s,new Map([['p2',{version:'1',execute:async()=>{touched=true;}}]]));
+ worker.dispatch();assert.equal(touched,false);s.decide(r.id,d.id,'stop');await Promise.all(worker.active.values());
+ assert.equal(touched,false);assert.equal(s.request(r.id).state,'succeeded');
+});
