@@ -36,7 +36,7 @@ function nodesFromXml(xml) {
 class AndroidAdb {
   constructor(serial, { executable = process.env.ADB_PATH || 'adb', execute = run, signal, worker, env = process.env, queueClient } = {}) {
     if (serial && !/^[\w.:-]+$/.test(serial)) throw new Error('Invalid device serial');
-    if (/[\\/]/.test(executable)) executable = path.resolve(__dirname, '..', executable);
+    if (/[\\/]/.test(executable)) executable = path.resolve(__dirname, '../..', executable);
     this.serial = serial; this.executable = executable; this.execute = execute; this.signal = signal; this.worker = worker;
     this.queueConfigured = queueMode(env);
     this.queueClient = queueClient || worker?.client || (this.queueConfigured ? new AndroidQueueClient({ env }) : null);

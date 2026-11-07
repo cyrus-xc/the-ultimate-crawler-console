@@ -3,17 +3,29 @@ const {AndroidAdb}=require('../douyin-phone/android_adb');
 const {lookup}=require('./venue_lookup');
 const {recoverLink}=require('./link_recovery');
 const {inspectPost}=require('../douyin-phone/harvest');
+const {harvest:harvestPlace}=require('./poi_page_harvest');
 const fail=code=>Object.assign(Error(code),{code,scope:'device'});
 class AndroidUiAdapter {
- constructor({gateway,store,lookupImpl=lookup,recoverImpl=recoverLink,inspectImpl=inspectPost}={}){Object.assign(this,{gateway,store,lookup:lookupImpl,recover:recoverImpl,inspect:inspectImpl});this.version='android-ui-identity-v1';}
+ constructor({gateway,store,lookupImpl=lookup,recoverImpl=recoverLink,inspectImpl=inspectPost,harvestImpl=harvestPlace}={}){Object.assign(this,{gateway,store,lookup:lookupImpl,recover:recoverImpl,inspect:inspectImpl,harvest:harvestImpl});this.version='android-ui-identity-v1';}
  async execute(ctx){
   const {platform,operation,params}=ctx.claim.payload,t=ctx.claim.target;
-  if(!(operation==='place.search'&&platform==='xiaohongshu')&&!(operation==='post.detail'&&params.native_request?.representation==='ui_identity'))throw fail('UNSUPPORTED_OPERATION');
+  const location=operation==='place.posts'&&platform==='xiaohongshu'&&params.native_request?.kind==='location_page';
+  if(!location&&!(operation==='place.search'&&platform==='xiaohongshu')&&!(operation==='post.detail'&&params.native_request?.representation==='ui_identity'))throw fail('UNSUPPORTED_OPERATION');
   const device=this.store.devices().find(d=>d.id===ctx.claim.device_id);if(!device?.serial)throw fail('DEVICE_REQUIRED');
   const worker={queue:true,clipboardPort:device.clipboard_port,client:{devices:async()=>({devices:[{kind:'android',serial:device.serial,connection_state:'device'}]})},
    acquire:async serial=>{ctx.guard();if(serial!==device.serial)throw fail('DEVICE_IDENTITY_MISMATCH');},release:async()=>{},
    command:async(serial,args)=>{if(serial!==device.serial)throw fail('DEVICE_IDENTITY_MISMATCH');return ctx.input(()=>this.gateway.execute(ctx.claim.lease,{serial,args},{signal:ctx.signal}));}};
   const adbFactory=(serial,options={})=>new AndroidAdb(serial,{...options,worker,env:{CRAWLER_DEVICE_LOCK_MODE:'queue'},signal:ctx.signal});
+  if(location){
+   const seed=params.locator?.seed_post;if(!/^[a-f0-9]{24}$/.test(seed||''))throw fail('SEED_REQUIRED');
+   const seen=new Set(ctx.resume.seen_ids||[]);let eventIndex=0;
+   const checkpoint=()=>({binding:ctx.resume.binding,device_id:ctx.claim.device_id,adapter_version:this.version,cursor:null,seen_ids:[...seen]});
+   await this.harvest(adbFactory(device.serial),{seed,max:params.max_items||200,since:params.published_after?.slice(0,10)||'',emit:event=>{
+    ctx.guard();if(event.event==='note')seen.add(event.note_id);
+    const key=event.event==='note'?'note:'+event.note_id:event.event==='done'?'completion':event.event+':'+eventIndex++;
+    ctx.commit({items:[{key,value:{phase:event.event==='done'?'completion':'result',data:event,transport:'android_ui',observed_at:new Date().toISOString()}}],checkpoint:checkpoint()});
+   }});return;
+  }
   let data;
   if(operation==='place.search'){
    data=await this.lookup({platform,serial:device.serial,venue_name:t.keyword,query:t.keyword,aliases:params.locator?.names||[]},{worker,adbFactory,guard:ctx.guard});

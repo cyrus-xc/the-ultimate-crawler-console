@@ -20,9 +20,10 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
-function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null}) {
+function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
-  const desktopActions=new Map(),loginUploads=new Map();
+  const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
+  const drainPhone=async lease=>{const action=phoneActions.get(lease.token);if(action){action.controller.abort(problem('STOP_REQUESTED',409));await action.promise.catch(()=>{});}};
   const drainDesktop=async lease=>{const active=desktopActions.get(lease.token);if(active){await active.adapter.close();await active.promise.catch(()=>{});}};
   const desktopAction=async(lease,action)=>{
     const held=store.assertLease(lease,{externalOnly:true});if(!held.owner.startsWith('external:'+scope+':'))throw problem('LEASE_NOT_OWNED',403);
@@ -46,7 +47,16 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
       if(url.pathname==='/v1/requests'&&req.method==='POST')return send(202,store.submit(await body(req),scope));
       if(url.pathname==='/v1/desktop/close'&&req.method==='POST'){const input=await body(req);if(!['web:xhs:default','web:douyin:default'].includes(input.lease?.device_id))throw problem('WEB_DEVICE_REQUIRED',409);await desktopAction(input.lease,'close');return send(200,{closed:true});}
-      if(url.pathname==='/v1/desktop/qr'&&req.method==='POST'){const input=await body(req);return send(200,await desktopAction(input.lease,'loginQr'));}
+      if(url.pathname==='/v1/desktop/qr'&&req.method==='POST'){
+        const input=await body(req),result=await desktopAction(input.lease,'loginQr'),key=input.lease.device_id;
+        if(result.authenticated)loginQrs.delete(key);
+        else if(result.png_base64){const previous=loginQrs.get(key);if(previous?.png_base64!==result.png_base64)loginQrs.set(key,{png_base64:result.png_base64,expires_at:Date.now()+600000});}
+        return send(200,result);
+      }
+      if(url.pathname==='/v1/desktop/qr-current'&&req.method==='GET'){
+        const key=url.searchParams.get('device_id');if(!['web:xhs:default','web:douyin:default'].includes(key))throw problem('WEB_DEVICE_REQUIRED',400);
+        const qr=loginQrs.get(key);if(!qr)throw problem('QR_NOT_AVAILABLE',409);if(Date.now()>=qr.expires_at)throw problem('QR_EXPIRED',409);return send(200,qr);
+      }
       if(url.pathname==='/v1/desktop/open'&&req.method==='POST'){
         const input=await body(req),lease=input.lease;
         const held=store.assertLease(lease,{externalOnly:true});if(!held.owner.startsWith('external:'+scope+':'))throw problem('LEASE_NOT_OWNED',403);
@@ -89,6 +99,22 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(id&&action==='frame'&&req.method==='GET'){const bytes=await displays.frame(id,scope);res.setHeader('Content-Type','image/png');res.writeHead(200);res.end(bytes);return;}
         throw problem('METHOD_NOT_ALLOWED',405);
       }
+      if(url.pathname==='/v1/link-utilities'&&req.method==='POST'){
+        const input=await body(req);return send(200,await linkUtility(input.operation,input.params,AbortSignal.timeout(65000)));
+      }
+      if(url.pathname==='/v1/device-utilities'&&req.method==='POST'){
+        if(!gateway)throw problem('DEVICE_GATEWAY_DISABLED',503);barrier?.assert();const input=await body(req),lease=input.lease;
+        const current=store.assertLease(lease,{externalOnly:true});if(!current.owner.startsWith('external:'+scope+':'))throw problem('LEASE_NOT_OWNED',403);
+        if(phoneActions.has(lease.token))throw problem('DEVICE_BUSY',409);
+        const controller=new AbortController();const guard=()=>{if(controller.signal.aborted)throw controller.signal.reason;store.assertLease(lease,{externalOnly:true});barrier?.assert();};
+        const disconnect=()=>{if(!res.writableEnded)controller.abort(problem('CLIENT_DISCONNECTED',409));};res.once('close',disconnect);
+        const timer=setTimeout(()=>controller.abort(problem('UTILITY_TIMEOUT',408)),240000);
+        const monitor=setInterval(()=>{try{guard();}catch(e){controller.abort(e);}},250);
+        const promise=Promise.resolve().then(()=>phoneUtility({store,gateway,lease,serial:input.serial,operation:input.operation,params:input.params,signal:controller.signal,guard}));
+        phoneActions.set(lease.token,{controller,promise});
+        try{const result=await promise;guard();if(!res.destroyed)return send(200,result);return;}
+        finally{clearTimeout(timer);clearInterval(monitor);res.removeListener('close',disconnect);await gateway.drain(lease);phoneActions.delete(lease.token);}
+      }
       const leaseRoute=url.pathname.match(/^\/v1\/device-leases(?:\/(heartbeat|assert|release|command))?$/);
       if(leaseRoute){
         if(req.method!=='POST')throw problem('METHOD_NOT_ALLOWED',405);
@@ -112,9 +138,10 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(action==='heartbeat')return send(200,{lease:store.heartbeat(lease)});
         if(action==='assert')return send(200,{valid:true,expires:current.expires});
         if(action==='release'){
-          await server.retireDesktopControl?.(lease);await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
+          await drainPhone(lease);await server.retireDesktopControl?.(lease);await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
           const released=store.releaseExternal(lease);gateway?.forgetReleased?.(lease);return send(200,released);
         }
+        if(phoneActions.has(lease.token))throw problem('DEVICE_BUSY',409);
         const controller=new AbortController();
         const disconnect=()=>{if(!res.writableEnded)controller.abort(Object.assign(Error('CLIENT_DISCONNECTED'),{code:'CLIENT_DISCONNECTED'}));};
         res.once('close',disconnect);

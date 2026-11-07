@@ -17,7 +17,7 @@ class DouyinPhoneAdapter {
     return ctx.input(()=>this.gateway.execute(ctx.claim.lease,{serial,args},{signal:ctx.signal}));
   }};
   const adb=new AndroidAdb(device.serial,{worker,env:{CRAWLER_DEVICE_LOCK_MODE:'queue'},signal:ctx.signal});
-  const seen=new Set(ctx.resume.seen_ids||[]);let storeName='';
+  const seen=new Set([...(locator.known_ids||[]),...(ctx.resume.seen_ids||[])]);let storeName='';
   const checkpoint=()=>({binding:ctx.resume.binding,device_id:ctx.claim.device_id,adapter_version:this.version,cursor:null,seen_ids:[...seen]});
   try{
    await this.harvest(adb,{video,names:locator.names,max:params.max_items||200,fetchImpl,

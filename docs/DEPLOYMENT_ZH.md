@@ -9,7 +9,7 @@
 | `the-ultimate-crawler-console` | 持久化队列、调度、物理设备租约、平台消费者、浏览器/手机运行时、采集错误、断点、受控输入、屏幕源 | pipeline 业务筛选、基线政策、活动判断、最终报告、面向用户的前端 |
 | `xhs-analysis` | 业务工作台、原证据/缓存读取、逐页业务决定、运行目录中的请求引用、爬虫控制台与鉴权代理 | queue 模式中的浏览器/ADB 重试、设备选择、旧原生 App 主动请求 |
 
-新服务不写旧项目 canonical `data/`、`output/` 或 `casestudy/`。消费者复用现有登录态路径，不复制使用中的 Chromium profile；服务运行数据库和私有捕获写入自己的 `CRAWLER_RUNTIME_DIR`。API 不接受任意 pipeline 输出路径。
+新服务不写旧项目 canonical `data/`、`output/` 或 `casestudy/`。消费者使用本服务目录中的登录态。迁移时先停止浏览器，校验后移动profile；服务运行数据库和私有捕获写入自己的 `CRAWLER_RUNTIME_DIR`。API 不接受任意 pipeline 输出路径。
 
 ## 后端配置
 
@@ -22,13 +22,13 @@ systemd unit 使用 `EnvironmentFile` 读取私有 `.env`；直接运行 `npm st
 | `CRAWLER_PORT` | loopback API，默认 `18323` |
 | `CRAWLER_XHS_WEB_ENABLED` / `CRAWLER_DOUYIN_WEB_ENABLED` | 显式注册两个平台的 Web 消费者；值 `true` 或 `1` |
 | `XHS_CRAWLER_BIN` | 从本仓库 `adapters/xhs-web/xiaohongshu-mcp/cmd/crawler` 构建的可执行文件；旧二进制不含分页和人工登录确认协议 |
-| `XHS_BROWSER_PROFILE` / `COOKIES_PATH` / `XHS_BROWSER_CACHE` | 原 XHS 独立 profile、cookie 容器与浏览器缓存；可用绝对路径引用旧安装，但不导入旧项目代码 |
+| `XHS_BROWSER_PROFILE` / `COOKIES_PATH` / `XHS_BROWSER_CACHE` | 本服务的 XHS 独立 profile、cookie 容器与浏览器缓存；不依赖 pipeline 运行目录 |
 | `DOUYIN_BROWSER_PROFILE` | 与 XHS 不同的专用 Chromium profile；两者路径相同会拒绝注册 |
 | `CRAWLER_BROWSER_EXECUTABLE` | Douyin Chromium 可执行文件；省略时从浏览器缓存解析 |
 | `ENABLE_XHS_BROWSER_NETWORK` | XHS 免费浏览器采集开关；部署真实采集时设为 true，与两个付费 gate 无关 |
 | `CRAWLER_ROOT_INPUT_SERIALS` | 可选、逗号分隔的明确 serial；只允许普通数字 input 遭 INJECT_EVENTS 拒绝后的受限模拟触摸，不允许安装绕过或 App 内部调用 |
 | `CRAWLER_CHROME_MANIFEST_FILE` | 手机 Chrome 准备工具生成的私有 APK 摘要清单；只经固定 provisioning 接口安装，不复制账号数据 |
-| `CRAWLER_PYTHON` | 安装 Playwright 和 requests 的 Python；匿名分享页同样使用它 |
+| `CRAWLER_PYTHON` | 本服务自己的 Python 环境，安装全部 adapters requirements；匿名分享页同样使用它 |
 | `CRAWLER_DESKTOP_DEPS` | 已安装 sway/wayvnc 的依赖根目录，含 `usr/bin`、`usr/lib` |
 | `CRAWLER_DESKTOP_STATE_FILE` | 隐藏桌面的 `display.json`，通常为 `$CRAWLER_RUNTIME_DIR/desktop/display.json`；启动后端时读取 |
 | `CRAWLER_WAYLAND_DISPLAY` / `XDG_RUNTIME_DIR` | 不使用状态文件时显式提供隐藏桌面 socket；消费者拒绝退回普通桌面 |
@@ -136,3 +136,22 @@ Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原�
 - 后台全量 Python 50 项 PASS；Node 未修改，前次全量 155 项 PASS。主项目相关回归：Douyin 79、DouyinKolPerformance 71、DouyinCaseStudy 36、CampaignWatch 279，均 PASS。
 
 此为小量、单页实测，不推断所有排序、搜索条件或多页场景均完成真机验收；其他设备能力限制仍见手机验收记录。
+
+### V4 手机执行器退役
+
+Pipeline 的 Android / clipboard / link recovery 模块现为 API 客户端；手机桥的
+启动/停止和 ADB 子进程只属于本服务。Parse Links 任务记录仍归 Pipeline，
+`POST /v1/device-utilities` 接收已取得的设备租约、显式 serial、操作名和参数，
+同租约只允许一个 utility；释放、断连或租约失效会取消并排空操作。
+匿名链接展开/校验经 `/v1/link-utilities` 执行，未授权浏览器 Origin 不可直连。
+
+XHS 地点页旧 UI 采集迁至 `adapters/android-ui/poi_page_harvest.js`，通过正式队列
+`place.posts` + `native_request.kind=location_page` 调用，保留 seed、时间边界、
+候选/跳过事件和逐条持久化。仅在实际验证设备后配置
+`ui_capabilities: [{"platform":"xiaohongshu","operation":"place.posts"}]`；
+该能力与原生 topic feed 分开匹配，不因 ADB 在线而自动声称支持。
+Douyin 地点采集通过 `locator.known_ids`（最多10,000个真实帖子ID）恢复跨请求进度。
+
+登录 QR 的重发只读取 `/v1/desktop/qr-current` 缓存：缓存由持有 Web 租约的
+`/v1/desktop/qr` 操作生成，同一图片重复读取不会延长10分钟窗口。Pipeline
+不再读取浏览器或 QR 运行时文件；服务重启后无缓存时明确返回未获取 QR。

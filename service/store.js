@@ -101,7 +101,7 @@ class Store {
   }
   compatible(d,p) {
     return (!p.params.native_request?.representation||d.kind===(p.params.native_request.representation==='ui_identity'?'android':'web')) && p.routing.kinds.includes(d.kind) && (!p.routing.device_ids.length||p.routing.device_ids.includes(d.id)) &&
-      d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation && (p.params.native_request?.representation==='ui_identity'?(c.representations||[]).includes('ui_identity'):(!c.representations||c.representations.includes(p.params.native_request?.representation))) &&
+      d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation && (p.params.native_request?.kind!=='location_page'||(c.native_kinds||[]).includes('location_page')) && (p.params.native_request?.representation==='ui_identity'?(c.representations||[]).includes('ui_identity'):(!c.representations||c.representations.includes(p.params.native_request?.representation))) &&
         (!p.params.sort || (Array.isArray(c.sorts)&&c.sorts.includes(p.params.sort))) &&
         (!p.params.filters || Object.keys(p.params.filters).every(k=>(c.filters||[]).includes(k))));
   }

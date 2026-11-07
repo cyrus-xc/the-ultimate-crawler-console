@@ -56,7 +56,7 @@ async function start({env=process.env,listen=true}={}){
     const {DouyinPhoneAdapter}=require('../adapters/douyin-phone/consumer'),douyin=new DouyinPhoneAdapter({store,gateway});
     const {AndroidUiAdapter}=require('../adapters/android-ui/consumer'),utility=new AndroidUiAdapter({store,gateway});
     store.register({id:device.id,kind:'android',serial:device.serial,capabilities:[...device.capabilities,...(configured.douyin_poi?[{platform:'douyin',operation:'place.posts'}]:[]),...utilityCapabilities]});
-    adapters.set(device.id,{phoneMultiplex:true,version:xhs.version+'+douyin-poi',execute:ctx=>(ctx.claim.payload.operation==='place.search'||ctx.claim.payload.params.native_request?.representation==='ui_identity'?utility:ctx.claim.payload.platform==='douyin'?douyin:xhs).execute(ctx),close:async()=>{await xhs.close?.();await douyin.close?.();}});
+    adapters.set(device.id,{phoneMultiplex:true,version:xhs.version+'+douyin-poi',execute:ctx=>(ctx.claim.payload.operation==='place.search'||ctx.claim.payload.params.native_request?.representation==='ui_identity'||ctx.claim.payload.params.native_request?.kind==='location_page'?utility:ctx.claim.payload.platform==='douyin'?douyin:xhs).execute(ctx),close:async()=>{await xhs.close?.();await douyin.close?.();}});
    }
   };
   registerPhones();if(phoneSettings){registrationTimer=setInterval(()=>{try{registerPhones();}catch{}},5000);registrationTimer.unref();}

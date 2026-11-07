@@ -7,8 +7,8 @@ const fail=code=>Object.assign(Error(code),{code});
 // Discovery alone does not advertise an unverified collector capability.
 function uiCapabilities(device){
  const requested=device.ui_capabilities ?? (device.ui_helpers===true?[{platform:'xiaohongshu',operation:'place.search'},{platform:'xiaohongshu',operation:'post.detail'},{platform:'douyin',operation:'post.detail'}]:[]);
- if(!Array.isArray(requested)||requested.some(c=>!c||!['xiaohongshu','douyin'].includes(c.platform)||!['post.detail','place.search'].includes(c.operation)||(c.operation==='place.search'&&c.platform!=='xiaohongshu')))throw fail('INVALID_PHONE_CAPABILITIES');
- return requested.map(c=>({platform:c.platform,operation:c.operation,...(c.operation==='post.detail'?{representations:['ui_identity']}: {})}));
+ if(!Array.isArray(requested)||requested.some(c=>!c||!['xiaohongshu','douyin'].includes(c.platform)||!['post.detail','place.search','place.posts'].includes(c.operation)||(['place.search','place.posts'].includes(c.operation)&&c.platform!=='xiaohongshu')))throw fail('INVALID_PHONE_CAPABILITIES');
+ return requested.map(c=>({platform:c.platform,operation:c.operation,...(c.operation==='post.detail'?{representations:['ui_identity']}:c.operation==='place.posts'?{native_kinds:['location_page']}: {})}));
 }
 function phoneConfig(env=process.env){
  if(!['1','true'].includes(env.CRAWLER_PHONE_ENABLED))return null;

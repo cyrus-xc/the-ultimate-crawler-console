@@ -34,7 +34,7 @@ function normalize(input) {
     'search.posts':['max_items','sort','filters'], 'profile.get':[],
     'profile.posts':['max_items','published_after','published_before'],
     'post.detail':[], 'post.comments':['max_items','include_replies'],
-    'place.search':['max_items','locator'], 'place.posts':['max_items','sort','locator'], 'link.resolve':[]
+    'place.search':['max_items','locator'], 'place.posts':['max_items','sort','locator','published_after'], 'link.resolve':[]
   }[input.operation];
   keys(params,[...allowed,'native_request']);
   if(params.native_request!==undefined){
@@ -44,7 +44,8 @@ function normalize(input) {
     if(['share_page','mobile_metadata','mobile_detail'].includes(params.native_request.representation)&&input.platform!=='xiaohongshu')throw problem('INVALID_PARAMS');
     if(Buffer.byteLength(JSON.stringify(params.native_request))>262144)throw problem('INVALID_PARAMS');
   }
-  if(params.locator!==undefined){keys(params.locator,['names','seed_post']);if(!Array.isArray(params.locator.names)||!params.locator.names.length||params.locator.names.length>30||params.locator.names.some(x=>!identifier(x))||(params.locator.seed_post!==undefined&&!identifier(params.locator.seed_post)))throw problem('INVALID_PARAMS');}
+  if(params.locator!==undefined){keys(params.locator,['names','seed_post','known_ids']);if(!Array.isArray(params.locator.names)||!params.locator.names.length||params.locator.names.length>30||params.locator.names.some(x=>!identifier(x))||(params.locator.seed_post!==undefined&&!identifier(params.locator.seed_post)))throw problem('INVALID_PARAMS');}
+  if(params.locator?.known_ids!==undefined&&(input.operation!=='place.posts'||input.platform!=='douyin'||!Array.isArray(params.locator.known_ids)||params.locator.known_ids.length>10000||params.locator.known_ids.some(id=>typeof id!=='string'||!/^\d{15,22}$/.test(id))))throw problem('INVALID_PARAMS');
   if ('max_items' in params) integer(params.max_items,1,100000);
   for (const k of ['published_after','published_before']) if (k in params &&
     (typeof params[k] !== 'string' || !/(?:Z|[+-]\d\d:\d\d)$/.test(params[k]) || !Number.isFinite(Date.parse(params[k])))) throw problem('INVALID_TIME');
