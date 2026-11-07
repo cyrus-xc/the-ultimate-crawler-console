@@ -1,7 +1,7 @@
 'use strict';
 const {createHash} = require('node:crypto');
 const VERSION = 'crawler.request.v1';
-const OPERATIONS = ['search.posts', 'profile.get', 'profile.posts', 'post.detail', 'post.comments', 'place.search', 'place.posts'];
+const OPERATIONS = ['search.posts', 'profile.get', 'profile.posts', 'post.detail', 'post.comments', 'place.search', 'place.posts', 'link.resolve'];
 const object = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const canonical = x => JSON.stringify(sort(x));
 function sort(x) {
@@ -21,7 +21,7 @@ function normalize(input) {
   if (!['xiaohongshu','douyin'].includes(input.platform) || !OPERATIONS.includes(input.operation)) throw problem('UNSUPPORTED_OPERATION');
   if (!['full','half','auto'].includes(input.effort || 'auto')) throw problem('INVALID_EFFORT');
   if (!Array.isArray(input.targets) || !input.targets.length || input.targets.length > 1000) throw problem('INVALID_TARGETS');
-  const key = {'search.posts':'keyword','place.search':'keyword','profile.get':'user_id','profile.posts':'user_id','post.detail':'post_id','post.comments':'post_id','place.posts':'place_id'}[input.operation];
+  const key = {'search.posts':'keyword','place.search':'keyword','profile.get':'user_id','profile.posts':'user_id','post.detail':'post_id','post.comments':'post_id','place.posts':'place_id','link.resolve':'url'}[input.operation];
   const targets = input.targets.map(t => {
     keys(t,[key,'observed_url']);
     if (!identifier(t[key])) throw problem('INVALID_TARGET');
@@ -34,9 +34,17 @@ function normalize(input) {
     'search.posts':['max_items','sort','filters'], 'profile.get':[],
     'profile.posts':['max_items','published_after','published_before'],
     'post.detail':[], 'post.comments':['max_items','include_replies'],
-    'place.search':['max_items'], 'place.posts':['max_items','sort']
+    'place.search':['max_items','locator'], 'place.posts':['max_items','sort','locator'], 'link.resolve':[]
   }[input.operation];
-  keys(params,allowed);
+  keys(params,[...allowed,'native_request']);
+  if(params.native_request!==undefined){
+    keys(params.native_request,['kind','id','keyword','xsec_token','target','seconds','comments','comment_mode','comment_lazy_load_limit','sort_by','since','profile_walk','profile_walk_version','profile_anchor_ids','profile_skip_ids','capture_share','select_share','user_id','representation']);
+    if(params.native_request.representation!==undefined&&!['share_page','mobile_metadata','mobile_detail','ui_identity'].includes(params.native_request.representation))throw problem('INVALID_PARAMS');
+    if(params.native_request.representation!==undefined&&input.operation!=='post.detail')throw problem('INVALID_PARAMS');
+    if(['share_page','mobile_metadata','mobile_detail'].includes(params.native_request.representation)&&input.platform!=='xiaohongshu')throw problem('INVALID_PARAMS');
+    if(Buffer.byteLength(JSON.stringify(params.native_request))>262144)throw problem('INVALID_PARAMS');
+  }
+  if(params.locator!==undefined){keys(params.locator,['names','seed_post']);if(!Array.isArray(params.locator.names)||!params.locator.names.length||params.locator.names.length>30||params.locator.names.some(x=>!identifier(x))||(params.locator.seed_post!==undefined&&!identifier(params.locator.seed_post)))throw problem('INVALID_PARAMS');}
   if ('max_items' in params) integer(params.max_items,1,100000);
   for (const k of ['published_after','published_before']) if (k in params &&
     (typeof params[k] !== 'string' || !/(?:Z|[+-]\d\d:\d\d)$/.test(params[k]) || !Number.isFinite(Date.parse(params[k])))) throw problem('INVALID_TIME');

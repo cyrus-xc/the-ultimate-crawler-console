@@ -192,7 +192,7 @@ class DouyinBrowser:
             viewport={"width": 1366, "height": 860},
             locale="zh-CN",
             timezone_id="Asia/Shanghai",
-            args=["--disable-blink-features=AutomationControlled"],
+            args=["--disable-blink-features=AutomationControlled", "--ozone-platform=wayland", "--class=ultimate-crawler-douyin"],
         )
         if executable is not None:
             launch["executable_path"] = str(executable)
@@ -247,6 +247,12 @@ class DouyinBrowser:
 
     def is_logged_in(self) -> bool:
         from . import guard
+        if urlparse(self.page.url).hostname not in ('www.douyin.com','douyin.com'):
+            return False
+        if self.page.evaluate("() => document.readyState") not in ('interactive','complete'):
+            return False
+        if any(button.is_visible() for button in self.page.get_by_text('登录',exact=True).all()):
+            return False
         state = self.login_state()
         hinted = (state["cookie_LOGIN_STATUS"] == "1" or state["cookie_sessionid_present"]
                   or state["localStorage_HasUserLogin"] == "1")

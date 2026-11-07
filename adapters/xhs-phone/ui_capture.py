@@ -13,7 +13,9 @@ from response_evidence import request_matches, request_target_matches, classify_
 from runtime_redaction import clean
 
 class CaptureError(RuntimeError):
-    pass
+    def __init__(self, code, diagnostics=None):
+        super().__init__(code)
+        self.diagnostics = diagnostics
 
 def semantic_request(request, operation):
     """Normalize observed App sort encoding only for semantic validation.
@@ -84,20 +86,37 @@ class UiResponseCapture:
         self.clock_ms = clock_ms or (lambda: time.time()*1000)
         self.monotonic = monotonic
 
-    def read(self, operation, contract, values, trigger, *, timeout=30, guard=lambda: None, valid_note_url=lambda u,n: False):
+    def read(self, operation, contract, values, trigger, *, timeout=30, guard=lambda: None, valid_note_url=lambda u,n: False, related_contracts=None, notify_response=None):
         if not 0 < timeout <= 300:
             raise ValueError('Invalid capture timeout')
         ready, changed = threading.Event(), threading.Event()
-        responses, cronet, errors = [], [], []
+        responses, cronet, errors, event_counts = [], [], [], {}
+        clock_offset = [0]
+        action_start = [None]
+        notified = [False]
         script = self.session.create_script(self.script_path.read_text('utf-8'))
         def receive(message, unused):
             payload = clean(message).get('payload',{})
+            if isinstance(payload.get('at'), (int,float)):
+                payload['device_at_ms'] = payload['at']
+                payload['at'] += clock_offset[0]
+            transport = payload.get('transport')
+            if isinstance(transport,dict):
+                for key in ('sent_at_ms','received_at_ms'):
+                    if isinstance(transport.get(key),(int,float)):
+                        transport[key] += clock_offset[0]
+            event = payload.get('event', 'unknown')
+            event_counts[event] = event_counts.get(event, 0)+1
             if message.get('type') == 'error':
                 errors.append('CAPTURE_OBSERVER_FAILED'); ready.set()
             if payload.get('event') == 'observer_ready':
                 ready.set()
             if payload.get('event') == 'response_json':
                 responses.append(payload)
+                if notify_response and action_start[0] is not None and not notified[0] and payload.get('at',-1) >= action_start[0]:
+                    if request_matches({**payload,'request':semantic_request(payload.get('request',{}),operation)},matching_contract,values):
+                        notified[0] = True
+                        notify_response()
             if payload.get('event') == 'cronet_response_started':
                 cronet.append(payload)
             changed.set()
@@ -113,6 +132,8 @@ class UiResponseCapture:
             if errors:
                 raise CaptureError(errors[0])
             script.exports_sync.allowpath(contract['path'])
+            for extra in (related_contracts or {}).values():
+                script.exports_sync.allowpath(extra['path'])
             if operation in {'image_detail','video_detail'}:
                 script.exports_sync.allowshare(values['note_id'],contract['path'])
             # Defaults inferred for direct API invocations are not UI controls.
@@ -120,7 +141,23 @@ class UiResponseCapture:
             # confirm supported parameter translations, never silently drop them.
             matching_contract = copy.deepcopy(contract)
             matching_contract['parameters'] = [p for p in contract['parameters'] if p['name'] in values]
-            start = self.clock_ms()
+            # Phone clocks are not necessarily host-synchronised. Compare action
+            # boundaries in host time, while retaining the original device time.
+            try:
+                device_clock = getattr(script.exports_sync,'observerclock',None)
+                if device_clock is None:
+                    raise AttributeError('fixture has no device clock')
+                before = self.clock_ms()
+                device_now = device_clock()
+                after = self.clock_ms()
+                if isinstance(device_now, (int,float)):
+                    clock_offset[0] = (before+after)/2-device_now
+            except AttributeError:
+                pass # Offline fixture scripts do not provide a device clock.
+            # Drop every pre-action observation, including events received before
+            # the clock calibration (a device clock ahead must not admit them).
+            responses.clear();cronet.clear()
+            start = self.clock_ms();action_start[0] = start
             guard();trigger()
             while True:
                 guard()
@@ -135,7 +172,7 @@ class UiResponseCapture:
                     evidence = classify_transport(wire,start,now,lower)
                     result = {'operation':operation,'note_id':values.get('note_id'),'input':clean(values),
                               'response':body,'request':wire['request'],'status':wire['status'],
-                              'captured_at_ms':wire['at'],'at_peek_limit':wire.get('at_peek_limit',False),
+                              'captured_at_ms':wire['at'],'device_captured_at_ms':wire.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',
                               'action_started_at_ms':start,'action_finished_at_ms':now}
                     if operation=='search':
@@ -146,10 +183,57 @@ class UiResponseCapture:
                         except Exception:
                             link=None
                         result=bridge_result(result,link,valid_note_url)
+                    # App prefetch can load another page during one gesture.
+                    # Preserve every matching target page observed by this action;
+                    # no later cursor may silently hide an already loaded page.
+                    if operation in {'search','user_posted','comments','topic_feed'}:
+                        broad_values = copy.deepcopy(values)
+                        for key in ('cursor','start','page','page_context','search_id','search_session_id'):
+                            broad_values.pop(key,None)
+                            if isinstance(broad_values.get('query'),dict):
+                                broad_values['query'].pop(key,None)
+                        broad_contract = copy.deepcopy(matching_contract)
+                        broad_contract['parameters'] = [p for p in broad_contract['parameters'] if p['name'] in broad_values]
+                        extras = []; related_errors=[]
+                        for extra in responses:
+                            if extra is wire or not isinstance(extra.get('at'),(int,float)) or not start <= extra['at'] <= now:
+                                continue
+                            if not request_matches({**extra,'request':semantic_request(extra.get('request',{}),operation)},broad_contract,broad_values):
+                                continue
+                            try:
+                                extra_body=verify_payload(operation,broad_values,extra,contract)
+                            except CaptureError as error:
+                                related_errors.append(str(error));continue
+                            extra_query=sorted((q['name'],q['value']) for q in extra.get('request',{}).get('query',[]))
+                            extra_lower=[e for e in cronet if e.get('request',{}).get('path')==extra['request']['path'] and sorted((q['name'],q['value']) for q in e.get('request',{}).get('query',[]))==extra_query]
+                            extras.append({'operation':operation,'input':clean(broad_values),'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'device_captured_at_ms':extra.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'transport_evidence':classify_transport(extra,start,now,extra_lower),'trigger':'ui'})
+                        if extras:result['related_pages']=extras
+                        if related_errors:result['related_errors']=related_errors
+                    # A profile navigation emits header and first notes in the
+                    # same UI action. Preserve both rather than reopening the
+                    # cached page and accidentally accepting its last cursor.
+                    if operation == 'user_info' and related_contracts:
+                        related_contract = copy.deepcopy(related_contracts.get('user_posted'))
+                        if related_contract:
+                            related_values = {'user_id': values.get('query', {}).get('user_id'), 'cursor': ''}
+                            related_contract['parameters'] = [p for p in related_contract['parameters'] if p['name'] in related_values]
+                            related_deadline = min(deadline, self.monotonic()+2)
+                            while True:
+                                guard()
+                                candidates = [r for r in responses if isinstance(r.get('at'), (int,float)) and start <= r['at'] <= self.clock_ms() and request_matches(r, related_contract, related_values)]
+                                if candidates:
+                                    extra = candidates[0]
+                                    extra_body = verify_payload('user_posted', related_values, extra, related_contract)
+                                    extra_lower = [e for e in cronet if request_target_matches(e.get('request', {}), related_contract, related_values)]
+                                    result['related'] = {'user_posted': {'operation':'user_posted','input':related_values,'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'transport_evidence':classify_transport(extra,start,self.clock_ms(),extra_lower),'trigger':'ui'}}
+                                    break
+                                if self.monotonic() >= related_deadline:
+                                    break
+                                changed.wait(min(.1, related_deadline-self.monotonic()));changed.clear()
                     return result
                 remaining=deadline-self.monotonic()
                 if remaining<=0:
-                    raise CaptureError('CAPTURE_TIMEOUT')
+                    raise CaptureError('CAPTURE_TIMEOUT', {'events':event_counts,'observed_requests':[{'path':r.get('request',{}).get('path'),'host':r.get('request',{}).get('host'),'status':r.get('status'),'query_names':[q.get('name') for q in r.get('request',{}).get('query',[])]} for r in (responses+cronet)[:20]]})
                 changed.wait(min(0.1,remaining));changed.clear()
         finally:
             try:

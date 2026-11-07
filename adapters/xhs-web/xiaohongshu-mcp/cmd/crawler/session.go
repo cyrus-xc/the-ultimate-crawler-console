@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/xiaohongshu-mcp/crawler"
@@ -123,6 +124,57 @@ func serveSession() int {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "new_session_page": fresh})
 	})
+	mux.HandleFunc("/desktop/qr", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r) {
+			return
+		}
+		if r.Method != "POST" {
+			http.Error(w, "method", 405)
+			return
+		}
+		mu.Lock()
+		if active > 0 || closing {
+			mu.Unlock()
+			http.Error(w, "collector busy", 409)
+			return
+		}
+		active++
+		mu.Unlock()
+		defer func() { mu.Lock(); active--; last = time.Now(); mu.Unlock() }()
+		qrCtx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+		defer cancel()
+		png, logged, err := engine.DesktopQRCode(qrCtx)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "LOGIN_QR_UNAVAILABLE"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "authenticated": logged, "png_base64": base64.StdEncoding.EncodeToString(png)})
+	})
+	mux.HandleFunc("/desktop/confirm", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r) {
+			return
+		}
+		if r.Method != "POST" {
+			http.Error(w, "method", 405)
+			return
+		}
+		mu.Lock()
+		if active > 0 || closing {
+			mu.Unlock()
+			http.Error(w, "collector busy", 409)
+			return
+		}
+		active++
+		mu.Unlock()
+		defer func() { mu.Lock(); active--; last = time.Now(); mu.Unlock() }()
+		checkCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err := engine.ConfirmDesktopLogin(checkCtx); err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": err.Error()})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+	})
 	mux.HandleFunc("/read", func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r) {
 			return
@@ -213,6 +265,12 @@ func serveSession() int {
 					return decisions.exchange(c, w, "profile_note", nid, detail)
 				},
 			})
+		}
+		if req.StreamPages {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			readCtx = xiaohongshu.WithPageControl(readCtx, xiaohongshu.PageControl{Limit: req.MaxPages, Observe: func(c context.Context, raw json.RawMessage) (bool, error) {
+				return decisions.exchange(c, w, "page", req.ID, map[string]any{"raw": raw})
+			}})
 		}
 		data, err := engine.Read(readCtx, req)
 		if err != nil {

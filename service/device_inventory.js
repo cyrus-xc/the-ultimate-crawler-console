@@ -24,7 +24,7 @@ class DeviceInventory {
   for(const device of known)if(!ready.has(device.serial))this.store.setPresence(device.id,false);
   this.lastError=null;this.snapshot=new Map(found.map(d=>[d.serial,d]));return found;
  }
- describe(device){return device.kind==='android'?{...device,connection_state:this.snapshot&&!this.lastError?(this.snapshot.get(device.serial)?.state||'offline'):'unknown'}:device;}
+ describe(device){return device.kind==='android'?{...device,model:this.snapshot?.get(device.serial)?.model||device.serial,connection_state:this.snapshot&&!this.lastError?(this.snapshot.get(device.serial)?.state||'offline'):'unknown'}:device;}
  start(){if(this.timer)return this;this.closed=false;const tick=()=>{this.refresh().catch(()=>{this.lastError='DEVICE_DISCOVERY_FAILED';this.onError(this.lastError);});};tick();this.timer=setInterval(tick,this.pollMs);this.timer.unref();return this;}
  async close(){this.closed=true;clearInterval(this.timer);this.timer=null;if(this.pending)await this.pending;}
 }

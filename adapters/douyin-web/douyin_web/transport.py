@@ -41,13 +41,18 @@ class Transport:
         if str(detail.get('aweme_id',''))!=post_id:raise ReadError('POST_IDENTITY_MISMATCH')
         return body
 
-    def pages(self,operation,target,*,max_items,max_pages,cursor=0,on_page=lambda page:None):
+    def pages(self,operation,target,*,max_items,max_pages,cursor=0,on_page=lambda page:None,include_profile=False):
         if operation not in {'profile.posts','post.comments'}:raise ReadError('UNSUPPORTED_OPERATION')
         if not isinstance(max_items,int) or max_items<1 or not isinstance(max_pages,int) or max_pages<1:raise ReadError('INVALID_LIMIT')
         is_profile=operation=='profile.posts';key='user_id' if is_profile else 'post_id'
         identity=target[key]
         self.goto('https://www.douyin.com/'+('user/' if is_profile else 'video/')+quote(identity,safe=''))
         seen=set();pages=[];more=True;stop='page_limit'
+        if is_profile and include_profile:
+            profile=self.api('/aweme/v1/web/user/profile/other/',{'sec_user_id':identity})
+            if str((profile.get('user') or {}).get('sec_uid'))!=identity:raise ReadError('PROFILE_IDENTITY_MISMATCH')
+            if on_page({'body':profile,'items':[profile['user']],'cursor':cursor,'has_more':True,'page_index':0,'observed_at':time.time()})=='stop':
+                return {'pages':[],'coverage':{'unique':0,'pages':0,'stop_reason':'client_stopped','end_observed':False}}
         for index in range(max_pages):
             if is_profile:
                 body=self.api('/aweme/v1/web/aweme/post/',{'sec_user_id':identity,'max_cursor':cursor,'count':18,'locate_query':'false','show_live_replay_strategy':1})
@@ -68,3 +73,57 @@ class Transport:
             if stalled:stop='cursor_stalled';break
             cursor=next_cursor
         return {'pages':pages,'coverage':{'unique':len(seen),'pages':len(pages),'stop_reason':stop,'end_observed':not more}}
+
+    def search(self,keyword,*,max_items,max_pages,sort=None,filters=None,on_page=lambda page:None):
+        from urllib.parse import urlparse,parse_qs
+        sorts={None:'0','综合':'0','最新':'2','最多点赞':'1'}
+        if sort not in sorts:raise ReadError('UNSUPPORTED_SORT')
+        allowed={'publish_time','filter_duration','search_range'}
+        filters=filters or {}
+        if set(filters)-allowed:raise ReadError('UNSUPPORTED_FILTER')
+        expected={'sort_type':sorts[sort],**{k:str(v) for k,v in filters.items()}}
+        pending=[]
+        def capture(response):
+            parsed=urlparse(response.url)
+            if parsed.hostname!='www.douyin.com' or not parsed.path.endswith('/search/item/'):return
+            query=parse_qs(parsed.query)
+            if query.get('keyword')!=[keyword]:return
+            for key,value in expected.items():
+                if query.get(key,['0'])!=[value]:return
+            try:body=response.json()
+            except Exception:return
+            pending.append(body)
+        self.browser.page.on('response',capture)
+        seen=set()
+        try:
+            self.goto('https://www.douyin.com/search/'+quote(keyword,safe='')+'?'+urlencode({'type':'video',**expected}))
+            for index in range(max_pages):
+                self.check();self.browser.page.wait_for_timeout(2000)
+                batch=list(pending);pending.clear()
+                for body in batch:
+                    if body.get('status_code') not in (None,0):raise ReadError('UPSTREAM_REJECTED','platform')
+                    items=[d['aweme_info'] for d in body.get('data') or [] if isinstance(d,dict) and d.get('aweme_info')]
+                    if any(not item.get('aweme_id') for item in items):raise ReadError('ITEM_IDENTITY_MISSING')
+                    seen.update(str(item['aweme_id']) for item in items)
+                    more=bool(body.get('has_more',True))
+                    decision=on_page({'body':body,'items':items,'cursor':body.get('cursor'),'has_more':more,'page_index':index+1,'observed_at':time.time()})
+                    if decision=='stop' or not more or len(seen)>=max_items:return
+                if index+1<max_pages:
+                    self.check();self.browser.page.mouse.wheel(0,900)
+            if not seen:raise ReadError('SEARCH_RESPONSE_UNAVAILABLE','platform')
+        finally:self.browser.page.remove_listener('response',capture)
+
+    def mix_views(self,user_id,*,max_mixes=5,max_videos=60,on_page=lambda page:None):
+        body=self.api('/aweme/v1/web/mix/list/',{'sec_user_id':user_id,'req_from':'channel_pc_web','cursor':0,'count':12})
+        if on_page({'endpoint':'aweme_v1_web_mix_list','body':body,'items':[],'cursor':'mix-list','has_more':True})=='stop':return
+        seen=0
+        for mix in (body.get('mix_infos') or [])[:max_mixes]:
+            cursor=0
+            while seen<max_videos:
+                body=self.api('/aweme/v1/web/mix/aweme/',{'mix_id':mix['mix_id'],'cursor':cursor,'count':20})
+                items=body.get('aweme_list') or []
+                seen+=sum(1 for item in items if (item.get('statistics') or {}).get('play_count'))
+                next_cursor=body.get('cursor',cursor+20)
+                if on_page({'endpoint':'aweme_v1_web_mix_aweme','body':body,'items':items,'cursor':'mix:'+str(mix['mix_id'])+':'+str(next_cursor),'has_more':bool(body.get('has_more'))})=='stop':return
+                if not body.get('has_more') or next_cursor==cursor:break
+                cursor=next_cursor

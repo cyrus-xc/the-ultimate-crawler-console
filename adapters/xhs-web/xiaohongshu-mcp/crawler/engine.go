@@ -22,6 +22,8 @@ const ShareSelectionVersion = xiaohongshu.ShareSelectionVersion
 const ProfileWalkVersion = xiaohongshu.ProfileWalkVersion
 
 type Request struct {
+	MaxPages       int      `json:"max_pages,omitempty"`
+	StreamPages    bool     `json:"stream_pages,omitempty"`
 	ProfileWalk    bool     `json:"profile_walk,omitempty"`
 	WalkVersion    string   `json:"profile_walk_version,omitempty"`
 	ProfileAnchors []string `json:"profile_anchor_ids,omitempty"`
@@ -49,6 +51,9 @@ var idPattern = regexp.MustCompile(`^[a-fA-F0-9]{24}$`)
 var poiPattern = regexp.MustCompile(`^[a-fA-F0-9]{8,64}$`)
 
 func (r Request) Validate() error {
+	if r.MaxPages < 0 || r.MaxPages > 1000 {
+		return errors.New("INVALID_PAGE_LIMIT")
+	}
 	if r.ProfileWalk && r.WalkVersion != ProfileWalkVersion || !r.ProfileWalk && r.WalkVersion != "" {
 		return errors.New("INVALID_PROFILE_WALK")
 	}
@@ -129,6 +134,9 @@ func (e *Engine) Read(ctx context.Context, r Request) (result map[string]any, er
 	}
 	if r.ProfileWalk && !xiaohongshu.HasProfileWalk(ctx) {
 		return nil, errors.New("INVALID_PROFILE_WALK")
+	}
+	if r.MaxPages > 0 && !r.StreamPages {
+		ctx = xiaohongshu.WithPageControl(ctx, xiaohongshu.PageControl{Limit: r.MaxPages})
 	}
 	trace := newReadTrace()
 	defer func() {

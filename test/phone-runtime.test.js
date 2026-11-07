@@ -19,6 +19,7 @@ function fixture(t,{running=true}={}){
   const cmd=args[3]||'';
   if(cmd.includes('sha256sum'))return sha+' file';
   if(cmd.includes(' -l ')){state.running=true;return '';}
+  if(cmd.includes('kill ')){state.running=false;return '';}
   if(cmd.includes('/stat'))return stat();
   return '';
  }};

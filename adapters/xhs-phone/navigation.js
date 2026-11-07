@@ -1,7 +1,7 @@
 'use strict';
 const {DevicePause}=require('../../android/android_adb');
 const {writeAndroidClipboard}=require('../../android/android_clipboard');
-const {UiLocator}=require('../../android/ui_locator');
+const {UiLocator,SORT_ANCHORS}=require('../../android/ui_locator');
 const SORT_LABELS={general:'综合',time_descending:'最新',popularity_descending:'最多点赞',comment_descending:'最多评论',collect_descending:'最多收藏'};
 const label=n=>String(n?.text||n?.['content-desc']||'').trim();
 const failed=code=>{throw new DevicePause(code,code);};
@@ -22,8 +22,16 @@ class XhsNavigation {
     let nodes=await this.ui();
     let edits=nodes.filter(n=>/EditText$/.test(n.class||''));
     if(!edits.length){
-      let search;try{search=this.locator.locate('search.query',nodes);}catch{}
-      if(!search){try{search=this.locator.locate('search.open',nodes);}catch{failed('SEARCH_CONTROL_UNAVAILABLE');}}
+      let search;
+      for(let depth=0;depth<5;depth++){
+        try{search=this.locator.locate('search.query',nodes);}catch{}
+        if(!search){try{search=this.locator.locate('search.open',nodes);}catch{}}
+        if(search)break;
+        // A prior detail/profile job may leave XHS away from its search entry.
+        // Use bounded normal Back navigation, never guessed icon coordinates.
+        if(depth===4||nodes.some(n=>['发现','Discover','Explore'].includes(label(n)))||nodes.some(n=>['搜索','Search','검색'].includes(label(n))))failed('SEARCH_CONTROL_UNAVAILABLE');
+        await this.shell('input','keyevent','4');await this.adb.wait(350);nodes=await this.ui();
+      }
       for(let attempt=0;attempt<2;attempt++){
         await this.tap(search.node);await this.adb.wait(350);nodes=await this.ui();
         if(nodes.some(n=>/EditText$/.test(n.class||''))){
@@ -42,7 +50,7 @@ class XhsNavigation {
     await this.tap(input);await this.shell('input','keyevent','123');
     await this.shell('input','keyevent',...Array(Math.min(280,label(input).length+8)).fill('67'));
     await this.shell('input','keyevent','279');
-    nodes=await this.ui();const actual=label(choose(nodes,n=>/EditText$/.test(n.class||'')&&n.center,'SEARCH_INPUT_UNAVAILABLE')).replace(/^搜索,\s*/,'');
+    nodes=await this.ui();const actual=label(choose(nodes,n=>/EditText$/.test(n.class||'')&&n.center,'SEARCH_INPUT_UNAVAILABLE')).replace(/^(?:搜索|Search),\s*/i,'');
     if(actual!==keyword)failed('SEARCH_INPUT_MISMATCH');
     this.locator.confirm(inputCandidate,'search_text_verified');
     if(submit)await this.submitSearch();
@@ -51,9 +59,10 @@ class XhsNavigation {
   async sort(value){
     const wanted=SORT_LABELS[value];if(!wanted)failed('UNSUPPORTED_SORT');
     let nodes=await this.ui();
+    if(nodes.some(n=>SORT_ANCHORS.includes(label(n)))){await this.shell('input','keyevent','4');await this.adb.wait(350);nodes=await this.ui();}
     let quick;try{quick=this.locator.locate('filter.quick_general',nodes);}catch{failed('QUICK_FILTER_RESET_UNAVAILABLE');}
     if(quick.node.selected!=='true'){await this.tap(quick.node);await this.adb.wait(350);nodes=await this.ui();}
-    const expanded=nodes.some(n=>['最多点赞','最多评论','最多收藏'].includes(label(n)));
+    const expanded=nodes.some(n=>SORT_ANCHORS.includes(label(n)));
     if(!expanded){
       let opener;try{opener=this.locator.locate('sort.open',nodes);}catch{failed('SORT_CONTROL_UNAVAILABLE');}
       await this.tap(opener.node);await this.adb.wait(350);nodes=await this.ui();
@@ -61,7 +70,7 @@ class XhsNavigation {
     // New tasks must not inherit filters selected by an earlier task/person.
     let reset;try{reset=this.locator.locate('sort.reset',nodes);}catch{failed('FILTER_RESET_UNAVAILABLE');}
     await this.tap(reset.node);await this.adb.wait(350);nodes=await this.ui();
-    if(!nodes.some(n=>['最多点赞','最多评论','最多收藏'].includes(label(n)))){
+    if(!nodes.some(n=>SORT_ANCHORS.includes(label(n)))){
       const opener=this.locator.locate('sort.open',nodes);await this.tap(opener.node);await this.adb.wait(350);nodes=await this.ui();
     }
     let candidate;try{candidate=this.locator.locate('sort.'+value,nodes);}catch{failed('SORT_OPTION_UNAVAILABLE');}
@@ -78,6 +87,37 @@ class XhsNavigation {
   async openNote(noteId){
     if(!/^[a-f0-9]{24}$/.test(noteId))failed('INVALID_NOTE_ID');
     await this.shell('am','start','-a','android.intent.action.VIEW','-d',`xhsdiscover://item/${noteId}`,'-p','com.xingin.xhs');
+    await this.adb.wait(350);await this.ui();
+  }
+  async openProfile(userId){
+    if(!/^[a-f0-9]{24}$/.test(userId))failed('INVALID_USER_ID');
+    await this.shell('am','start','-a','android.intent.action.VIEW','-d',`xhsdiscover://user/${userId}`,'-p','com.xingin.xhs');
+    await this.adb.wait(350);await this.ui();
+  }
+  async openPlace(observedUrl){
+    let url;try{url=new URL(observedUrl);}catch{failed('PLACE_OBSERVED_URL_REQUIRED');}
+    if(url.protocol!=='https:'||!['www.xiaohongshu.com','xiaohongshu.com'].includes(url.hostname)||url.username||url.password)failed('PLACE_OBSERVED_URL_REQUIRED');
+    await this.shell('am','start','-a','android.intent.action.VIEW','-d',url.href,'-p','com.xingin.xhs');
+  }
+  async comments(){
+    const nodes=await this.ui();
+    const controls=nodes.filter(n=>n.center&&/^(?:共\s*)?\d+\s*条评论$|^评论(?:\s*\d+)?$|^Comments?(?:\s*\d+)?$/i.test(label(n)));
+    if(controls.length===1){await this.tap(controls[0]);await this.adb.wait(350);}
+    else await this.swipe();
+  }
+  async back(){await this.shell('input','keyevent','4');await this.adb.wait(350);}
+  async refresh(){
+    const nodes=await this.ui(),width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0)),height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
+    if(width<200||height<400)failed('VIEWPORT_UNAVAILABLE');
+    await this.shell('input','swipe',Math.round(width*.5),Math.round(height*.35),Math.round(width*.5),Math.round(height*.8),'450');await this.adb.wait(500);
+  }
+  async firstPage(responseReady=()=>false){
+    for(let attempt=0;attempt<8;attempt++){if(responseReady())return;await this.refresh();}
+    if(!responseReady())failed('PHONE_FIRST_PAGE_UNOBSERVED');
+  }
+  async nextPage(responseReady=()=>false){
+    for(let attempt=0;attempt<12;attempt++){await this.swipe();if(responseReady())return;}
+    failed('PHONE_PAGE_RESPONSE_UNOBSERVED');
   }
   async swipe(){
     const nodes=await this.ui();const width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0));const height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));

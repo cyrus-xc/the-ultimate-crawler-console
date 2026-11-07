@@ -52,6 +52,15 @@ func ReadSearchEvidenceWithBudget(ctx context.Context, page *rod.Page, keyword s
 		}
 		n := len(accumulated)
 		counts = append(counts, n)
+		keepReading, observeErr := observePage(ctx, raw)
+		if observeErr != nil {
+			return nil, observeErr
+		}
+		if !keepReading {
+			stop = "client_stopped"
+			break
+		}
+
 		terminal, checkErr := page.Context(ctx).Eval(`() => {const h=window.__INITIAL_STATE__?.search?.hasMore;const v=h?.value??h?._value??h;return v===false;}`)
 		// A false initial flag on an empty/auth page is not proof of an empty result.
 		if checkErr == nil && terminal.Value.Bool() && n > 0 && n == last {
@@ -90,6 +99,10 @@ func ReadSearchEvidenceWithBudget(ctx context.Context, page *rod.Page, keyword s
 		}
 		if seconds > 0 && time.Now().After(deadline) {
 			stop = "time_budget"
+			break
+		}
+		if pageLimitReached(ctx, len(counts)) {
+			stop = "page_limit"
 			break
 		}
 		if err = page.Context(ctx).Mouse.Scroll(0, 850, 1); err != nil {

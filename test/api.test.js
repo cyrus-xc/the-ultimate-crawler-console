@@ -39,3 +39,14 @@ test('share decision endpoint preserves false and rejects missing choice',async 
  const response=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({action:'continue',capture_share:false})});
  assert.equal(response.status,200);assert.equal((await response.json()).capture_share,false);
 });
+
+test('failed live login verification records the platform fault until verified recovery',async t=>{
+ const store=new Store();store.register({id:'web:douyin:default',kind:'web',capabilities:[{platform:'douyin',operation:'post.detail'}]});
+ let loggedIn=false;const adapter={resume:async()=>{if(!loggedIn)throw Object.assign(Error('LOGIN_REQUIRED'),{code:'LOGIN_REQUIRED'});}};
+ const scheduler={worker:{adapters:new Map([['web:douyin:default',adapter]])}};
+ const server=createServer({store,token,scheduler});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{await new Promise(r=>server.close(r));store.close();});
+ const lease=store.externalLease('web:douyin:default','external:pipeline:login');const url=`http://127.0.0.1:${server.address().port}/v1/desktop/resume`;
+ const run=()=>fetch(url,{method:'POST',headers,body:JSON.stringify({lease,confirmed:true})});
+ assert.equal((await run()).status,409);assert.equal(store.devices()[0].faults.douyin,'LOGIN_REQUIRED');
+ loggedIn=true;assert.equal((await run()).status,200);assert.equal(store.devices()[0].faults.douyin,undefined);
+});

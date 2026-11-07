@@ -95,3 +95,41 @@ test('orphaned command ownership is retained until a supervisor confirms stop',a
  store.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run('p1');gateway.confirmStopped('p1',{commandId:'orphan',stopped:true});
  assert.equal(gateway.status('p1'),null);assert.equal(store.devices()[0].quarantined,1);
 });
+test('trusted runtime setup uses the same lease and cleanup cannot issue input',async t=>{
+ const {store,gateway,children}=fixture(t),lease=store.externalLease('p1','runtime');
+ const run=gateway.executeTrusted(lease,{args:['forward','tcp:0','tcp:27043']});await tick();assert.equal(children.length,1);children[0].finish(0,'40123');assert.equal((await run).stdout,'40123');
+ await assert.rejects(gateway.executeTrusted(lease,{args:tap},{cleanup:true}),{code:'RUNTIME_CLEANUP_UNSUPPORTED'});
+ store.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run('p1');
+ const cleanup=gateway.executeTrusted(lease,{args:['forward','--remove','tcp:40123']},{cleanup:true});await tick();children[1].finish();await cleanup;
+ store.releaseExternal(lease);await assert.rejects(gateway.executeTrusted(lease,{args:['forward','--remove','tcp:40123']},{cleanup:true}),{code:'LEASE_LOST'});
+});
+test('configured rooted phone retries only numeric input on actual INJECT_EVENTS denial',async t=>{
+ const {store,gateway,children}=fixture(t,{gatewayOptions:{rootInputSerials:['SERIAL1']}}),lease=store.externalLease('p1','console');
+ const action=gateway.execute(lease,{args:tap});await tick();children[0].finish(1,'','SecurityException: injecting requires INJECT_EVENTS permission');await tick();
+ assert.equal(children.length,2);assert.deepEqual(children[1].args,['-s','SERIAL1','shell','su','-c',"'input tap 10 20'"]);children[1].finish();await action;
+ const other=store.externalLease('p2','console'),denied=gateway.execute(other,{args:tap});const rejected=assert.rejects(denied,{code:'INPUT_PERMISSION_REQUIRED'});await tick();children[2].finish(1,'','SecurityException: injecting requires INJECT_EVENTS permission');await rejected;assert.equal(children.length,3);
+ await assert.rejects(gateway.execute(lease,{args:['shell','su','-c','id']}),{code:'ADB_COMMAND_UNSUPPORTED'});
+});
+test('root input fallback rechecks cancellation and cannot revive revoked control',async t=>{
+ const {store,gateway,children}=fixture(t,{gatewayOptions:{rootInputSerials:['SERIAL1']}}),lease=store.externalLease('p1','console'),controller=new AbortController();
+ const action=gateway.execute(lease,{args:tap},{signal:controller.signal});const rejected=assert.rejects(action,{code:'DEVICE_COMMAND_CANCELLED'});await tick();
+ children[0].finish(1,'','SecurityException: injecting requires INJECT_EVENTS permission');controller.abort();await rejected;assert.equal(children.length,1);
+});
+test('long provisioning timeout is internal-only and bounded',async t=>{
+ const {store,gateway,children}=fixture(t,{gatewayOptions:{timeoutMs:5}}),lease=store.externalLease('p1','provision');
+ await assert.rejects(gateway.executeTrusted(lease,{args:['forward','--list']},{timeoutMs:180001}),{code:'INVALID_GATEWAY_TIMEOUT'});assert.equal(children.length,0);
+ await assert.rejects(gateway.execute(lease,{args:tap},{timeoutMs:180000}),{code:'ADB_COMMAND_TIMEOUT'});assert.equal(children.length,1);
+});
+test('normal release retires admission and drains a completed touch without quarantining',async t=>{
+ const {store,gateway,children}=fixture(t),lease=store.externalLease('p1','console');
+ const active=gateway.execute(lease,{args:tap});await tick();let released=false;const retired=gateway.retire(lease).then(()=>{released=true;});await tick();assert.equal(released,false);assert.deepEqual(children[0].signals,[]);
+ const late=gateway.execute(lease,{args:tap}).catch(e=>e);children[0].finish();await active;await retired;assert.equal((await late).code,'DEVICE_COMMAND_CANCELLED');assert.equal(gateway.requiresRecovery(),false);assert.equal(store.devices().find(d=>d.id==='p1').quarantined,0);
+ store.releaseExternal(lease);gateway.forgetReleased(lease);
+});
+
+test('installer failure exposes only its stable code',async t=>{
+ const {store,gateway,children}=fixture(t),lease=store.externalLease('p1','provision');
+ const result=gateway.executeTrusted(lease,{args:['install-multiple','-r','/private/base.apk']});
+ const rejected=assert.rejects(result,error=>error.code==='INSTALL_FAILED_USER_RESTRICTED'&&!error.message.includes('fixture-secret'));
+ await tick();children[0].finish(1,'Failure [INSTALL_FAILED_USER_RESTRICTED: fixture-secret]');await rejected;
+});

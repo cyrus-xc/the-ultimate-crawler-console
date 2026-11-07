@@ -1,0 +1,17 @@
+[Unit]
+Description=Private Wayland desktop for independent crawler consumers
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Development/the-ultimate-crawler-console
+EnvironmentFile=%h/Development/the-ultimate-crawler-console/.env
+ExecStart=/usr/bin/bash adapters/xhs-web/desktop/start.sh
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=15
+UMask=0077
+
+[Install]
+WantedBy=default.target

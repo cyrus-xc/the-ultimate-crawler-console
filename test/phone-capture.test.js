@@ -40,3 +40,8 @@ test('unserializable input is rejected before spawning an observer',async()=>{
  await assert.rejects(captureResponse({...options,values,spawnProcess:()=>{spawned=true;}}),{code:'INVALID_CAPTURE_INPUT'});
  assert.equal(spawned,false);
 });
+test('observer response feedback reaches an ongoing UI action before completion',async()=>{
+ const {options,child}=fixture();let saw=false;
+ const result=await captureResponse({...options,trigger:async control=>{assert.equal(control.responseReady(),false);child.stdout.write(JSON.stringify({event:'response_ready'})+'\n');await new Promise(r=>setImmediate(r));saw=control.responseReady();}});
+ assert.equal(saw,true);assert.equal(result.status,200);
+});

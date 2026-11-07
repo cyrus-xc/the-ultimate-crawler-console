@@ -82,11 +82,21 @@ class PhoneRuntime {
   if(this.ownedServer){
    try{
     const {pid,start}=this.ownedServer,current=(await this.pidof(path.posix.basename(this.devicePath),this.cleanupAdb)).split(/\s+/);
-    if(current.includes(pid)&&processStart(await this.root(`cat /proc/${pid}/stat`,this.cleanupAdb))===start)await this.root(`kill ${pid}`,this.cleanupAdb);
+    if(current.includes(pid)&&processStart(await this.root(`cat /proc/${pid}/stat`,this.cleanupAdb))===start){
+     await this.root(`kill ${pid}`,this.cleanupAdb);
+     let stopped=false;
+     for(let n=0;n<20;n++){
+      const live=(await this.pidof(path.posix.basename(this.devicePath),this.cleanupAdb)).split(/\s+/);
+      if(!live.includes(pid)){stopped=true;break;}
+      if(processStart(await this.root(`cat /proc/${pid}/stat`,this.cleanupAdb))!==start){stopped=true;break;}
+      await this.cleanupAdb.wait(100);
+     }
+     if(!stopped)throw fail('RUNTIME_STOP_UNCONFIRMED');
+    }
     this.ownedServer=null;
    }catch(error){errors.push(error);}
   }
-  if(errors.length)throw fail('RUNTIME_CLEANUP_FAILED');
+  if(errors.length){const error=fail('RUNTIME_CLEANUP_FAILED');error.cleanup_codes=errors.map(e=>e.code||e.constructor.name);throw error;}
  }
 }
 module.exports={PhoneRuntime,foregroundMainPid,processStart};

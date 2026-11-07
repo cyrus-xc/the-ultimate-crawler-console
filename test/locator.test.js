@@ -34,3 +34,16 @@ test('expanded sort menu disambiguates duplicated general/latest shortcuts using
  const l=new UiLocator({serial:'a',appVersion:'v'});const n=(text,y)=>({...node('0_resource_name_obfuscated',text),center:[100,y]});const nodes=[n('综合',580),n('最新',580),n('综合',706),n('最新',706),n('最多点赞',706),n('最多收藏',871)];
  assert.equal(l.locate('sort.general',nodes).node.center[1],706);assert.equal(l.locate('sort.time_descending',nodes).node.center[1],706);
 });
+
+test('expanded menu excludes lower underlying quick sort controls after layout shifts',()=>{
+ const l=new UiLocator({serial:'a',appVersion:'v'}),n=(text,y)=>({...node('0_resource_name_obfuscated',text),center:[100,y],height:120});
+ const nodes=[n('综合',1662),n('最新',1662),n('综合',706),n('最新',706),n('最多点赞',706),n('最多评论',706),n('最多收藏',871),n('重置',2256)];
+ assert.equal(l.locate('sort.time_descending',nodes).node.center[1],706);assert.equal(l.locate('sort.reset',nodes).node.center[1],2256);
+ assert.throws(()=>l.locate('sort.time_descending',[...nodes,n('最新',706)]),{code:'UI_CONTROL_AMBIGUOUS'});
+});
+test('observed English Redmi controls retain the same five semantic sort roles',()=>{
+ const l=new UiLocator({serial:'redmi',appVersion:'9.51.0'}),n=(text,y)=>({...node('0_resource_name_obfuscated',text),center:[100,y],height:80});
+ const nodes=[n('Top',420),n('Latest',420),n('Top',514),n('Latest',514),n('Most liked',514),n('Most commented',635),n('Most saved',635),n('Clear',1775)];
+ for(const [role,label] of Object.entries({general:'Top',time_descending:'Latest',popularity_descending:'Most liked',comment_descending:'Most commented',collect_descending:'Most saved'}))assert.equal(l.locate('sort.'+role,nodes).node.text,label);
+ assert.equal(l.locate('filter.quick_general',nodes).node.center[1],420);assert.equal(l.locate('sort.reset',nodes).node.text,'Clear');
+});

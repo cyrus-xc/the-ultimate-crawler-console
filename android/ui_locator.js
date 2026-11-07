@@ -4,18 +4,19 @@ const {createHash,randomUUID}=require('node:crypto');
 const VERSION='ui_locator_v1';
 const text=n=>String(n.text||n['content-desc']||'').trim();
 const stableId=n=>{const id=n['resource-id']||'';return id && !/obfuscated|0_resource_name/.test(id)?id:null;};
+const SORT_ANCHORS=['最多点赞','最多评论','最多收藏','Most liked','Most commented','Most saved'];
 const ROLES={
  'search.open':{labels:['搜索','Search','검색']},
  'search.input':{classSuffix:'EditText'},
  'search.query':{structural:'search_query'},
- 'sort.open':{labels:['全部','筛选','排序','综合','Sort','Filter']},
- 'filter.quick_general':{labels:['综合']},
- 'sort.reset':{labels:['重置','Reset']},
- 'sort.general':{labels:['综合','综合排序']},
- 'sort.time_descending':{labels:['最新']},
- 'sort.popularity_descending':{labels:['最多点赞']},
- 'sort.comment_descending':{labels:['最多评论']},
- 'sort.collect_descending':{labels:['最多收藏']}
+ 'sort.open':{labels:['全部','All','筛选','排序','综合','Sort','Filter']},
+ 'filter.quick_general':{labels:['综合','Top']},
+ 'sort.reset':{labels:['重置','Reset','Clear']},
+ 'sort.general':{labels:['综合','综合排序','Top']},
+ 'sort.time_descending':{labels:['最新','Latest']},
+ 'sort.popularity_descending':{labels:['最多点赞','Most liked']},
+ 'sort.comment_descending':{labels:['最多评论','Most commented']},
+ 'sort.collect_descending':{labels:['最多收藏','Most saved']}
 };
 class LocatorError extends Error{constructor(code,role){super(code);this.code=code;this.role=role;}}
 class UiLocator {
@@ -28,7 +29,7 @@ class UiLocator {
  matches(role,node,nodes=[]){
   const spec=ROLES[role];if(!spec)throw new LocatorError('UNKNOWN_CONTROL_ROLE',role);
   if(spec.structural==='search_query'){
-    const clear=nodes.filter(n=>text(n)==='全部删除'&&n.center),submit=nodes.filter(n=>text(n)==='搜索'&&n.center),back=nodes.filter(n=>text(n)==='返回'&&n.center);
+    const clear=nodes.filter(n=>['全部删除','Delete all'].includes(text(n))&&n.center),submit=nodes.filter(n=>['搜索','Search'].includes(text(n))&&n.center),back=nodes.filter(n=>['返回','Back'].includes(text(n))&&n.center);
     if(clear.length!==1||submit.length!==1||back.length!==1||!node.center)return false;
     const y=submit[0].center[1],tolerance=Math.max(20,(submit[0].height||40)/2);
     return node.clickable==='true' && /TextView$/.test(node.class||'') && !!text(node) && node.center[0]>back[0].center[0] && node.center[0]<clear[0].center[0] && Math.abs(node.center[1]-y)<tolerance && Math.abs(clear[0].center[1]-y)<tolerance && Math.abs(back[0].center[1]-y)<tolerance;
@@ -38,9 +39,9 @@ class UiLocator {
  locate(role,nodes){
   let matches=nodes.filter(n=>this.matches(role,n,nodes));
   if(role==='sort.open'){for(const preferred of ROLES[role].labels){const group=matches.filter(n=>text(n)===preferred);if(group.length){matches=group;break;}}}
-  else if(role.startsWith('sort.')||role==='filter.quick_general'){
-    const anchors=nodes.filter(n=>['最多点赞','最多评论','最多收藏'].includes(text(n))&&n.center);
-    if(anchors.length){const top=Math.min(...anchors.map(n=>n.center[1]));matches=matches.filter(n=>role==='filter.quick_general'?n.center[1]<top-Math.max(20,(n.height||40)/2):n.center[1]>=top-Math.max(20,(n.height||40)/2));}
+  else if((role.startsWith('sort.')&&role!=='sort.reset')||role==='filter.quick_general'){
+    const anchors=nodes.filter(n=>SORT_ANCHORS.includes(text(n))&&n.center);
+    if(anchors.length){const top=Math.min(...anchors.map(n=>n.center[1])),bottom=Math.max(...anchors.map(n=>n.center[1]));matches=matches.filter(n=>role==='filter.quick_general'?(n.center[1]<top-Math.max(20,(n.height||40)/2)||n.center[1]>bottom+Math.max(20,(n.height||40)/2)):(n.center[1]>=top-Math.max(20,(n.height||40)/2)&&n.center[1]<=bottom+Math.max(20,(n.height||40)/2)));}
   }
   // A cached resource ID is a hint, never sufficient proof if semantics changed.
   // Duplicate matches cannot be resolved by the old coordinate alone.
@@ -59,4 +60,4 @@ class UiLocator {
   return {role:candidate.role,recovered:candidate.recovered,revision:this.bindings[candidate.role].revision};
  }
 }
-module.exports={UiLocator,LocatorError,ROLES,VERSION};
+module.exports={UiLocator,LocatorError,ROLES,VERSION,SORT_ANCHORS};

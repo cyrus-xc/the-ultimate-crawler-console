@@ -74,6 +74,15 @@ func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string,
 		}
 		n := identifiedProfileCount(obj.Feeds)
 		counts = append(counts, n)
+		keepReading, observeErr := observePage(ctx, raw)
+		if observeErr != nil {
+			return nil, observeErr
+		}
+		if !keepReading {
+			stop = "client_stopped"
+			break
+		}
+
 		if walking {
 			var selectedStop string
 			anchors := walk.Anchors
@@ -127,6 +136,10 @@ func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string,
 		last = n
 		if scrollStalled(stalled, time.Since(lastGrowth)) {
 			stop = "no_growth"
+			break
+		}
+		if pageLimitReached(ctx, len(counts)) {
+			stop = "page_limit"
 			break
 		}
 		if err = page.Context(ctx).Mouse.Scroll(0, 850, 1); err != nil {

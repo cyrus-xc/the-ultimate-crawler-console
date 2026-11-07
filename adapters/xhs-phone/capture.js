@@ -7,7 +7,7 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
  if(!values||typeof values!=='object'||Array.isArray(values)||Buffer.byteLength(encoded)>1024*1024)throw error('INVALID_CAPTURE_INPUT');
  await guard();if(signal?.aborted)throw signal.reason;
  const child=spawnProcess(python,['-B',path.join(__dirname,'capture_cli.py'),'--contract',contractPath,'--endpoint',endpoint,'--pid',String(pid),'--operation',operation,'--timeout',String(timeoutSeconds)],{stdio:['pipe','pipe','ignore'],env:{...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'}});
- const decoder=new StringDecoder('utf8');let buffer='',bytes=0,result=null,failure=null,action=null,actionDone=false,killTimer;
+ const decoder=new StringDecoder('utf8');let buffer='',bytes=0,result=null,failure=null,action=null,actionDone=false,responseReady=false,killTimer;
  const stop=reason=>{if(!failure)failure=reason;child.kill('SIGTERM');if(!killTimer)killTimer=setTimeout(()=>child.kill('SIGKILL'),2000);};
  const abort=()=>stop(signal.reason||error('STOP_REQUESTED'));
  const timer=setTimeout(()=>stop(error('CAPTURE_TIMEOUT')),timeoutSeconds*1000+10000);
@@ -22,11 +22,13 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
    if(failure)continue;
    if(message.event==='perform_action'){
     if(action){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}
-    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger();await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(stop);
+    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger({responseReady:()=>responseReady});await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(stop);
+   }else if(message.event==='response_ready'){
+    if(!action){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}responseReady=true;
    }else if(message.event==='result'){
     if(result||!actionDone||message.result?.operation!==operation||message.result?.status!==200||!message.result?.response||!message.result?.request){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}
     result=message.result;
-   }else if(message.event==='error')stop(error(/^[A-Z][A-Z0-9_]{1,100}$/.test(message.code||'')?message.code:'CAPTURE_FAILED'));
+   }else if(message.event==='error'){const failure=error(/^[A-Z][A-Z0-9_]{1,100}$/.test(message.code||'')?message.code:'CAPTURE_FAILED');if(message.diagnostics)failure.diagnostics=message.diagnostics;stop(failure);}
    else stop(error('CAPTURE_PROTOCOL_INVALID'));
   }
  });

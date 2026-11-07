@@ -61,6 +61,7 @@ class Store {
     return this.tx(()=>{
       const prior=this.db.prepare('SELECT id,hash FROM requests WHERE scope=? AND key=?').get(scope,payload.idempotency_key);
       if(prior){if(prior.hash!==hash)throw problem('IDEMPOTENCY_CONFLICT',409);return this.request(prior.id);}
+      if(payload.cache.mode==='only')throw problem('CACHE_MISS',404);
       const id=randomUUID(),at=this.now();
       this.db.prepare('INSERT INTO requests(id,scope,key,hash,payload,state,created,updated,queued_at) VALUES (?,?,?,?,?,?,?,?,?)').run(id,scope,payload.idempotency_key,hash,canonical(payload),'queued',at,at,at);
       for(const target of payload.targets) this.db.prepare('INSERT INTO units(id,request_id,target,state) VALUES (?,?,?,?)').run(randomUUID(),id,canonical(target),'queued');
@@ -99,15 +100,15 @@ class Store {
     });
   }
   compatible(d,p) {
-    return p.routing.kinds.includes(d.kind) && (!p.routing.device_ids.length||p.routing.device_ids.includes(d.id)) &&
-      d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation &&
+    return (!p.params.native_request?.representation||d.kind===(p.params.native_request.representation==='ui_identity'?'android':'web')) && p.routing.kinds.includes(d.kind) && (!p.routing.device_ids.length||p.routing.device_ids.includes(d.id)) &&
+      d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation && (p.params.native_request?.representation==='ui_identity'?(c.representations||[]).includes('ui_identity'):(!c.representations||c.representations.includes(p.params.native_request?.representation))) &&
         (!p.params.sort || (Array.isArray(c.sorts)&&c.sorts.includes(p.params.sort))) &&
         (!p.params.filters || Object.keys(p.params.filters).every(k=>(c.filters||[]).includes(k))));
   }
-  healthy(d,p) {return d.health==='ready'&&!d.quarantined&&!d.faults[p.platform];}
-  acquire(deviceId,owner,attemptId=null) {
+  healthy(d,p) {const fault=d.faults[p.platform];const anonymous=p.platform==='xiaohongshu'&&d.kind==='web'&&(p.operation==='link.resolve'||['share_page','mobile_metadata','mobile_detail'].includes(p.params.native_request?.representation));return d.health==='ready'&&!d.quarantined&&(!fault||(anonymous&&fault==='LOGIN_REQUIRED'));}
+  acquire(deviceId,owner,attemptId=null,{control=false}={}) {
     const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
-    if(!d || d.quarantined || d.health!=='ready')throw problem('DEVICE_UNAVAILABLE',409);
+    if(!d || d.quarantined || (d.health!=='ready'&&!(control&&d.kind==='web')))throw problem('DEVICE_UNAVAILABLE',409);
     if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(deviceId))throw problem('DEVICE_BUSY',409);
     this.assertNoCommand(deviceId);
     const generation=d.generation+1,token=randomUUID(),expires=this.now()+this.leaseMs;
@@ -115,9 +116,9 @@ class Store {
     this.db.prepare('INSERT INTO leases VALUES (?,?,?,?,?,?)').run(deviceId,token,owner,generation,expires,attemptId);
     return {device_id:deviceId,token,generation,expires,attempt_id:attemptId};
   }
-  externalLease(deviceId,owner) {
+  externalLease(deviceId,owner,options={}) {
     if(!identifier(owner))throw problem('INVALID_OWNER');
-    return this.tx(()=>{this.expireInside();const lease=this.acquire(deviceId,owner);this.event(null,'lease.acquired',{device_id:deviceId,owner,generation:lease.generation});return lease;});
+    return this.tx(()=>{this.expireInside();const lease=this.acquire(deviceId,owner,null,options);this.event(null,'lease.acquired',{device_id:deviceId,owner,generation:lease.generation});return lease;});
   }
   assertLease(lease,{owner=null,externalOnly=false}={}) {
     const current=this.fence(lease);

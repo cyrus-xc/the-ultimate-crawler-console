@@ -68,8 +68,10 @@ function validateCommand(args, device) {
 }
 
 class DeviceGateway {
-  constructor(store, {adbPath='adb', spawnProcess=spawn, beforeCommand=()=>{}, pollMs=100, timeoutMs=15000, killGraceMs=1000, maxOutputBytes=16*1024*1024}={}) {
+  constructor(store, {adbPath='adb', spawnProcess=spawn, beforeCommand=()=>{}, rootInputSerials=[], pollMs=100, timeoutMs=15000, killGraceMs=1000, maxOutputBytes=16*1024*1024}={}) {
     if (typeof adbPath !== 'string' || !adbPath || typeof beforeCommand !== 'function' || pollMs < 1 || timeoutMs < 1 || killGraceMs < 1) throw problem('INVALID_GATEWAY_CONFIG',500);
+    if(!Array.isArray(rootInputSerials)||rootInputSerials.some(s=>typeof s!=='string'||!/^[-\w.:]+$/.test(s)))throw problem('INVALID_GATEWAY_CONFIG',500);
+    this.rootInputSerials=new Set(rootInputSerials);
     this.store=store;this.adbPath=adbPath;this.spawnProcess=spawnProcess;this.beforeCommand=beforeCommand;
     this.pollMs=pollMs;this.timeoutMs=timeoutMs;this.killGraceMs=killGraceMs;this.maxOutputBytes=maxOutputBytes;
     this.id=randomUUID();this.tails=new Map();this.operations=new Map();this.active=new Map();this.cancelled=new Set();this.closing=false;
@@ -87,13 +89,13 @@ class DeviceGateway {
     return this.recoveryRequired || !!this.store.db.prepare('SELECT 1 FROM device_commands LIMIT 1').get() ||
       !!this.store.db.prepare("SELECT 1 FROM devices WHERE kind='android' AND quarantined=1 LIMIT 1").get();
   }
-  assert(lease) {
+  assert(lease, {cleanup=false}={}) {
     this.beforeCommand();
     const row=this.store.assertLease ? this.store.assertLease(lease) : this.store.fence(lease);
     const device=this.store.db.prepare('SELECT * FROM devices WHERE id=?').get(lease.device_id);
     if (!device || device.kind !== 'android' || !/^[\w.:-]+$/.test(device.serial || '')) throw problem('ANDROID_DEVICE_REQUIRED',409);
-    if (device.quarantined) throw problem('DEVICE_QUARANTINED',409);
-    if (row.attempt_id) {
+    if (device.quarantined && !cleanup) throw problem('DEVICE_QUARANTINED',409);
+    if (row.attempt_id && !cleanup) {
       const work=this.store.db.prepare('SELECT u.state,r.state request_state FROM attempts a JOIN units u ON u.id=a.unit_id JOIN requests r ON r.id=u.request_id WHERE a.id=?').get(row.attempt_id);
       if (!work || work.state !== 'running' || work.request_state !== 'running') throw problem('WORKER_INPUT_NOT_ALLOWED',409);
     }
@@ -102,13 +104,43 @@ class DeviceGateway {
   status(deviceId) {
     return this.store.db.prepare('SELECT device_id,command_id,gateway_id,gateway_pid,pid,state,started FROM device_commands WHERE device_id=?').get(deviceId) || null;
   }
-  execute(lease, {args,serial}={}, {signal}={}) {
+  // Internal runtime calls never originate from HTTP. Only the service's fixed
+  // passive-observer setup/cleanup builds these commands; leases and DB command
+  // ownership are identical to the public gateway.
+  executeTrusted(lease, {args,serial}={}, {signal,cleanup=false,timeoutMs}={}) {
+    if(timeoutMs!==undefined&&(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>180000))return Promise.reject(problem('INVALID_GATEWAY_TIMEOUT',400));
+    if (!Array.isArray(args) || args.some(a=>typeof a!=='string'||/[\x00\r\n]/.test(a))) return Promise.reject(problem('ADB_COMMAND_UNSUPPORTED',400));
+    if(cleanup){
+      const words=args.map(a=>a.startsWith("'")&&a.endsWith("'")?a.slice(1,-1):a);
+      const safe=(words[0]==='forward'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
+        (words[0]==='reverse'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
+        (words[0]==='shell'&&words[1]==='pidof'&&/^xhs-lab-frida-[\w.-]+$/.test(words[2]||'')&&words.length===3)||
+        (words[0]==='shell'&&words[1]==='su'&&words[2]==='-c'&&/^(?:cat \/proc\/\d+\/stat|kill \d+)$/.test(words[3]||'')&&words.length===4);
+      if(!safe)return Promise.reject(problem('RUNTIME_CLEANUP_UNSUPPORTED',400));
+    }
+    return this.enqueue(lease,{args,serial},{signal,cleanup,trusted:true,timeoutMs});
+  }
+  execute(lease, command={}, options={}) { return this.enqueue(lease,command,options); }
+  enqueue(lease, {args,serial}={}, {signal,cleanup=false,trusted=false,timeoutMs}={}) {
     if (this.closing) return Promise.reject(problem('GATEWAY_CLOSED',503));
     let device, command;
-    try { device=this.assert(lease);if(serial!==undefined && serial!==device.serial)throw problem('DEVICE_IDENTITY_MISMATCH',409);command=validateCommand(args,device); }
+    try { device=this.assert(lease,{cleanup});if(serial!==undefined && serial!==device.serial)throw problem('DEVICE_IDENTITY_MISMATCH',409);command=trusted?{args:[...args],binary:false,timeoutMs}:validateCommand(args,device);
+      if(!trusted&&this.rootInputSerials.has(device.serial)&&args[0]==='shell'){
+        const words=args.slice(1).map(shellToken),[input,action,...values]=words;
+        if(input==='input'&&['tap','swipe','keyevent'].includes(action)&&values.length&&values.every(v=>/^\d+$/.test(v)))command.rootArgs=['shell','su','-c',`'input ${action} ${values.join(' ')}'`];
+      } }
     catch(error) { return Promise.reject(error); }
     const key=keyOf(lease), previous=this.tails.get(device.id) || Promise.resolve();
-    const operation=previous.catch(()=>{}).then(()=>this.run(lease,command,signal));
+    const operation=previous.catch(()=>{}).then(async()=>{
+      try{return await this.run(lease,command,signal,{cleanup});}
+      catch(error){
+        // Opt-in rooted devices may deny ordinary shell INJECT_EVENTS. Retry
+        // only validated numeric input, under the unchanged lease and command
+        // lifetime. No HTTP request can name a root command or enable fallback.
+        if(error.code!=='INPUT_PERMISSION_REQUIRED'||!command.rootArgs)throw error;
+        return this.run(lease,{args:command.rootArgs,binary:false},signal,{cleanup});
+      }
+    });
     this.tails.set(device.id,operation);
     if (!this.operations.has(key)) this.operations.set(key,new Set());
     this.operations.get(key).add(operation);
@@ -118,12 +150,12 @@ class DeviceGateway {
     }).catch(()=>{});
     return operation;
   }
-  async run(lease, command, signal) {
+  async run(lease, command, signal, {cleanup=false}={}) {
     const key=keyOf(lease);
-    if(this.closing || this.cancelled.has(key) || signal?.aborted)throw problem('DEVICE_COMMAND_CANCELLED',409);
+    if(this.closing || (!cleanup && this.cancelled.has(key)) || signal?.aborted)throw problem('DEVICE_COMMAND_CANCELLED',409);
     const commandId=randomUUID();
     const device=this.store.tx(()=>{
-      const device=this.assert(lease);
+      const device=this.assert(lease,{cleanup});
       if(this.status(device.id))throw problem('DEVICE_COMMAND_BUSY',409);
       this.store.db.prepare("INSERT INTO device_commands(device_id,command_id,token,generation,gateway_id,gateway_pid,state,started) VALUES (?,?,?,?,?,?,'running',?)").run(device.id,commandId,lease.token,lease.generation,this.id,process.pid,this.store.now());
       return device;
@@ -142,7 +174,7 @@ class DeviceGateway {
     const onAbort=()=>abort(problem('DEVICE_COMMAND_CANCELLED',409));
     this.active.set(commandId,{key,abort});
     try {
-      this.assert(lease);
+      this.assert(lease,{cleanup});
       // Only the configured executable and the database serial reach spawn.
       child=this.spawnProcess(this.adbPath,['-s',device.serial,...command.args],{stdio:['ignore','pipe','pipe'],windowsHide:true,env:{...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'}});
       closePromise=new Promise(resolve=>{
@@ -153,13 +185,14 @@ class DeviceGateway {
       const collect=(target,data)=>{outputBytes+=data.length;if(outputBytes>this.maxOutputBytes)abort(problem('ADB_OUTPUT_LIMIT',502));else target.push(Buffer.from(data));};
       child.stdout.on('data',data=>collect(stdout,data));child.stderr.on('data',data=>collect(stderr,data));
       signal?.addEventListener('abort',onAbort,{once:true});if(signal?.aborted)onAbort();
-      timer=setTimeout(()=>abort(problem('ADB_COMMAND_TIMEOUT',504)),this.timeoutMs);
-      monitor=setInterval(()=>{try{this.assert(lease);}catch(error){abort(error);}},this.pollMs);
+      timer=setTimeout(()=>abort(problem('ADB_COMMAND_TIMEOUT',504)),(command.timeoutMs||this.timeoutMs));
+      monitor=setInterval(()=>{try{this.assert(lease,{cleanup});}catch(error){abort(error);}},this.pollMs);
       const code=await closePromise;
       if(failure)throw failure;
-      this.assert(lease);
+      this.assert(lease,{cleanup});
       if(code!==0){
         if(/SecurityException:[^\r\n]*requires INJECT_EVENTS permission/.test(Buffer.concat(stderr).toString('utf8')))throw problem('INPUT_PERMISSION_REQUIRED',409);
+        if(command.args[0]==='install-multiple'){const installerCode=Buffer.concat([...stderr,...stdout]).toString('utf8').match(/\bINSTALL_FAILED_[A-Z_]+\b/);if(installerCode)throw problem(installerCode[0],502);}
         throw problem('ADB_COMMAND_FAILED',502);
       }
       const bytes=Buffer.concat(stdout);
@@ -174,6 +207,7 @@ class DeviceGateway {
       this.store.db.prepare('DELETE FROM device_commands WHERE command_id=? AND gateway_id=?').run(commandId,this.id);
     }
   }
+  async retire(lease) {this.cancelled.add(keyOf(lease));await this.drain(lease);}
   async cancel(lease) {
     const key=keyOf(lease);this.cancelled.add(key);
     for(const active of this.active.values())if(active.key===key)active.abort(problem('DEVICE_COMMAND_CANCELLED',409));

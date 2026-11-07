@@ -18,6 +18,7 @@ function retainObservedShare(body, request, observationId) {
   }
 }
 rpc.exports = {
+  observerclock() { return Date.now(); },
   allowshare(noteId, path) {
     if (!/^[a-f0-9]{24}$/.test(noteId) || !paths.has(path)) throw new Error('INVALID_SHARE_TARGET');
     shareTarget = {noteId, path};

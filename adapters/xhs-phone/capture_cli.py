@@ -8,8 +8,10 @@ from pathlib import Path
 from ui_capture import UiResponseCapture
 from note_links import valid_note_url
 
+emit_lock=threading.Lock()
 def emit(value):
-    print(json.dumps(value,ensure_ascii=False),flush=True)
+    with emit_lock:
+        print(json.dumps(value,ensure_ascii=False),flush=True)
 
 def main():
     parser=argparse.ArgumentParser()
@@ -54,13 +56,13 @@ def main():
             emit({'event':'perform_action'})
             if json.loads(sys.stdin.readline()).get('action')!='done':
                 raise RuntimeError('ACTION_NOT_CONFIRMED')
-        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url)
+        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url,related_contracts={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else None,notify_response=lambda:emit({'event':'response_ready'}))
         emit({'event':'result','result':result})
         return 0
     except Exception as error:
         code=str(error)
         if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}',code):code='CAPTURE_FAILED'
-        emit({'event':'error','code':code})
+        emit({'event':'error','code':code,**({'diagnostics':error.diagnostics} if getattr(error,'diagnostics',None) else {})})
         return 1
     finally:
         if session is not None:

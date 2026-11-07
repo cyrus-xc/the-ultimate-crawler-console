@@ -21,6 +21,7 @@ import (
 	"github.com/xpzouying/xiaohongshu-mcp/browser"
 	"github.com/xpzouying/xiaohongshu-mcp/configs"
 	"github.com/xpzouying/xiaohongshu-mcp/cookies"
+	"github.com/xpzouying/xiaohongshu-mcp/xiaohongshu"
 )
 
 const SessionVersion = "crawler_browser_session_v1"
@@ -195,6 +196,71 @@ func (e *Engine) OpenDesktop(ctx context.Context) (fresh bool, err error) {
 	_, err = page.Context(ctx).Activate()
 	return fresh, err
 }
+
+// DesktopQRCode exports only the visible login QR for an authorized operator.
+func (e *Engine) DesktopQRCode(ctx context.Context) ([]byte, bool, error) {
+	e.ensureBrowser()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	page := e.page(ctx, "operator-desktop")
+	_, logged, err := xiaohongshu.NewLogin(page).FetchQrcodeImage(ctx)
+	if err != nil {
+		return nil, false, errors.New("LOGIN_QR_UNAVAILABLE")
+	}
+	if logged {
+		return nil, true, nil
+	}
+	el, err := page.Context(ctx).Element(".login-container .qrcode-img")
+	if err != nil {
+		return nil, false, errors.New("LOGIN_QR_UNAVAILABLE")
+	}
+	bytes, err := el.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
+	if err != nil {
+		return nil, false, errors.New("LOGIN_QR_UNAVAILABLE")
+	}
+	return bytes, false, nil
+}
+
+// ConfirmDesktopLogin never navigates or collects. A human acknowledgement may
+// persist only the authenticated live page, never the stale login cookie file.
+func (e *Engine) ConfirmDesktopLogin(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.browser == nil {
+		return errors.New("LOGIN_REQUIRED")
+	}
+	var page *rod.Page
+	var latest time.Time
+	for key, p := range e.tabs {
+		if page == nil || e.used[key].After(latest) {
+			page = p
+			latest = e.used[key]
+		}
+	}
+	if page == nil {
+		return errors.New("LOGIN_REQUIRED")
+	}
+	logged, err := xiaohongshu.NewLogin(page).AuthenticatedHere(ctx)
+	if err != nil {
+		return errors.New("LOGIN_STATE_UNAVAILABLE")
+	}
+	if !logged {
+		return errors.New("LOGIN_REQUIRED")
+	}
+	if cookieHash() != e.cookieHash {
+		return errors.New("LOGIN_COOKIE_CHANGED")
+	}
+	data, err := e.browser.Cookies(ctx)
+	if err != nil {
+		return errors.New("LOGIN_COOKIE_SAVE_FAILED")
+	}
+	if err = cookies.NewLoadCookie(cookies.GetCookiesFilePath()).SaveCookies(data); err != nil {
+		return errors.New("LOGIN_COOKIE_SAVE_FAILED")
+	}
+	e.cookieHash = cookieHash()
+	return nil
+}
+
 func (e *Engine) tabKey(r Request) string {
 	switch r.Kind {
 	case "search":

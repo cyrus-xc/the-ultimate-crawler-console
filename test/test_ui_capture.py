@@ -92,6 +92,49 @@ class CaptureTests(unittest.TestCase):
             result=capture.read('image_detail',CONTRACT,{'note_id':N},trigger,valid_note_url=valid_note_url)
             note=result['response']['data'][0]['note_list'][0]
             self.assertEqual(note.get('share_info',{}).get('link'),link if accepted else None)
+    def test_phone_clock_offset_preserves_fast_real_responses_without_changing_content_time(self):
+        session=Session()
+        original=session.create_script
+        def script(source):
+            value=original(source);value.observerclock=lambda:1000;return value
+        session.create_script=script
+        clock=iter([2000,2002,2003,2005]);capture=UiResponseCapture(session,clock_ms=lambda:next(clock))
+        response=wire(at=1004);response['body']['data'][0]['note_list'][0]['time']=123
+        result=capture.read('image_detail',CONTRACT,{'note_id':N},lambda:session.scripts[-1].emit(response))
+        self.assertEqual(result['captured_at_ms'],2005)
+        self.assertEqual(result['device_captured_at_ms'],1004)
+        self.assertEqual(result['observer_clock_offset_ms'],1001)
+        self.assertEqual(result['response']['data'][0]['note_list'][0]['time'],123)
+
+    def test_profile_first_page_is_preserved_from_same_navigation_action(self):
+        user_contract={**CONTRACT,'path':'/api/sns/v3/user/info','parameters':[{'name':'query','type':'java.util.Map'}]}
+        posted_contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
+        info={'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':user_contract['path'],'query':[{'name':'user_id','value':N}]},'status':200,'body':{'code':0,'success':True,'data':{'userid':N}}}
+        posted={'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':posted_contract['path'],'query':[{'name':'user_id','value':N},{'name':'cursor','value':''}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':'b'*24,'user':{'userid':N}}],'has_more':False}}}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            session.scripts[-1].emit(info);session.scripts[-1].emit(posted)
+        result=capture.read('user_info',user_contract,{'query':{'user_id':N}},trigger,related_contracts={'user_posted':posted_contract})
+        self.assertEqual(result['related']['user_posted']['response']['data']['notes'][0]['id'],'b'*24)
+
+    def test_response_feedback_stops_ui_loop_before_action_returns(self):
+        session=Session();ready=[];capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            session.scripts[-1].emit(wire())
+            self.assertEqual(ready,[True])
+        capture.read('image_detail',CONTRACT,{'note_id':N},trigger,notify_response=lambda:ready.append(True))
+
+    def test_prefetched_target_page_is_preserved_but_foreign_user_is_not(self):
+        contract={**CONTRACT,'path':'/api/sns/v4/note/user/posted','parameters':[{'name':'user_id','type':'java.lang.String'},{'name':'cursor','type':'java.lang.String'}]}
+        def posted(cursor,note,user=N):
+            return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':contract['path'],'query':[{'name':'user_id','value':user},{'name':'cursor','value':cursor}]},'status':200,'body':{'code':0,'success':True,'data':{'notes':[{'id':note,'user':{'userid':user}}],'has_more':True}}}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            for value in [posted('', 'b'*24),posted('next','c'*24),posted('', 'e'*24,'d'*24)]:session.scripts[-1].emit(value)
+        result=capture.read('user_posted',contract,{'user_id':N,'cursor':''},trigger)
+        self.assertEqual(len(result['related_pages']),1)
+        self.assertEqual(result['related_pages'][0]['response']['data']['notes'][0]['id'],'c'*24)
+
     def test_standalone_access_tokens_are_removed_before_evidence_storage(self):
         from runtime_redaction import clean
         value=clean({'data':{'xsec_token':'fixture-only','xsecToken':'fixture-only','id':N}})
