@@ -1,0 +1,38 @@
+name: Offline crawler contracts
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      ENABLE_TIKHUB_NETWORK: '0'
+      ENABLE_LLM_NETWORK: '0'
+      ENABLE_XHS_BROWSER_NETWORK: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm test
+  xhs-source:
+    runs-on: ubuntu-latest
+    env:
+      ENABLE_TIKHUB_NETWORK: '0'
+      ENABLE_LLM_NETWORK: '0'
+      ENABLE_XHS_BROWSER_NETWORK: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: adapters/xhs-web/xiaohongshu-mcp/go.mod
+          cache-dependency-path: |
+            adapters/xhs-web/xiaohongshu-mcp/go.sum
+            adapters/xhs-web/headless_browser/go.sum
+      - run: go test ./cmd/crawler ./crawler ./configs ./cookies ./browser
+        working-directory: adapters/xhs-web/xiaohongshu-mcp

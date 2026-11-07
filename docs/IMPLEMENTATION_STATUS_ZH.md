@@ -12,7 +12,7 @@
 
 验证：
 
-- 新后台 `npm test`：Node 与 Python 离线测试（最终数目见最新命令输出）。只使用 fake adapters；付费 gates 强制关闭。
+- 新后台 `npm test`：25 项 Node 和 6 项 Python 离线测试 PASS。只使用 fake adapters；付费 gates 强制关闭。
 - XHS 源码 `go test ./cmd/crawler ./crawler ./configs ./cookies ./browser`：PASS；未启用真实浏览器 opt-in fixture。
 - 原 pipeline 和 console 未修改运行代码，本阶段尚未执行其全量回归。最终迁移验收仍须执行原计划全部命令。
 

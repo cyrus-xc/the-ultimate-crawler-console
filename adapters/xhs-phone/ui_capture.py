@@ -121,4 +121,9 @@ class UiResponseCapture:
                     raise CaptureError('CAPTURE_TIMEOUT')
                 changed.wait(min(0.1,remaining));changed.clear()
         finally:
-            script.unload()
+            try:
+                script.unload()
+            except Exception:
+                # The app can terminate after a verified response. Cleanup failure
+                # must not discard the response or hide the original error.
+                pass
