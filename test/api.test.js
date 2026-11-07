@@ -31,3 +31,11 @@ test('manual business decisions go through authenticated request-scoped endpoint
  const r=store.submit({...request,continuation:{mode:'manual'}},'pipeline'),c=store.claim();store.commit(c,{checkpoint:{page:1}});const d=store.requestDecision(c);
  const response=await fetch(url+'/v1/requests/'+r.id+'/decisions/'+d.id,{method:'POST',headers,body:JSON.stringify({action:'stop'})});assert.equal(response.status,200);assert.equal((await response.json()).action,'stop');
 });
+test('share decision endpoint preserves false and rejects missing choice',async t=>{
+ const {url,store}=await setup(t);store.register({id:'p',serial:'s',kind:'android',capabilities:[{platform:'xiaohongshu',operation:'post.detail'}]});
+ const r=store.submit({...request,continuation:{mode:'manual'}},'pipeline'),c=store.claim();
+ store.commit(c,{checkpoint:{decision:{phase:'detail_ready',subject_id:'n1'}}});const d=store.requestDecision(c),endpoint=url+'/v1/requests/'+r.id+'/decisions/'+d.id;
+ assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({action:'continue'})})).status,400);
+ const response=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({action:'continue',capture_share:false})});
+ assert.equal(response.status,200);assert.equal((await response.json()).capture_share,false);
+});

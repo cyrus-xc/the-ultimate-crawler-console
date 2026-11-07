@@ -16,8 +16,8 @@ class Client(CrawlerQueueClient):
     def results(self, request_id, cursor=0):
         self.cursors.append(cursor)
         return copy.deepcopy(next(self.pages))
-    def decide(self, request_id, decision_id, action):
-        self.actions.append((decision_id, action))
+    def decide(self, request_id, decision_id, action, **kwargs):
+        self.actions.append((decision_id, action, kwargs) if kwargs else (decision_id, action))
 
 def state(unit='a', decision='d1', page=1):
     return {'state':'running', 'decisions':[{'id':decision,'unit_id':unit,'action':None}],
@@ -61,5 +61,15 @@ class QueueClientTests(unittest.TestCase):
         with self.assertRaisesRegex(QueueError,'SERVICE_RESPONSE_INVALID'):
             client.wait_with_decisions('request',lambda *args:'continue')
         self.assertEqual(client.actions,[])
+
+    def test_typed_callback_preserves_false_share_selection(self):
+        snapshot=state();snapshot['decisions'][0].update(phase='detail_ready',subject_id='note')
+        client=Client([snapshot,{'state':'succeeded'}],[page([],0)])
+        def decide(unit, observations):
+            self.assertEqual(unit['decision']['phase'],'detail_ready')
+            self.assertEqual(unit['decision']['subject_id'],'note')
+            return {'action':'continue','capture_share':False}
+        client.wait_with_decisions('request',decide,interval=0)
+        self.assertEqual(client.actions,[('d1','continue',{'capture_share':False})])
 
 if __name__=='__main__':unittest.main()

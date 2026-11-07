@@ -3,7 +3,7 @@ import json
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, ProxyHandler
 
 class QueueError(RuntimeError):
     def __init__(self, code, status=None):
@@ -11,11 +11,11 @@ class QueueError(RuntimeError):
         self.code, self.status = code, status
 
 class CrawlerQueueClient:
-    def __init__(self, endpoint, token, *, timeout=30, opener=urlopen):
+    def __init__(self, endpoint, token, *, timeout=30, opener=None):
         url = urlsplit(endpoint)
         if url.scheme != 'http' or url.hostname != '127.0.0.1' or url.path not in ('', '/') or url.username or url.query or url.fragment:
             raise ValueError('Queue endpoint must be an IPv4 loopback HTTP origin')
-        self.endpoint, self.token, self.timeout, self.opener = endpoint.rstrip('/'), token, timeout, opener
+        self.endpoint, self.token, self.timeout, self.opener = endpoint.rstrip('/'), token, timeout, opener or build_opener(ProxyHandler({})).open
 
     def _call(self, method, path, payload=None):
         data = None if payload is None else json.dumps(payload).encode('utf-8')
@@ -51,10 +51,15 @@ class CrawlerQueueClient:
             raise ValueError('Invalid queue action')
         return self._call('POST', '/v1/requests/'+self._id(request_id)+'/'+action)
 
-    def decide(self, request_id, decision_id, action):
+    def decide(self, request_id, decision_id, action, *, capture_share=None):
         if action not in {'continue', 'stop'}:
             raise ValueError('Invalid business decision')
-        return self._call('POST', '/v1/requests/'+self._id(request_id)+'/decisions/'+self._id(decision_id), {'action': action})
+        payload = {'action': action}
+        if capture_share is not None:
+            if type(capture_share) is not bool:
+                raise ValueError('capture_share must be boolean')
+            payload['capture_share'] = capture_share
+        return self._call('POST', '/v1/requests/'+self._id(request_id)+'/decisions/'+self._id(decision_id), payload)
 
     def results(self, request_id, cursor=0):
         if type(cursor) is not int or cursor < 0:
@@ -81,7 +86,9 @@ class CrawlerQueueClient:
     def wait_with_decisions(self, request_id, decide, *, timeout=600, interval=1):
         """Run business policy locally on a stopped collection unit.
 
-        decide receives (unit, observations) and returns 'continue' or 'stop'.
+        decide receives (unit, observations), including unit['decision']['phase'].
+        Return 'continue'/'stop' for page decisions, or a dict with action and
+        capture_share for detail_ready. False capture_share still permits continue.
         Observations contain all committed results for that unit, in order;
         the unit includes its server-owned checkpoint. No callback is serialized.
         A callback exception leaves the remote decision pending for recovery.
@@ -113,7 +120,14 @@ class CrawlerQueueClient:
                         continue
                     # Copies protect the accumulated evidence from callback edits.
                     import copy
-                    action = decide(copy.deepcopy(unit), copy.deepcopy(observations.get(unit['id'], [])))
+                    local_unit = copy.deepcopy(unit)
+                    local_unit['decision'] = copy.deepcopy(decision)
+                    action = decide(local_unit, copy.deepcopy(observations.get(unit['id'], [])))
+                    if isinstance(action, dict):
+                        if set(action)-{'action','capture_share'}:
+                            raise ValueError('Invalid business decision fields')
+                        self.decide(request_id, decision['id'], action.get('action'), capture_share=action.get('capture_share'))
+                        continue
                     if action not in {'continue', 'stop'}:
                         raise ValueError('Business callback must return continue or stop')
                     self.decide(request_id, decision['id'], action)

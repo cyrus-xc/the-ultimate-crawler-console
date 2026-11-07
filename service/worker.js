@@ -49,7 +49,7 @@ class LocalWorker {
           if(claim.payload.continuation?.mode!=='manual')return 'continue';
           guard();const d=this.store.requestDecision(claim);
           while(true){
-            guard();const current=this.store.decision(d.id);if(current.action){decisionPending=false;businessStopped=current.action==='stop';return current.action;}
+            guard();const current=this.store.decision(d.id);if(current.action){decisionPending=false;businessStopped=current.action==='stop';return current.phase==='page'?current.action:{action:current.action,capture_share:current.capture_share,phase:current.phase,subject_id:current.subject_id};}
             if(current.deadline<=this.store.now())throw Object.assign(Error('BUSINESS_DECISION_TIMEOUT'),{code:'BUSINESS_DECISION_TIMEOUT',scope:'item'});
             await new Promise(resolve=>setTimeout(resolve,50));
           }
@@ -57,7 +57,7 @@ class LocalWorker {
         commit:page=>{guard();if(decisionPending||businessStopped)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});this.store.commit(claim,{...page,done:false});decisionPending=claim.payload.continuation?.mode==='manual';}};
       // A process/device restart cannot bypass an unresolved local decision.
       if(claim.checkpoint&&claim.payload.continuation?.mode==='manual'){
-        decisionPending=true;await context.waitForDecision();
+        decisionPending=true;context.resumeDecision=await context.waitForDecision();
       }
       if(!businessStopped)await adapter.execute(context);
       if(decisionPending)throw Object.assign(Error('BUSINESS_DECISION_REQUIRED'),{code:'BUSINESS_DECISION_REQUIRED',scope:'item'});

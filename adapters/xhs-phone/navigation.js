@@ -24,8 +24,16 @@ class XhsNavigation {
     if(!edits.length){
       let search;try{search=this.locator.locate('search.query',nodes);}catch{}
       if(!search){try{search=this.locator.locate('search.open',nodes);}catch{failed('SEARCH_CONTROL_UNAVAILABLE');}}
-      await this.tap(search.node);await this.adb.wait(350);nodes=await this.ui();
-      this.locator.locate('search.input',nodes);this.locator.confirm(search,'search_input_visible');
+      for(let attempt=0;attempt<2;attempt++){
+        await this.tap(search.node);await this.adb.wait(350);nodes=await this.ui();
+        if(nodes.some(n=>/EditText$/.test(n.class||''))){
+          this.locator.locate('search.input',nodes);this.locator.confirm(search,'search_input_visible');break;
+        }
+        // An open filter sheet may consume the first click to dismiss itself.
+        // Re-resolve the query from the new tree; never repeat stale coordinates.
+        if(attempt===1)failed('SEARCH_INPUT_UNAVAILABLE');
+        try{search=this.locator.locate('search.query',nodes);}catch{failed('SEARCH_INPUT_UNAVAILABLE');}
+      }
     }
     choose(nodes,n=>/EditText$/.test(n.class||'')&&n.center,'SEARCH_INPUT_UNAVAILABLE');
     await this.action(()=>this.writeClipboard(this.adb,keyword,{port:this.clipboardPort}));
@@ -42,10 +50,19 @@ class XhsNavigation {
   async submitSearch(){await this.shell('input','keyevent','66');await this.adb.wait(500);}
   async sort(value){
     const wanted=SORT_LABELS[value];if(!wanted)failed('UNSUPPORTED_SORT');
-    let nodes=await this.ui(),visible=nodes.filter(n=>label(n)===wanted&&n.center);
-    if(!visible.length){
+    let nodes=await this.ui();
+    let quick;try{quick=this.locator.locate('filter.quick_general',nodes);}catch{failed('QUICK_FILTER_RESET_UNAVAILABLE');}
+    if(quick.node.selected!=='true'){await this.tap(quick.node);await this.adb.wait(350);nodes=await this.ui();}
+    const expanded=nodes.some(n=>['最多点赞','最多评论','最多收藏'].includes(label(n)));
+    if(!expanded){
       let opener;try{opener=this.locator.locate('sort.open',nodes);}catch{failed('SORT_CONTROL_UNAVAILABLE');}
       await this.tap(opener.node);await this.adb.wait(350);nodes=await this.ui();
+    }
+    // New tasks must not inherit filters selected by an earlier task/person.
+    let reset;try{reset=this.locator.locate('sort.reset',nodes);}catch{failed('FILTER_RESET_UNAVAILABLE');}
+    await this.tap(reset.node);await this.adb.wait(350);nodes=await this.ui();
+    if(!nodes.some(n=>['最多点赞','最多评论','最多收藏'].includes(label(n)))){
+      const opener=this.locator.locate('sort.open',nodes);await this.tap(opener.node);await this.adb.wait(350);nodes=await this.ui();
     }
     let candidate;try{candidate=this.locator.locate('sort.'+value,nodes);}catch{failed('SORT_OPTION_UNAVAILABLE');}
     await this.tap(candidate.node);this.pendingSort={value,candidate};

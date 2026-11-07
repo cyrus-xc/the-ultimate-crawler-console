@@ -52,3 +52,20 @@ result for that unit in order, and `unit.checkpoint` belongs to the queue. Retur
 The worker fences the next input while a decision is pending and after stop.
 Decisions are idempotent and checkpoint-bound. Callback failure leaves the decision
 pending; it does not implicitly continue, cancel, or submit a duplicate request.
+
+Q11 extends each decision with `phase` and `subject_id`: `page`, `detail_start`,
+`detail_ready`, or `profile_note`. The checkpoint's `decision` member supplies
+these values, so distinct stages have distinct decision identities. A
+`detail_ready` response requires an explicit Boolean `capture_share` alongside
+`action`; `false` means skip sharing, not stop collection. Other stages reject
+that field. `stop` cannot request a new share capture. Python callbacks receive
+phase information as `unit["decision"]` and may return
+`{"action":"continue", "capture_share":False}`. Worker adapters receive this
+structured decision, including after failover as `context.resumeDecision`.
+Existing v3 decisions migrate to phase `page` without losing their checkpoint,
+action, deadline, or waiting state (database schema v4).
+
+The pipeline adapter must preserve source-specific callback semantics: Web
+`detail_ready` bool selects sharing; `profile_note` false stops, non-bool continues.
+Native profile selector truthy stops; its observer return value is ignored.
+These mappings are not business policy and do not serialize Python functions.

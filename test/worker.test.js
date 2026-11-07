@@ -51,3 +51,12 @@ test('replacement device waits on saved business decision before touching hardwa
  worker.dispatch();assert.equal(touched,false);s.decide(r.id,d.id,'stop');await Promise.all(worker.active.values());
  assert.equal(touched,false);assert.equal(s.request(r.id).state,'succeeded');
 });
+test('worker passes share selection to adapter without treating false as stop',async t=>{
+ const s=setup(t),r=s.submit({...input,continuation:{mode:'manual'}});let afterDecision=false;
+ const worker=new LocalWorker(s,new Map([['p',{version:'1',execute:async({commit,waitForDecision,input})=>{
+  commit({checkpoint:{decision:{phase:'detail_ready',subject_id:'n1'}}});
+  assert.deepEqual(await waitForDecision(),{action:'continue',capture_share:false,phase:'detail_ready',subject_id:'n1'});
+  await input(()=>{afterDecision=true;});
+ }}]]));worker.dispatch();s.decide(r.id,s.request(r.id).decisions[0].id,'continue',false);
+ await Promise.all(worker.active.values());assert.equal(afterDecision,true);assert.equal(s.request(r.id).state,'succeeded');
+});

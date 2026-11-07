@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adapters/xhs-phone'))
-from ui_capture import UiResponseCapture, CaptureError
+from ui_capture import UiResponseCapture, CaptureError, semantic_request
 N='a'*24
 CONTRACT={'http_method':'GET','path':'/api/sns/v1/note/imagefeed','allowed_hosts':['example.test'],
           'parameters':[{'name':'note_id','type':'java.lang.String'}]}
@@ -53,4 +53,33 @@ class CaptureTests(unittest.TestCase):
         session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
         with self.assertRaisesRegex(CaptureError,'CAPTURE_TIMEOUT'):
             capture.read('image_detail',CONTRACT,{'note_id':N},lambda:None,timeout=0.005)
+    def test_app_filter_sort_is_validated_without_changing_raw_request(self):
+        request={'query':[{'name':'sort','value':''},{'name':'filters','value':'[{"type":"sort_type","tags":["comment_descending"]}]'}]}
+        original=copy.deepcopy(request)
+        result=semantic_request(request,'search')
+        self.assertEqual(next(q['value'] for q in result['query'] if q['name']=='sort'),'comment_descending')
+        self.assertEqual(request,original)
+    def test_latest_shortcut_is_not_chronological_sort(self):
+        request={'query':[{'name':'sort','value':''},{'name':'filters','value':'[{"type":"filter_hot","tags":["最新"]}]'}]}
+        result=semantic_request(request,'search')
+        self.assertEqual(next(q['value'] for q in result['query'] if q['name']=='sort'),'general')
+    def test_conflicting_sort_parameters_are_not_accepted(self):
+        request={'query':[{'name':'sort','value':'general'},{'name':'filters','value':'[{"type":"sort_type","tags":["comment_descending"]}]'}]}
+        result=semantic_request(request,'search')
+        self.assertEqual(next(q['value'] for q in result['query'] if q['name']=='sort'),'__invalid_sort__')
+    def test_search_ignores_residual_filters_and_keeps_original_packet(self):
+        contract={**CONTRACT,'parameters':[{'name':'query','type':'java.util.Map'}]}
+        filters='[{"type":"sort_type","tags":["time_descending"]},{"type":"filter_hot","tags":["最新"]}]'
+        response=wire();response['request']['query']=[{'name':'keyword','value':'coffee'},{'name':'sort','value':''},{'name':'filters','value':filters}]
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        values={'query':{'keyword':'coffee','sort':'time_descending','filters':'[]'}}
+        with self.assertRaisesRegex(CaptureError,'CAPTURE_TIMEOUT'):
+            capture.read('search',contract,values,lambda:session.scripts[-1].emit(response),timeout=0.005)
+        response['request']['query'][-1]['value']='[{"type":"sort_type","tags":["time_descending"]},{"type":"filter_hot","tags":["不限"]}]'
+        result=capture.read('search',contract,values,lambda:session.scripts[-1].emit(response))
+        self.assertEqual(result['request'],response['request'])
+        self.assertEqual(result['effective_sort'],'time_descending')
+        response['request']['query'][-1]['value']=response['request']['query'][-1]['value'].replace('不限','综合')
+        result=capture.read('search',contract,values,lambda:session.scripts[-1].emit(response))
+        self.assertEqual(result['effective_sort'],'time_descending')
 if __name__=='__main__':unittest.main()

@@ -37,7 +37,7 @@ function createServer({store,token,scope='pipeline'}) {
       const decision=url.pathname.match(/^\/v1\/requests\/([0-9a-f-]+)\/decisions\/([0-9a-f-]+)$/);
       if(decision&&req.method==='POST'){
         store.request(decision[1],scope);const input=await body(req);
-        return send(200,store.decide(decision[1],decision[2],input.action));
+        return send(200,store.decide(decision[1],decision[2],input.action,input.capture_share??null));
       }
       const match=url.pathname.match(/^\/v1\/requests\/([0-9a-f-]+)(?:\/(results|events|pause|resume|cancel|retry))?$/);
       if(!match)throw problem('NOT_FOUND',404);

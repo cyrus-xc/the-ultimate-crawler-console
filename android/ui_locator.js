@@ -9,6 +9,8 @@ const ROLES={
  'search.input':{classSuffix:'EditText'},
  'search.query':{structural:'search_query'},
  'sort.open':{labels:['全部','筛选','排序','综合','Sort','Filter']},
+ 'filter.quick_general':{labels:['综合']},
+ 'sort.reset':{labels:['重置','Reset']},
  'sort.general':{labels:['综合','综合排序']},
  'sort.time_descending':{labels:['最新']},
  'sort.popularity_descending':{labels:['最多点赞']},
@@ -36,9 +38,9 @@ class UiLocator {
  locate(role,nodes){
   let matches=nodes.filter(n=>this.matches(role,n,nodes));
   if(role==='sort.open'){for(const preferred of ROLES[role].labels){const group=matches.filter(n=>text(n)===preferred);if(group.length){matches=group;break;}}}
-  else if(role.startsWith('sort.')){
+  else if(role.startsWith('sort.')||role==='filter.quick_general'){
     const anchors=nodes.filter(n=>['最多点赞','最多评论','最多收藏'].includes(text(n))&&n.center);
-    if(anchors.length){const top=Math.min(...anchors.map(n=>n.center[1]));matches=matches.filter(n=>n.center[1]>=top-Math.max(20,(n.height||40)/2));}
+    if(anchors.length){const top=Math.min(...anchors.map(n=>n.center[1]));matches=matches.filter(n=>role==='filter.quick_general'?n.center[1]<top-Math.max(20,(n.height||40)/2):n.center[1]>=top-Math.max(20,(n.height||40)/2));}
   }
   // A cached resource ID is a hint, never sufficient proof if semantics changed.
   // Duplicate matches cannot be resolved by the old coordinate alone.

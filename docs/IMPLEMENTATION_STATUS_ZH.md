@@ -12,7 +12,7 @@
 
 验证：
 
-- 新后台 `npm test`：49 项 Node 和 16 项 Python 离线测试 PASS。只使用 fake adapters；付费 gates 强制关闭。
+- 新后台 `npm test`：55 项 Node 和 21 项 Python 离线测试 PASS。只使用 fake adapters；付费 gates 强制关闭。
 - XHS 源码 `go test ./cmd/crawler ./crawler ./configs ./cookies ./browser`：PASS；未启用真实浏览器 opt-in fixture。
 - 原 pipeline 和 console 未修改运行代码，本阶段尚未执行其全量回归。最终迁移验收仍须执行原计划全部命令。
 
@@ -25,3 +25,9 @@
 Q10 已确认并实现基础协议：Python wait_with_decisions 将按单元累计的结构化响应和当前断点传给本地回调，仅发送 continue/stop。worker 阻止未决状态与 stop 后的新输入；迟到决定不能授权不同断点。回调异常保留待决状态，便于恢复。新增分页结果、跨单元隔离、回调失败与过期断点测试。原 pipeline 业务回调尚未切换。
 
 补充恢复验证：替换设备先恢复未决业务决定，stop 不启动替代设备操作；Douyin 分页收到 stop 后保留当前整页和游标，不再 fetch 下一页。默认搜索复测成功，实际返回 21 条；最新排序二次捕获仍超时。
+
+排序修复实测：9.51.0 完整菜单将排序写入 filters.sort_type，快捷栏“最新”是 filter_hot；菜单重置不清快捷栏。新导航先清快捷筛选再重置菜单并选择完整排序，UI 树仍为首选。响应层仅对匹配做语义归一，保留原请求/响应；不接受额外的旧筛选。OnePlus 最新排序按完整流程复测通过（time_descending，默认其他筛选，HTTP 200，20 条，新鲜 Cronet 响应）。其余排序继续验证。
+
+Q11 已确认：决策增加 phase/subject_id/capture_share，false 分享选择不等于停止；schema v4 保留 v3 未决状态。新增队列、HTTP、worker、Python 客户端及迁移测试。最多点赞排序完整流程实测通过；最多评论和最多收藏随后也通过相同流程，均为 HTTP 200、20 条、新鲜 Cronet 响应。
+
+2026-11-08：OnePlus（c7dee0b3，小红书 9.51.0）五种搜索排序均通过同一 UI 驱动流程：综合、最新、最多点赞、最多评论、最多收藏。每次都校验真实请求的排序和无额外筛选，HTTP 200，20 条，新鲜 Cronet 响应。证据保留在本机私有 smoke 目录，未提交原始响应/截图。这不代表 Redmi、连续分页、主页、评论或正式队列消费者已经通过。

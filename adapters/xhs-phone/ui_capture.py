@@ -15,6 +15,35 @@ from runtime_redaction import clean
 class CaptureError(RuntimeError):
     pass
 
+def semantic_request(request, operation):
+    """Normalize observed App sort encoding only for semantic validation.
+
+    Keep the original request in evidence. The latest shortcut (filter_hot)
+    is not the chronological sort (sort_type=time_descending).
+    """
+    if operation != 'search':
+        return request
+    result = copy.deepcopy(request)
+    query = {q['name']: q['value'] for q in request.get('query', [])}
+    direct = query.get('sort') or 'general'
+    try:
+        filters = json.loads(query.get('filters') or '[]')
+        if not isinstance(filters, list) or any(not isinstance(f,dict) for f in filters):
+            raise ValueError('Invalid filter list')
+        sorts = [f['tags'] for f in filters if isinstance(f, dict) and f.get('type') == 'sort_type']
+        if len(sorts) > 1 or (sorts and (not isinstance(sorts[0], list) or len(sorts[0]) != 1)):
+            raise ValueError('Ambiguous sort')
+        effective = sorts[0][0] if sorts else direct
+        remaining = [f for f in filters if f.get('type')!='sort_type' and f.get('tags') not in ([], ['不限']) and not (f.get('type')=='filter_hot' and f.get('tags')==['综合'])]
+        remaining.sort(key=lambda f:f.get('type',''))
+        if query.get('sort') and sorts and direct != effective:
+            raise ValueError('Conflicting sort')
+    except (ValueError, TypeError, KeyError):
+        effective = '__invalid_sort__'
+        remaining = [{'type':'__invalid_filters__'}]
+    result['query'] = [q for q in result.get('query', []) if q['name'] not in {'sort','filters'}] + [{'name':'sort','value':effective}, {'name':'filters','value':json.dumps(remaining,ensure_ascii=False,separators=(',',':'))}]
+    return result
+
 def verify_payload(operation, values, wire, contract):
     """Retain native HTTP/business success and entity validation."""
     body = wire.get('body')
@@ -98,17 +127,19 @@ class UiResponseCapture:
                 if errors:
                     raise CaptureError(errors[0])
                 now = self.clock_ms()
-                matching = [r for r in responses if isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and request_matches(r,matching_contract,values)]
+                matching = [r for r in responses if isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},matching_contract,values)]
                 if matching:
                     wire = matching[0]
                     body = verify_payload(operation,values,wire,contract)
-                    lower = [e for e in cronet if request_target_matches(e.get('request',{}),matching_contract,values)]
+                    lower = [e for e in cronet if request_target_matches(semantic_request(e.get('request',{}),operation),matching_contract,values)]
                     evidence = classify_transport(wire,start,now,lower)
                     result = {'operation':operation,'note_id':values.get('note_id'),'input':clean(values),
                               'response':body,'request':wire['request'],'status':wire['status'],
                               'captured_at_ms':wire['at'],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',
                               'action_started_at_ms':start,'action_finished_at_ms':now}
+                    if operation=='search':
+                        result['effective_sort']=next(q['value'] for q in semantic_request(wire['request'],operation)['query'] if q['name']=='sort')
                     if operation in {'image_detail','video_detail'}:
                         try:
                             link=script.exports_sync.takeshare(wire.get('observation_id'))

@@ -109,7 +109,7 @@ test('v1 database gains stable phone ports without deleting device state',t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crawler-upgrade-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'queue.db');
  const Database=require('better-sqlite3'),old=new Database(file);old.exec(`CREATE TABLE devices(id TEXT PRIMARY KEY,kind TEXT NOT NULL,serial TEXT,capabilities TEXT NOT NULL,health TEXT NOT NULL,faults TEXT NOT NULL DEFAULT '{}',generation INTEGER NOT NULL DEFAULT 0,quarantined INTEGER NOT NULL DEFAULT 0);
  INSERT INTO devices(id,kind,serial,capabilities,health,quarantined) VALUES ('phone','android','serial','[]','unavailable',1); PRAGMA user_version=1;`);old.close();
- const s=new Store(file);t.after(()=>s.close());assert.equal(s.devices()[0].health,'unavailable');assert.equal(s.devices()[0].quarantined,1);assert.equal(s.devices()[0].clipboard_port,38617);assert.equal(s.db.pragma('user_version',{simple:true}),3);
+ const s=new Store(file);t.after(()=>s.close());assert.equal(s.devices()[0].health,'unavailable');assert.equal(s.devices()[0].quarantined,1);assert.equal(s.devices()[0].clipboard_port,38617);assert.equal(s.db.pragma('user_version',{simple:true}),4);
 });
 
 test('business decisions are checkpoint-bound, idempotent and preserve paused unit state',t=>{
@@ -128,4 +128,27 @@ test('a delayed decision cannot authorize a different checkpoint',t=>{
  assert.throws(()=>s.decide(r.id,d.id,'continue'),{code:'DECISION_STALE'});
  assert.equal(s.request(r.id).decisions.length,0);
  assert.equal(s.request(r.id).units[0].state,'waiting_decision');
+});
+test('share decisions are explicit, phase-bound, and idempotent',t=>{
+ const s=setup(t);phone(s);const r=s.submit(input({continuation:{mode:'manual'}})),c=s.claim();
+ s.commit(c,{checkpoint:{decision:{phase:'detail_ready',subject_id:'n1'}}});const d=s.requestDecision(c);
+ assert.equal(d.phase,'detail_ready');assert.equal(s.request(r.id).decisions[0].subject_id,'n1');
+ assert.throws(()=>s.decide(r.id,d.id,'continue'),{code:'INVALID_SHARE_DECISION'});
+ assert.throws(()=>s.decide(r.id,d.id,'stop',true),{code:'INVALID_SHARE_DECISION'});
+ assert.equal(s.decide(r.id,d.id,'continue',false).capture_share,false);
+ assert.equal(s.decide(r.id,d.id,'continue',false).capture_share,false);
+ assert.throws(()=>s.decide(r.id,d.id,'continue',true),{code:'DECISION_CONFLICT'});
+ s.commit(c,{checkpoint:{decision:{phase:'profile_note',subject_id:'n1'}}});const next=s.requestDecision(c);
+ assert.notEqual(next.id,d.id);assert.throws(()=>s.decide(r.id,next.id,'continue',true),{code:'SHARE_DECISION_NOT_APPLICABLE'});
+});
+test('v3 pending decisions survive schema upgrade with page semantics',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crawler-decision-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'queue.db');
+ const original=new Store(file);phone(original);const r=original.submit(input({continuation:{mode:'manual'}})),c=original.claim();
+ original.commit(c,{checkpoint:{page:1}});const d=original.requestDecision(c);original.close();
+ const Database=require('better-sqlite3'),legacy=new Database(file);
+ for(const column of ['phase','subject_id','capture_share'])legacy.exec('ALTER TABLE decisions DROP COLUMN '+column);
+ legacy.pragma('user_version = 3');legacy.close();
+ const restored=new Store(file);t.after(()=>restored.close());
+ assert.equal(restored.decision(d.id).phase,'page');assert.equal(restored.decision(d.id).capture_share,null);
+ assert.equal(restored.request(r.id).units[0].state,'waiting_decision');assert.equal(restored.decision(d.id).checkpoint_hash,d.checkpoint_hash);
 });
