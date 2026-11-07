@@ -5,6 +5,7 @@ from pathlib import Path
 from douyin_web.browser import DouyinBrowser
 from douyin_web.transport import Transport,ReadError
 from douyin_web import guard
+from login_diagnostics import LoginDiagnostics
 
 def emit(value):
     print(json.dumps(value,ensure_ascii=False),flush=True)
@@ -29,6 +30,7 @@ def shutdown(*_):raise KeyboardInterrupt()
 def main():
     signal.signal(signal.SIGTERM,shutdown)
     browser=None
+    login_diagnostics=LoginDiagnostics(os.environ.get('CRAWLER_RUNTIME_DIR','runtime'))
     try:
         while True:
             line=sys.stdin.readline()
@@ -39,9 +41,11 @@ def main():
                 admission()
                 if browser is None:
                     browser=DouyinBrowser(None,profile_dir=Path(os.environ['DOUYIN_BROWSER_PROFILE']));browser.__enter__()
+                    browser.context.on('response',login_diagnostics.response)
                 transport=Transport(browser,before_action=admission)
                 operation=request['operation'];target=request['target'];params=request.get('params',{})
                 if operation=='login_qr':
+                    login_diagnostics.start()
                     if browser.is_logged_in():emit({'type':'qr','data':{'authenticated':True}});emit({'type':'done'});continue
                     admission()
                     if urlparse(browser.page.url).hostname not in ('www.douyin.com','douyin.com'):
@@ -93,6 +97,10 @@ def main():
                 if operation=='resume':
                     for attempt in range(7):
                         admission()
+                        wall=guard.check(browser.page,login_wall_is_block=False)
+                        if wall and wall.get('kind') in ('identity_verification','captcha'):
+                            login_diagnostics.wall(wall['kind'])
+                            raise ReadError('VERIFICATION_REQUIRED','platform')
                         if browser.is_logged_in():break
                         if attempt==6:
                             state=browser.login_state();state['visible_login_buttons']=sum(button.is_visible() for button in browser.page.get_by_text('登录',exact=True).all())
@@ -104,9 +112,9 @@ def main():
                         browser.page.wait_for_timeout(500)
                     emit({'type':'done'});continue
                 if operation=='desktop':
-                    admission();browser.page.goto('https://www.douyin.com/',wait_until='domcontentloaded',timeout=30000);admission()
-                    if guard.check(browser.page,login_wall_is_block=False):raise ReadError('VERIFICATION_REQUIRED','platform')
-                    browser.page.bring_to_front()
+                    # A human must be able to see the existing verification UI.
+                    # Focusing it must neither navigate away nor reject its wall.
+                    browser.show_desktop(before_action=admission)
                     emit({'type':'done'});continue
                 if operation=='link.resolve':
                     url=target['url'];parsed=urlparse(url)

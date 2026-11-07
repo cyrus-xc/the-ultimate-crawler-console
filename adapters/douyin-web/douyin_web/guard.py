@@ -58,6 +58,16 @@ def check(page: Page, *, login_wall_is_block: bool = True) -> dict | None:
     # came back as a bare "502 Bad Gateway / kngx" page with no API traffic.
     if "502 Bad Gateway" in title or "Bad Gateway" in title:
         return {"kind": "gateway_502", "detail": title}
+    # Observed after a successful phone scan: Douyin requires an additional
+    # SMS identity check. This is neither a logged-in session nor a QR failure.
+    try:
+        heading = page.get_by_text("身份验证", exact=True).first.is_visible()
+        sms = any(page.get_by_text(label, exact=True).first.is_visible()
+                  for label in ("接收短信验证码", "发送短信验证"))
+        if heading and sms:
+            return {"kind": "identity_verification", "detail": "sms_identity_verification"}
+    except Exception:
+        pass
     for frame in page.frames:
         if BLOCK_URL_PATTERN.search(frame.url or "") and _frame_shown(frame):
             url = urlsplit(frame.url)

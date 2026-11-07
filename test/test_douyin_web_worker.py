@@ -33,3 +33,15 @@ class LoginStateTests(unittest.TestCase):
             page.url='https://www.douyin.com/'
             page.get_by_text=lambda *a,**k:SimpleNamespace(all=lambda:[SimpleNamespace(is_visible=lambda:True)])
             self.assertFalse(browser.is_logged_in())
+
+class DesktopFocusTests(unittest.TestCase):
+    def test_current_platform_verification_is_not_reloaded(self):
+        from types import SimpleNamespace
+        from douyin_web.browser import DouyinBrowser
+        browser=DouyinBrowser(None);calls=[]
+        browser.page=SimpleNamespace(url='https://www.douyin.com/?login=1',
+            goto=lambda *a,**kw:calls.append('goto'),bring_to_front=lambda:calls.append('focus'))
+        browser.show_desktop(lambda:calls.append('guard'))
+        self.assertEqual(calls,['guard','focus'])
+        browser.page.url='about:blank';calls.clear();browser.show_desktop(lambda:calls.append('guard'))
+        self.assertEqual(calls,['guard','goto','guard','focus'])

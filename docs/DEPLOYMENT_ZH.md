@@ -105,7 +105,7 @@ Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原�
 
 ## 当前真实验收边界
 
-2026-11-08 的 Web smoke 已验证：新 Go 会话与独立 Douyin Chromium 能在隐藏 Wayland 桌面同时启动；各自使用独立 profile。XHS 有 cookie 文件，但搜索返回 `CRAWLER_TIMEOUT`，只读页面检查出现登录提示、未见验证码提示。Douyin 原默认 profile 不存在，新独立 profile 的 `is_logged_in()` 为 false。随后使用已登录 OnePlus 的小红书 App，经正式设备租约、正常扫一扫相册与登录确认，已完成 XHS Web 登录，并由 `/desktop/resume` 验证和保存登录态。Douyin 通过私有二维码域名校验和正常 App 深链接已到达“登录抖音网页版”确认页，并完成确认点击；但 Web 端随后重新打开与检查仍无 sessionid/登录标志、存在登录按钮，故保留 `LOGIN_REQUIRED`，不宣称成功。两平台的已登录搜索/主页/详情/评论需分别验收，登录成功本身不能替代采集验证。
+2026-11-08 的 Web smoke 已验证：新 Go 会话与独立 Douyin Chromium 能在隐藏 Wayland 桌面同时启动；各自使用独立 profile。XHS 有 cookie 文件，但搜索返回 `CRAWLER_TIMEOUT`，只读页面检查出现登录提示、未见验证码提示。Douyin 原默认 profile 不存在，新独立 profile 的 `is_logged_in()` 为 false。随后使用已登录 OnePlus 的小红书 App，经正式设备租约、正常扫一扫相册与登录确认，已完成 XHS Web 登录，并由 `/desktop/resume` 验证和保存登录态。Douyin 通过私有二维码域名校验和正常 App 深链接已完成“登录抖音网页版”确认。最新被动诊断确认 Web 轮询从 `new` 到 `scanned`，随后 `check_qrconnect` 返回 HTTP 200、业务错误码 `2046`；同时实际网页显示“身份验证”，要求接收或发送短信验证。当前仍未登录，不能宣称采集已可用。两平台的已登录搜索/主页/详情/评论需分别验收，登录成功本身不能替代采集验证。
 
 手机真机结果以当次最终验收记录为准。曾验证某台手机某操作不代表另一台或其他操作可用；设备数不足、登录未完成或操作未验证时，应保持对应能力未验收。上述限制不影响离线协议、调度、租约、输入隔离和业务兼容测试的结果，但二者必须分开报告。
 
@@ -119,4 +119,8 @@ Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原�
 
 抖音登录脚本另提供 `--direct-qr`：仅从已验证“扫码登录 + 验证码登录”弹窗内导出的二维码，在私有进程内解码、核对 HTTPS 抖音短链域名及参数后，通过设备网关的普通 `ACTION_VIEW` 指定抖音 App 导航；不得输出解码载荷，不能接受任意外部二维码。它不调用 App 内部方法。该路径的成功仍以真实确认页面和服务端 `resume` 为准，未验收时不能当作已登录。
 
-最终抖音有界实测：登录二维码已通过 DOM 祖先同时包含“扫码登录”和“验证码登录”的弹窗检查；独立文件名图库选择、正常 `ACTION_VIEW`、手机确认均分别验证。手机确认后回到普通菜单，但 Web 重新打开仍未获得登录 cookie，且未检测到验证码墙。诊断保存在私有 `runtime/douyin-auth-state.json/.png`，所有操作租约已正常释放。后续应检查平台登录结果，不能把该平台标记为已通过真实采集验收。
+最终抖音有界实测：二维码已通过 DOM 登录弹窗检查，正常 `ACTION_VIEW` 和手机确认成功将网页推进到平台的短信身份验证。证据为私有 `runtime/douyin-login-transport.json` 与 `runtime/douyin-auth-state.png`；诊断只存登录端点路径（不含查询参数）、HTTP 状态、白名单业务码及状态，不存二维码载荷、凭证或原始响应。错误码 `2046` 与短信验证页面在本次同时被观察到，不据此臆测其他场景的错误含义。
+
+当前验证页面已通过控制台交给用户，保留运行中的浏览器与控制会话，等待用户完成短信验证后点击确认继续并结束接管。此时不得重启后台、关闭 worker 或重新导航，以免丢失验证上下文。代码已增加实际短信验证墙的 `VERIFICATION_REQUIRED` 分类，且“打开/定位”在已有抖音页面时只聚焦，不重载；这些最后修改在下一次 worker 启动时生效，本次没有为加载代码中断用户的验证页面。没有自动接收、发送短信或绕过身份验证。
+
+针对这次诊断与修复，`python -B -m unittest discover -s test -p 'test_login_diagnostics.py'`（4 项）、`python -B -m unittest discover -s test -p 'test_douyin_web_worker.py'`（5 项）及定向 `git diff --check` 均 PASS。验证通过前，抖音 Web 不应恢复爬虫消费；用户完成验证后仍需真实登录检查与实际采集验收。

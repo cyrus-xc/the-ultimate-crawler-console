@@ -63,3 +63,5 @@ UI 身份辅助补验收成功：仅开启已指定的 XHS ui_identity 能力后
 地点辅助搜索导航已复用 XhsNavigation/UiLocator，去除已失效的固定控件 ID；地点候选、分享及 POI 证据判定保持原语义。相关离线 22 个测试通过，覆盖设备 lease、剪贴板端口、歧义停止和导航失败释放。
 
 地点搜索辅助真机尚未通过：请求 `a5befdb1-6c68-44f1-91bf-5a442e66f2fd` 已执行正常搜索输入，但返回 `VENUE_SEARCH_TAB_MISSING`（最终请求因无替代设备为 NO_AVAILABLE_DEVICE）。一次后续 UI 检查确认当前可见分类为“全部、用户、商品、图片、视频、问点点”，没有“地点”。不将成功输入视作地点采集成功，生产应移除该未验证能力。证据 `/tmp/phone-production-smoke-Mqha7f/result.json`。DY UI helper 未取得已观察 video 目标，保持未启用。检查后 OnePlus lease 已释放，无后台串流。
+
+抖音手机辅助登录补充：手机正常确认已成功使 Web 二维码状态从 new 进入 scanned，随后 Web 返回业务码 2046 并显示需要用户完成的短信身份验证。当前浏览器页面保留给控制台用户，尚未宣称登录成功；不再重复扫码或重启会话。诊断/验证墙分类及保留当前页面的聚焦行为共 9 项 Python 测试通过。详见 `DEPLOYMENT_ZH.md` 的当前交接说明。

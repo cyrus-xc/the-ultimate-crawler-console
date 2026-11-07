@@ -112,7 +112,7 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(action==='heartbeat')return send(200,{lease:store.heartbeat(lease)});
         if(action==='assert')return send(200,{valid:true,expires:current.expires});
         if(action==='release'){
-          await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
+          await server.retireDesktopControl?.(lease);await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
           const released=store.releaseExternal(lease);gateway?.forgetReleased?.(lease);return send(200,released);
         }
         const controller=new AbortController();

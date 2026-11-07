@@ -228,6 +228,14 @@ class DouyinBrowser:
                     self.context = None
                     self._pw = None
 
+    def show_desktop(self, before_action=lambda: None) -> None:
+        """Expose the existing login/verification page without resetting it."""
+        if urlparse(self.page.url).hostname not in ('www.douyin.com', 'douyin.com'):
+            before_action()
+            self.page.goto('https://www.douyin.com/', wait_until='domcontentloaded', timeout=30000)
+        before_action()
+        self.page.bring_to_front()
+
     def cookies(self) -> dict[str, str]:
         return {c["name"]: c["value"] for c in self.context.cookies("https://www.douyin.com")}
 
