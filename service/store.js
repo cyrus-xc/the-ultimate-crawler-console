@@ -86,6 +86,18 @@ class Store {
       this.event(null,'device.registered',{device_id:id}); return id;
     });
   }
+  setPresence(deviceId,present) {
+    if(typeof present!=='boolean')throw problem('INVALID_PRESENCE');
+    return this.tx(()=>{
+      const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
+      if(!d)throw problem('DEVICE_NOT_FOUND',404);
+      if(!['ready','disconnected'].includes(d.health))return;
+      const health=present?'ready':'disconnected';
+      if(health===d.health)return;
+      this.db.prepare('UPDATE devices SET health=? WHERE id=?').run(health,deviceId);
+      this.event(null,'device.presence',{device_id:deviceId,present});
+    });
+  }
   compatible(d,p) {
     return p.routing.kinds.includes(d.kind) && (!p.routing.device_ids.length||p.routing.device_ids.includes(d.id)) &&
       d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation &&
@@ -97,6 +109,7 @@ class Store {
     const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
     if(!d || d.quarantined || d.health!=='ready')throw problem('DEVICE_UNAVAILABLE',409);
     if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(deviceId))throw problem('DEVICE_BUSY',409);
+    this.assertNoCommand(deviceId);
     const generation=d.generation+1,token=randomUUID(),expires=this.now()+this.leaseMs;
     this.db.prepare('UPDATE devices SET generation=? WHERE id=?').run(generation,deviceId);
     this.db.prepare('INSERT INTO leases VALUES (?,?,?,?,?,?)').run(deviceId,token,owner,generation,expires,attemptId);
@@ -104,15 +117,25 @@ class Store {
   }
   externalLease(deviceId,owner) {
     if(!identifier(owner))throw problem('INVALID_OWNER');
-    return this.tx(()=>this.acquire(deviceId,owner));
+    return this.tx(()=>{this.expireInside();const lease=this.acquire(deviceId,owner);this.event(null,'lease.acquired',{device_id:deviceId,owner,generation:lease.generation});return lease;});
+  }
+  assertLease(lease,{owner=null,externalOnly=false}={}) {
+    const current=this.fence(lease);
+    if(owner!==null && current.owner!==owner)throw problem('LEASE_OWNER_MISMATCH',403);
+    if(externalOnly && current.attempt_id)throw problem('WORKER_STOP_REQUIRED',409);
+    return {...current};
+  }
+  assertNoCommand(deviceId) {
+    if(this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='device_commands'").get() && this.db.prepare('SELECT 1 FROM device_commands WHERE device_id=?').get(deviceId))throw problem('DEVICE_COMMAND_ACTIVE',409);
   }
   fence(lease) {
+    if(!lease || !identifier(lease.device_id)||!identifier(lease.token)||!Number.isSafeInteger(lease.generation))throw problem('LEASE_LOST',409);
     const row=this.db.prepare('SELECT * FROM leases WHERE device_id=? AND token=? AND generation=?').get(lease.device_id,lease.token,lease.generation);
     if(!row || row.expires<=this.now())throw problem('LEASE_LOST',409);
     return row;
   }
   heartbeat(lease){return this.tx(()=>{this.fence(lease);const expires=this.now()+this.leaseMs;this.db.prepare('UPDATE leases SET expires=? WHERE token=?').run(expires,lease.token);return {...lease,expires};});}
-  releaseExternal(lease){return this.tx(()=>{const l=this.fence(lease);if(l.attempt_id)throw problem('WORKER_STOP_REQUIRED',409);this.db.prepare('DELETE FROM leases WHERE token=?').run(lease.token);});}
+  releaseExternal(lease){return this.tx(()=>{const l=this.fence(lease);if(l.attempt_id)throw problem('WORKER_STOP_REQUIRED',409);this.assertNoCommand(lease.device_id);this.db.prepare('DELETE FROM leases WHERE token=?').run(lease.token);this.event(null,'lease.released',{device_id:lease.device_id,owner:l.owner,generation:l.generation});return {released:true};});}
   state(id,state,reason=null) {
     const old=this.db.prepare('SELECT state,reason FROM requests WHERE id=?').get(id);
     if(old.state===state&&old.reason===reason)return;
@@ -134,9 +157,10 @@ class Store {
     const hasResults=!!this.db.prepare('SELECT 1 FROM results WHERE request_id=? LIMIT 1').get(id);
     this.state(id,failed?(hasResults?'partial':'failed'):'succeeded');
   }
-  claim() {
+  claim({deviceIds=null}={}) {
     return this.tx(()=>{
       this.expireInside();
+      if(deviceIds!==null && !deviceIds.length)return null;
       const rows=this.db.prepare("SELECT * FROM requests WHERE state IN ('queued','running','waiting_resources') ORDER BY last_dispatch,created,rowid").all();
       for(const row of rows) {
         const r=this.request(row.id),p=r.payload;
@@ -152,9 +176,10 @@ class Store {
           // No registered device yet is an initial configuration wait. Existing failed devices are terminal until explicit retry.
           if(!candidates.length){if(!running)this.state(r.id,'waiting_resources','NO_CAPABLE_DEVICE');continue;}
           if(running)continue;
+          if(candidates.some(d=>d.quarantined)){this.state(r.id,'waiting_resources','DEVICE_QUARANTINED');continue;}
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE request_id=? AND state='queued'").run(canonical({code:'NO_AVAILABLE_DEVICE'}),r.id);this.settle(r.id);continue;
         }
-        const free=healthy.filter(d=>!d.owner);
+        const free=healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id)));
         const competing=rows.some(other=>other.id!==r.id && free.some(d=>this.compatible(d,parse(other.payload))) &&
           this.db.prepare("SELECT 1 FROM units WHERE request_id=? AND state='queued'").get(other.id));
         const target=parallelism(p.effort,free.length+running,competing);
@@ -198,6 +223,7 @@ class Store {
     });
   }
   finish(claim,state,error=null) {
+    this.assertNoCommand(claim.device_id);
     this.db.prepare('UPDATE attempts SET state=?,finished=?,error=? WHERE id=?').run(state,this.now(),error?canonical(error):null,claim.attempt_id);
     this.db.prepare('DELETE FROM leases WHERE token=?').run(claim.lease.token);
   }
@@ -274,10 +300,22 @@ class Store {
       this.finish(claim,'stopped');this.settle(claim.request_id);
     });
   }
+  // Called only after adapter input writers have drained.
+  yield(claim) {
+    return this.tx(()=>{this.active(claim);this.db.prepare("UPDATE units SET state='queued' WHERE id=?").run(claim.unit_id);
+      this.finish(claim,'stopped');this.event(claim.request_id,'unit.yielded',{unit_id:claim.unit_id});this.settle(claim.request_id);});
+  }
+  quarantine(deviceId,reason='WORKER_STOP_TIMEOUT') {
+    if(!identifier(reason))throw problem('INVALID_ERROR');
+    return this.tx(()=>{if(!this.db.prepare('SELECT 1 FROM devices WHERE id=?').get(deviceId))throw problem('DEVICE_NOT_FOUND',404);
+      this.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run(deviceId);
+      this.event(null,'device.quarantined',{device_id:deviceId,reason});});
+  }
   expireInside() {
     for(const l of this.db.prepare('SELECT * FROM leases WHERE expires<=?').all(this.now())) {
       this.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run(l.device_id);
       this.db.prepare('DELETE FROM leases WHERE device_id=?').run(l.device_id);
+      this.event(null,'lease.expired',{device_id:l.device_id,owner:l.owner,generation:l.generation});
       if(l.attempt_id){
         const a=this.db.prepare('SELECT * FROM attempts WHERE id=?').get(l.attempt_id);
         this.db.prepare("UPDATE attempts SET state='expired',finished=? WHERE id=?").run(this.now(),a.id);
@@ -294,6 +332,7 @@ class Store {
       const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(id);
       if(!d)throw problem('DEVICE_NOT_FOUND',404);
       if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(id))throw problem('DEVICE_BUSY',409);
+      this.assertNoCommand(id);
       const faults=parse(d.faults);if(platform)delete faults[platform];
       this.db.prepare("UPDATE devices SET quarantined=0,health='ready',faults=? WHERE id=?").run(canonical(faults),id);
       this.event(null,'device.recovered',{device_id:id,platform});
