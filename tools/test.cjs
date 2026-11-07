@@ -1,0 +1,10 @@
+'use strict';
+const {spawnSync}=require('node:child_process');
+const fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const env={...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'};
+const files=fs.readdirSync(path.join(root,'test')).filter(f=>f.endsWith('.test.js')).sort().map(f=>'test/'+f);
+const node=spawnSync(process.execPath,['--test',...files],{cwd:root,env,stdio:'inherit'});
+if(node.status!==0)process.exit(node.status||1);
+const python=spawnSync(process.env.PYTHON||'python',['-B','-m','unittest','discover','-s','test','-p','test_*.py'],{cwd:root,env,stdio:'inherit'});
+process.exit(python.status|| (python.error?1:0));

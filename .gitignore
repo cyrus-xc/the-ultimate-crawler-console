@@ -1,0 +1,7 @@
+node_modules/
+runtime/
+.env
+*.db
+*.db-shm
+*.db-wal
+__pycache__/

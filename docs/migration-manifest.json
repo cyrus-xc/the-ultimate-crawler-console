@@ -1,0 +1,1415 @@
+{
+  "source_head": "da57f493d6478cf608dd8a1ad90f7963d7df1c01",
+  "source_dirty": true,
+  "files": [
+    {
+      "source": "/home/pcd/Development/xhs-analysis/HandyGadgets/parse_links/tasks.js",
+      "sha256": "6c59c815e7ca94af3b635bb128a002f40d0526d92fa808c7eb32c4beabaad907",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/android-adb.test.js",
+      "sha256": "09bd9b26f8adf12059fc57f0726805c663e21fcfbc585ecbfe33bb2386905e4d",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/campaign-watch-phone.test.js",
+      "sha256": "43ef51e0d94f1bea30ef82807702a5d8f6390a04565087f90dce4645d34cba28",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/campaign-watch.js",
+      "sha256": "33b5d245e1209431a31cb7e963dd294c88f5bdc49970eb330145b3278ef6a830",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/collector-alerts.js",
+      "sha256": "6288445219d7320a946bdb282377685542402e637964c932db76988f20f392a8",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/collector-screenshot.js",
+      "sha256": "382df80c3d9fb7aa7c4ab50c59d42b371076a9f7a304a2bc66e7bbaf29096218",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/crawler-desktop.js",
+      "sha256": "c71074f838edcb9382fce7d7eb6226d6b1d930150666beb784e9bac4d2cd05c7",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/crawler-desktop.test.js",
+      "sha256": "60c3228bb1c70144e2b5cb05a73eb48c7e7b1fd2eb40f640a9252356cfb5911b",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/douyin-poi-feed.test.js",
+      "sha256": "8e532d0a031b5b125747cbb07201e2c9d3791dbcb1c01859549364f80266bf81",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/gadgets.js",
+      "sha256": "863ee396e8aa4a34652e13186aafb290e7f36c87432a6076e699478505f7c5bc",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/gadgets.test.js",
+      "sha256": "dbe5f127b65df44056daa4f202c886d487d3b5ba239db634751ea58590234e25",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/hub-chain-fixture.cjs",
+      "sha256": "dada9e1b462f8e240a9be631fabcbc98afef173a0cd7a474e3fdebd28ba74f26",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/hub-progress.test.js",
+      "sha256": "f92f0bcbaf8c206f13dead084054252206006e447cbb35b87d124da5775f1baa",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/index.js",
+      "sha256": "36ac43876d1c7d3295b5a6468d3534707b2978ec461b7fa64fd6231df04fc12f",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/kol-chain-browser.test.js",
+      "sha256": "d94f7e4675df319b7c61928b66660f6863c77bc44bbe730e30be1c2a6e7b3916",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/native-phone-status.js",
+      "sha256": "3f3eb7346046898e6444f1f771673742287051f3d8db169f38f5f11236ee2bf3",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/ops-console-browser.test.js",
+      "sha256": "50fc2f3a1bf6eba779edd0161dc71f2b3862ed84640e383adb985cda3c2c1859",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/orchestration-ops.test.js",
+      "sha256": "c7f17811069a0431ecacb0271cfc449af3b178c48d9a6d32b6f10f143ef2a009",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/orchestration/ops.js",
+      "sha256": "6e803bf0c82d51fe9d5644f9751a10f91aa11b7b4187578962f4f343def6f98e",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/phone-bridge.js",
+      "sha256": "fcef99e526356ee74e3eae89632faf249568017eede19fcc6db63a67781fa934",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/phone-bridge.test.js",
+      "sha256": "7ac7c5d8af7a118fc120b638254761cdade33f37760b169c431959b6ec686fe5",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/phone-reconnect.js",
+      "sha256": "269414c43dee99ef48416f545d872804ac5726a181896af6df90537f7ad5211b",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/app/server/runner.js",
+      "sha256": "a6549382c4bb20c39a8f9ac9ff593265d34dc5b17f99dce9e2fb1ac0adf899b2",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/android_adb.js",
+      "sha256": "c87a21bff8c75b34e4da6a93a4882430ca754d6f52d4bb1ab43c206f5d2d6126",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/android_clipboard.js",
+      "sha256": "f6e1dad0feb650fcee2eec0173e884eddf17f5bc40aad321db711f3c0cdd9651",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/android_worker.js",
+      "sha256": "4842c6bc24e5a7633e4cf8a285e601b3a45011f47c0039257d447943622fd753",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/campaign_monitoring.py",
+      "sha256": "c0011d28149ddd9f9de1fed9966590cb0d8679225cd0d1c195dcb9a0514616f9",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/campaign_watch.py",
+      "sha256": "55bf32f38ddb02c2b7701ff1efd882393b64d909d0e26f00b739d148fe365159",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/campaign_watch_phone.js",
+      "sha256": "f11880f9ee17db8cce41337b9f399d1e4b2f88c68fcbe91d59dcf8f82069da43",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/campaign_watch_transports.py",
+      "sha256": "ad2ed574a6440a1b5bc71101341d8dcdbb9dc286af9537a8523729d01658940f",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/case_shares.py",
+      "sha256": "638571e05b87a7330bffb58c8ee2bf823644a484adf10138aea84b943214300c",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/crawler.py",
+      "sha256": "58131cf3ab51b4593e1e170092121e62b4ea06287aecf12cc7cd36f8d46c9881",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/crawler_runtime.py",
+      "sha256": "4895fa504a6bd96822641d10aefe291eaffa7ce0a2814b53e36dddbc341755e1",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/entity_discovery.py",
+      "sha256": "c5f47b16f2b5448bdee18f30d8e46349e36c8fe2938b854265b5179462570bf8",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/hybrid.py",
+      "sha256": "1b77865f1a4fc98eb6a75017f7739b18af791bf0b192451367bfc6b4a47fe0bc",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/lanes.py",
+      "sha256": "37dab603a4710dee55b0d786790a5f1805e3708086344337bd01d50e06fa3b07",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/native_phone.py",
+      "sha256": "2c16419e8b63cf1c1ef04d511ff07e98ee94039e548b547e353b89ea1ce20b27",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/provider.py",
+      "sha256": "b2e9aa640fae45e330f16c10ce59e892417a46ad579c762762b47a79618ee468",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/settings.py",
+      "sha256": "914af94a0ee34d809afcdb4e3f7a6a8b8b3c558d5f715470b722316580296211",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/collect/web_normalize.py",
+      "sha256": "5813f97777848d74c2f49ea591db758023da935765faa2991e3ff3c2e63e7b92",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/douyin_poi_content.js",
+      "sha256": "ac4439e6aaa270ff32ab51547ea874febf9e62934c43c3374c1f98fe605158b8",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/lane_fallback.py",
+      "sha256": "eb36fbb538bec5ce10f597e84d6567f2cd5803a29c794c397da158c426ab975a",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/link_recovery.js",
+      "sha256": "a92e41085d5a694b8d0ccd5709f2342fe071d71e7a2860f87664eb12a93a5d8d",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/merchant_baseline.py",
+      "sha256": "0f93b5b5dce7fa5ddc21135a2a46ecb1d23701120b936d441bfcbe9d34929c16",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/merchant_config.py",
+      "sha256": "e36b6f07e3c0b9919dcce43675c4e61a4d0c310027a250952ee66f5a13086bdb",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/platforms/douyin.py",
+      "sha256": "3189bb57b4c4d1a8ccfb03dd6296ac70efacf40a13356b591d7f0dd9b3388315",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/platforms/xhs.py",
+      "sha256": "c186e624ad5bfbbe9973888824c7d4049d5da1682dbd306dbf0aa43b2d1ef98d",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/poi_page_harvest.js",
+      "sha256": "fbb61df6f5d90a614a5682597c0a39fcc5ceb4d989e9b87e3ab5b5bfa9ecec76",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/core/venue_lookup.js",
+      "sha256": "87b32d8c209c89a6a382b66a0e85d61a639b820944b4b4f5b0a1e3a588df9e14",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/case_source.py",
+      "sha256": "2a02efb757a7019268e934d957708f4c08aff199cd31a45e581bc026ece63042",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/collect.py",
+      "sha256": "458d98ad463c0fd2fdf96237a41a3e8b0eebfce0b064e2497b58bab26a3b3a8d",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/login_wait.py",
+      "sha256": "bb9d0dbc54c6064852aa14ab6131b36a3ef532ee57e9176adb8bead95b8a48ad",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/probe.py",
+      "sha256": "cb117bc4c4121819902852cfd35576bd0d0c5a1f98ef860de09c6b1a3937aef2",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/probe_views.py",
+      "sha256": "a3e8210dff4fd3194d2b492760062975c08e1183c916a5237c1b8fb6036702bf",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/selfcheck.py",
+      "sha256": "3923014af8355d7c294aae0fd9c7cdb8e5aa3fbc0d86b02c6cf39cfff1c86d80",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/validate_mix_views.py",
+      "sha256": "a3687acf97e33a9024ffb0fb0476f8983fc7a87cd1e394f4a8fcbe91d1a475b5",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/douyin/verification_wait.py",
+      "sha256": "f68facaac0a777ec50402b026a3a843d5ce1678a3396d2005b7f7ef80e0c8579",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/pipeline/DouyinKolPerformance/stages/config.py",
+      "sha256": "efa7b1eaa4cd74c6ea3f5aa97831cea32acc2d3cf6b30fc66fc0b04f1c185d9a",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/pipeline/DouyinKolPerformance/stages/login.py",
+      "sha256": "862dd0f174b77415c7a22619785675c3fcd3e9a4b74b3a8006840fa4924edaf6",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/pipeline/KolPerformance/stages/collect.py",
+      "sha256": "1a95e527adeaf8c0df34600a7aee36a3491e1c353fdb2448e6cb75305c214f1e",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/pipeline/KolPerformance/stages/visit.py",
+      "sha256": "58e2c23fcf9d34f9b390753518876d378304cc03ebdc6a5e512dcf3be8aab895",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler-desktop-vnc.sh",
+      "sha256": "d6ca02c585156dc4f9d4c5af1bcfb061ccd3fa7aeb9c384b039b2918303e5a86",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler-desktop.sh",
+      "sha256": "80d8b7c265b7c2720e4082c89622ec7f72443f96805badc0aa5782c5fc449cf5",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler.py",
+      "sha256": "f0822460257e985de11f1480706d4c11b742d4a8e49b4827b4ba1b8f79a3d6cd",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler_console.cjs",
+      "sha256": "3c6c5c8993a7da97ac59cb15c7f77b916f667ca99c1288006ce9fa1be44a48e5",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler_desktop.py",
+      "sha256": "5f850b1aaa43494c8585ec6aadff50311ea864bad9ca20a5f5a9d37e13e635c4",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler_navigation_smoke.py",
+      "sha256": "5eca02e154a6aa26fb84290f7b9479d67610de57877d0b9c76cde441587262b2",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/crawler_selective_share_smoke.py",
+      "sha256": "fa745866fd662e30465d2331e66b02368018e38b603f0acd8f4d1e4cd2cd7232",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/douyin_setup.py",
+      "sha256": "cd164ce00cda50784bea45ca071c3464c8e96bcf5773288f35a6e075f90dbd2d",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/public_engagement_smoke.py",
+      "sha256": "9360284dc03d2b85a9e542e1dbfe6ccdbbf14a9de19bc3564668bc1c2205ce77",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/tools/reconnect-phone-bridge.sh",
+      "sha256": "a4be5d6ede00341c8ae3be27c40f65230b262f8e7251ac4fe95703a5893497e7",
+      "treatment": "review_required",
+      "category": "existing_call_site"
+    },
+    {
+      "source": "/home/pcd/android-lab/scripts/capture-native-note.py",
+      "sha256": "9138a8fa25e6cb44bd1ddff9b08cca8bc44b25351ebedc2c1c0ec593a46c819e",
+      "treatment": "preserve_response_reading_replace_trigger",
+      "category": "external_phone_bridge"
+    },
+    {
+      "source": "/home/pcd/android-lab/scripts/native-note-api-server.cjs",
+      "sha256": "ec39f8a3b6a3219b53adf0b74e6b80fabc5bd96c37fded3e2157001b80206059",
+      "treatment": "preserve_response_reading_replace_trigger",
+      "category": "external_phone_bridge"
+    },
+    {
+      "source": "/home/pcd/android-lab/src/observe-note-http.js",
+      "sha256": "1f92c4a1c1c97cd56e9b8656d9a015079cf3a02cf7a744551e726989bbed85bc",
+      "treatment": "preserve_response_reading_replace_trigger",
+      "category": "external_phone_bridge"
+    },
+    {
+      "source": "/home/pcd/android-lab/lib/runtime_redaction.py",
+      "sha256": "f69f420f1adaf6c9329b12dbd030541cdd9b648b7e477c7fd3587566b5d9a0b4",
+      "treatment": "preserve_response_reading_replace_trigger",
+      "category": "external_phone_bridge"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/alert_page.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/alert_page.go",
+      "sha256": "8f2eabc88b0be84d351b6f4519d75049f73ebb4a020d79ade28290ee581ce9bc",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/alert_page_browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/alert_page_browser_test.go",
+      "sha256": "a364968723f053e0e82a4c1f25d011264bea0aa394e0d7fc5a6c7cb48243761e",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/alert_page_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/alert_page_test.go",
+      "sha256": "ece02ee86ddcd75984c1a64e40108b4516237a0e8d3fbffac7f3598a5f6c6b6c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/LICENSE",
+      "destination": "adapters/xhs-web/headless_browser/LICENSE",
+      "sha256": "82d3ff6ed6f97047a3a38a11c4a3e0321dc56c7dc01df45397a905b375e0d01c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/cmd/chrome_path_example/main.go",
+      "destination": "adapters/xhs-web/headless_browser/cmd/chrome_path_example/main.go",
+      "sha256": "70b7d119028b79052c3a5aae64453500e229ef03afdbc625aac6d7b6e90a6045",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/go.mod",
+      "destination": "adapters/xhs-web/headless_browser/go.mod",
+      "sha256": "7024c40f7e2e7f2e2ef439e1f967038350a53d0e79361668683552270383eb09",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/go.sum",
+      "destination": "adapters/xhs-web/headless_browser/go.sum",
+      "sha256": "a84857b3e9b9f4346860df1de611e778322f4c9f5eba279050c2e068b1239e6e",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/headless_browser.go",
+      "destination": "adapters/xhs-web/headless_browser/headless_browser.go",
+      "sha256": "14879f3238f941cb835de8e462fe5104def19482dfd85aa905eb283ca2ebc1b2",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/headless_browser_test.go",
+      "destination": "adapters/xhs-web/headless_browser/headless_browser_test.go",
+      "sha256": "52617fce3046eee6d8c1c86aa85e369e99d437952cfc2d702022511d7ac3415b",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/owned_tree_other.go",
+      "destination": "adapters/xhs-web/headless_browser/owned_tree_other.go",
+      "sha256": "9f114ddb945e6411b7ef9b4a944cd37e25e8fcc95df0d56123be5c9b2bdcf488",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/owned_tree_windows.go",
+      "destination": "adapters/xhs-web/headless_browser/owned_tree_windows.go",
+      "sha256": "6199b6a0803247729ef36e9ac381ec62008bb9c311c31d3890ff22b009a30d2c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/process_alive_other.go",
+      "destination": "adapters/xhs-web/headless_browser/process_alive_other.go",
+      "sha256": "8096462262c9118a509f9710c4e30f8607a3c027cb11f36a6d60b230947b3725",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/process_alive_windows.go",
+      "destination": "adapters/xhs-web/headless_browser/process_alive_windows.go",
+      "sha256": "6bb8acc9c1f7dd162f9a9e20a1a4bb4a76b3f762e34b70482a5f91d5efab6f96",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/profile_lock.go",
+      "destination": "adapters/xhs-web/headless_browser/profile_lock.go",
+      "sha256": "3e5c2385bf40c91c31fcc7650a6fa434786e473c38bda3829d8c01534507760c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/profile_lock_test.go",
+      "destination": "adapters/xhs-web/headless_browser/profile_lock_test.go",
+      "sha256": "d05427fc3ca6b6258f589e53f3b57805d1141802390bae5beec08c14feee0a3f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/headless_browser/profile_lock_unix_test.go",
+      "destination": "adapters/xhs-web/headless_browser/profile_lock_unix_test.go",
+      "sha256": "8cf809727ce6f129e909d893e3d7ed2f991749e2048fba99032694d9fd156d34",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/LICENSE",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/LICENSE",
+      "sha256": "9d8b162d4b4822b793666e2a8cb6c94df7ecdb8204f23a20e6042f93e691cb0d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/app_server.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/app_server.go",
+      "sha256": "a36837d9138bacc69f51c472acea2a3108ed8b69131d146d568596ebb5c79ad3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/browser/browser.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/browser/browser.go",
+      "sha256": "e41e1202d1677758c9f8809a61b9def1a9258619877286a44108c957609e6e44",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/browser/browser_download.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/browser/browser_download.go",
+      "sha256": "8d1f3b946f965281a2a2be37046b0c22c0adb423a21127e63ef2e7641bcc3414",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/browser/browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/browser/browser_test.go",
+      "sha256": "e035e3ae70e8beb668168f7050354aafcfce120f7d8d056120b4303193e2f792",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/browser/browser_version.txt",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/browser/browser_version.txt",
+      "sha256": "0393690332434cdd92967bb0f00787143c9c0091de48e87d239ae59419181d90",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/browser/evidence_policy.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/browser/evidence_policy.go",
+      "sha256": "ae54b1770bc8a8c215c37a3bca802373174806a88ccd6d42b92a085bbce3273c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/cache.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/cache.go",
+      "sha256": "ba0b13d6f3e5f3f34744460c259fdbb73ba874f8c26110547a7deb2fbd0901e4",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/main.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/main.go",
+      "sha256": "c1f15049e996e97753e0047e845955071f68a2e64a82bb5b1a8c2badf02c3dbe",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/main_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/main_test.go",
+      "sha256": "9ac12723418353892b1f968a1002b82b85eafb81a6508cf33ec7f368b22e719c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/parent_other.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/parent_other.go",
+      "sha256": "f4b9ed48a957c29813175f2220fe0dca4b67efe9ce064a16067efac9c65716ba",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/parent_windows.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/parent_windows.go",
+      "sha256": "a2442bbfaced71a742811d742656212f559074de938280ec9402ca1bedd2d976",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/session.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/session.go",
+      "sha256": "b720a5bb99c90e8d54eefbb4a8082738d1782b21a49002526446afcb4a32c4da",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/session_other.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/session_other.go",
+      "sha256": "b50a55ec6215e835a7a5edd5ba0e600baeefd562184bdfe4302ff9d17786291d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/session_windows.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/session_windows.go",
+      "sha256": "f8da6727a142fafb71ccbadac14357ae04c4c711713b3b9fc4940d80d9eef02d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/share_selection.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/share_selection.go",
+      "sha256": "b2a517607bb86ba49891105d186aad70700d37896c0fbd45fa46b93c10f2fac6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/crawler/share_selection_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/crawler/share_selection_test.go",
+      "sha256": "af5afb68e6170c578acee66879fb7c9710c9b6041d42969e5540775adcb7448b",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/login/main.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/login/main.go",
+      "sha256": "d43b0b51a2b5b979ab9db0f9a9161e4db7b2e35bca1e110c749e9753fec0cfa5",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cmd/login/main_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cmd/login/main_test.go",
+      "sha256": "4e149e037111db21c19dd045f7fea7c6666157ed80152396ff5f66335a8419f1",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/configs/browser.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/configs/browser.go",
+      "sha256": "8e6663a25203651f6a2328ff4c1f3326f9befef1b9511c0fe4e6997257d1ba99",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/configs/browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/configs/browser_test.go",
+      "sha256": "97f606ad057cfde9271c800f676bb29534743fbd15caa6711b4be9d99b159d7d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/configs/image.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/configs/image.go",
+      "sha256": "5a204155e3f1054ea1d8037546db46b08d8ea83eed3876bac0af2fc96dd6fc77",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/configs/seed.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/configs/seed.go",
+      "sha256": "1f2d5c8a7981b1129db81345d109d12aceea3a7eeab5ef6e5f4718e540f99c80",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/configs/seed_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/configs/seed_test.go",
+      "sha256": "764b634866c5b49d76a5611e8110183811d0d7090a641c0870e0404fd1abdba4",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cookies/cookies.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cookies/cookies.go",
+      "sha256": "628703595e07aae14d3ee78fc59d45e4e4a95f88e217a2b100fa1130d4fdf915",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/cookies/cookies_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/cookies/cookies_test.go",
+      "sha256": "a44b71b6e14c5a0b0e54fb4d5a78ef0f5d588debd802ac55a0e12fd56d2482ef",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/diagnostics.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/diagnostics.go",
+      "sha256": "f867a52e35f578c3694dd9d21f7ac98ef7b2fb181b3b538bada8f0fb30af686b",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/diagnostics_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/diagnostics_test.go",
+      "sha256": "19b9ad9432531909c8711190ddba5f5aaee79c33936b759d0a23050765af3291",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/engine.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/engine.go",
+      "sha256": "b4444409c3b322fe2d4cfb7f5bee6a5031c63a38b36f80b1b281da32bb3b81b2",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/engine_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/engine_test.go",
+      "sha256": "c5e844d894a049d5a7199581c11a378d18d9d9cd529d47623eb7efe3bead03cd",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/panic_text.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/panic_text.go",
+      "sha256": "9653fefd202324b0cc29f224665cc42a7699d4b66987e1c7e6f8f9cf3bbafb66",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/panic_text_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/panic_text_test.go",
+      "sha256": "0a639b8421402f87a4013aace0b9d4a087fadfbbaef75a134d03e15a7d5dfafe",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/profile_walk_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/profile_walk_test.go",
+      "sha256": "8f220c7ef01d57ba18d58139005547b080de80ee6e82ec9e8da06700804bd182",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/session.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/session.go",
+      "sha256": "5e55a3cb62d17d780cc7277b8358470a6e0c84013995a2f22f4f810470c44d92",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/crawler/session_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/crawler/session_test.go",
+      "sha256": "6f1ce1f388c8b38e6496f784bdfe7695d832f986f2b2ce1a1cda2d5bc21cdc41",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/errors/errors.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/errors/errors.go",
+      "sha256": "a0fac145078037aacc59d600af52a5a5dfa2192de7af3dc3265baa7540ec188f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/evidence_tool.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/evidence_tool.go",
+      "sha256": "ae75831afde78c7cd69da4aa06af344c09a90c3ccbf86118659c5058a0a3b0b6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/go.mod",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/go.mod",
+      "sha256": "639efc1de512e575dd804efa677e60e7fc344461f20a34358ecddf6f8afddd6a",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/go.sum",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/go.sum",
+      "sha256": "7ef5e4153aef0c38e37d1d56672e1bccf21d5a60c7a65fc5c093e7ae8d57eeb2",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/handlers_api.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/handlers_api.go",
+      "sha256": "7493551d668f65485daf51df819558c4bab26e7169077b631ec9d8f50f484465",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/handlers_api_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/handlers_api_test.go",
+      "sha256": "663cfdb50218a86c4d16ea90ece8ee1243f283dcf509ed6e18a5bd8b35acc65a",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/delay.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/delay.go",
+      "sha256": "843a4528c86e837a74f5fe70cf2e77cac75bb4360ef9754f6b22d6fb29c878e3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/humanize_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/humanize_test.go",
+      "sha256": "b4312e82e4f29afee56e2c1fec3a55f2b1ea1892ee6fdc8a641d702c1d001077",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/input.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/input.go",
+      "sha256": "7eef0810afa637f506afa18c03cf8d4a0ac6c5b13b28cbbf3be9e349fe0832db",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/input_integration_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/input_integration_test.go",
+      "sha256": "e0e28b24933a9f8cbdc71e3e8432d0201658867d217973138906ca6cd4795bf3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/mouse.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/mouse.go",
+      "sha256": "c280fef08e0dc4482baf70cf08ab052a301ab40a3df08be2bd8412a5b5660ac3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/provider.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/provider.go",
+      "sha256": "c6a9cd35322b11b9a232a5bd198096c85a9461247495f3f27c5a7683d1b4b9e6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/humanize/scroll_policy_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/humanize/scroll_policy_test.go",
+      "sha256": "60b581c9512465861738951162ab7a62ff73723d5cbaf66830d82c28a4658ddc",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/login_session.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/login_session.go",
+      "sha256": "e84206bfdbd8c4952e2120de473d3295adab23b90693591e9c4b0b6a2dc50828",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/login_session_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/login_session_test.go",
+      "sha256": "824bf93ec5ac0316ef3ff643c8f614ccbe8c5d26b9e4b71a4a95469ad5770d0a",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/main.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/main.go",
+      "sha256": "05628b4e33e3438c9c73a23f77b34dcedacd0d6a01f2d91f7c1d1935be54f2d4",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/mcp_handlers.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/mcp_handlers.go",
+      "sha256": "ba4b4d48620f1f3fd3c8260417383f35ac9c2a8bacf4c480af7c4a085580d11c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/mcp_server.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/mcp_server.go",
+      "sha256": "73245a48c1f143453d47ffcd3bf11bc2fb3d7abd62d85b657e02b9befda3d2e6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/middleware.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/middleware.go",
+      "sha256": "336387225d06d9c572e3009a86536a0eb53e7b0cb74e1749f8b2beb67ced85ed",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/middleware_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/middleware_test.go",
+      "sha256": "f377bb9654c66c6d35a04623acc7e8f8cdc89fd815bd51b3084013e960eb1f5c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/pkg/downloader/images.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/pkg/downloader/images.go",
+      "sha256": "ae5d04b46e47f404feac0ab975f1521996da82149ce5e954a6c75fa4e325b039",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/pkg/downloader/images_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/pkg/downloader/images_test.go",
+      "sha256": "3eba9b4a00089d7ed512fe9a4339ed4a0a971a4d35aab8a93b416d4439cc531d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/pkg/downloader/processor.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/pkg/downloader/processor.go",
+      "sha256": "fca72322b8ce621eb973e62dd5a09c3398417172a10bb9a347a133cac3826564",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/pkg/xhsutil/title.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/pkg/xhsutil/title.go",
+      "sha256": "7bf8641fd722f48ef8ec4ba4c607c39d63c35b8fdf3fd62a75fb7e828007506d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/pkg/xhsutil/title_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/pkg/xhsutil/title_test.go",
+      "sha256": "68c58ae33633d58bf0fb5c055b2290c63fa52ec0555b0a1f26238547f5e5164c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/routes.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/routes.go",
+      "sha256": "3461ec072367ab612f0e5810042c8f42318a3d91f9a9d5385a61b6adc9ece479",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/routes_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/routes_test.go",
+      "sha256": "b17f711dd17bc106e3b0cd9a7939e32c54a323cbddadf00421cfacdadf322051",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/service.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/service.go",
+      "sha256": "8220854541437f241715ad0ad65696142b154c062d2011db5564a3154f99ecb8",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/smoke_handler.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/smoke_handler.go",
+      "sha256": "245cd343afffb4dba02a8b49e804d5df519b08c39ecf175673a909f6c34cd89f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/types.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/types.go",
+      "sha256": "c65645ae1c10afc3cc086a29b2a2650b671860e2c592c65d4675ded548acf1e2",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/access_diagnostic.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/access_diagnostic.go",
+      "sha256": "6999c06ef5db5887f01535a49af5c4674fb7f811e7f4e3e543fe899a1629397d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/access_diagnostic_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/access_diagnostic_test.go",
+      "sha256": "282c93bef9a6a18078ed63d9a4dbf1f358eeab3c98c5c20b84618528dc0322dc",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/access_state.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/access_state.go",
+      "sha256": "370b0c1af6ca11e751e8220cd891aa95fcc87b29d0aa4c7811405014a804e6e8",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/access_state_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/access_state_test.go",
+      "sha256": "66c0947bb7152ef92fbeced32255910ccc03660f094118792f496559536c79e3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/captcha.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/captcha.go",
+      "sha256": "9e80f663439af821ef377426b677bedf0a21e36232e7e2f109f823056dfb8fdd",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/captcha_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/captcha_test.go",
+      "sha256": "cd105ffe14de168ecc25baf9c2b3af434d16431a110656c22aa2c44f69872328",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/comment_feed.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/comment_feed.go",
+      "sha256": "047f75a443899e9b859073d3dd1093875cdd9e6a96f155c88b5fe596dabe6da6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/evidence.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/evidence.go",
+      "sha256": "b6ec6006f308b7d09f20713980bac3f833ba8cf2fb57d1fa0d683084779d8f5f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/evidence_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/evidence_test.go",
+      "sha256": "3f97e3414d5092c8b4b4aed6c7903b81dd220558b2439c6f0c04abe9150a8ac5",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feed_detail.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feed_detail.go",
+      "sha256": "9c83bcd9508c4346b7cc1441b09973e01f302ebf4750e37c776b5184e47ab20f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feed_detail_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feed_detail_test.go",
+      "sha256": "ce7901f6d042cb68e5acb070807ea6d75032f000358362176050ee46744ada56",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feed_open.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feed_open.go",
+      "sha256": "22d642fdd853cbacebe69dd0bf3f96daa7cbd166d5f367ae492ccb545785d62d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feed_open_browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feed_open_browser_test.go",
+      "sha256": "e58e1b2f04c597d9d165cca685463e8b8f37e4e39335fa0cd1782c7bfefe6734",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feeds.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feeds.go",
+      "sha256": "be12bfe9a363eecb80b7d30f2c94b4d50ad50ceb7797fbafd3ebd899d273d1ee",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/feeds_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/feeds_test.go",
+      "sha256": "8f85d8810b78f08f9e36f98ae825b76f13b1bb2c0552c999b1a16b4da8ed21ef",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/like_favorite.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/like_favorite.go",
+      "sha256": "9cb0c65303c4c1bf468405cf1e257efa69ae9528a84b28579b42141e82852b5c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/list_navigation.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/list_navigation.go",
+      "sha256": "df89d1f77e3a0f950bc2ad2b57860ce05701d74481cdb85e5535b791c5f44bf3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/login.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/login.go",
+      "sha256": "6c6964fb8a2888d34e6aaf31aca409c0af9d4c5a22f0afb812b23c655ce92873",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/login_overseas_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/login_overseas_test.go",
+      "sha256": "9e6fa07d4eb4ab518f2800abe9b04e2609e6965f5e00a0d21cc44f89c378169c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/login_state_browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/login_state_browser_test.go",
+      "sha256": "59c8fb7fd54b1416d8613e7b1adcf1678fb6cb21e95c65d2b23f6be6ce28eb35",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/navigate.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/navigate.go",
+      "sha256": "e86820fc8f9397a688d04d992a380ff62b30d6e5d15f87eab3a79391d86a3106",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/note_probe.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/note_probe.go",
+      "sha256": "94532857356a9bbecdbe79a0fa4ff8ddba1aacec8911d90f620cef3aa0f259d7",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/note_probe_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/note_probe_test.go",
+      "sha256": "e17e855f17e92fb4b4b076d75b5b7b4c0a6de8d6b8091191c3842ba3013da69e",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/note_share.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/note_share.go",
+      "sha256": "e99cbecc3804dfc38cd25e13515799e07fe8a055ecc33901ce7c965e4a160197",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/note_share_browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/note_share_browser_test.go",
+      "sha256": "cfb9c53499f0c980076ed228318c6a2c02743666f4e85b09e368bb34ca9c8b51",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/note_share_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/note_share_test.go",
+      "sha256": "2d28ae101443ec6a29e9b0c9bdd51c7084ce3347740bf70d07e697744cfff06c",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/notification.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/notification.go",
+      "sha256": "621c103086fea8889b9a724c448faec25145069b42a7eb9a5e35f36fdd821a4d",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/notification_like.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/notification_like.go",
+      "sha256": "e3510b67f2ec18f6cc2c51c9e707e747f6b8e3463e72d5117f524461cd5a22d5",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/notification_reply.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/notification_reply.go",
+      "sha256": "c14a70ec1055633f285ef85eec52cb9ac2c1b3e6aa6615c8b7fccd0dd68d07f1",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/notification_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/notification_test.go",
+      "sha256": "180abf0e9cb9d3015dbaca4e93a0dc2039852f3669c5d7edbd22719672f294f0",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/poi_evidence.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/poi_evidence.go",
+      "sha256": "1fa2575ff1a09a69a32008a46b7ce4ff0466b250f8f5f2b77a3f24ad9a20c135",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/profile_identity_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/profile_identity_test.go",
+      "sha256": "8c2e432cfe6a7bb9d028591876f7ac0f3cbf24651beee325688712ecec0145b4",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/profile_walk.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/profile_walk.go",
+      "sha256": "cf1a70f2125094c5ca9fe74c4b0175503d3353c63da0d5c22a1b883a8d39e9d1",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/profile_walk_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/profile_walk_test.go",
+      "sha256": "a2b0d7c3e1d14d5e437c025d07e9240c7ee53aa8b3c58f35cef10a8e338f9b6e",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/publish.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/publish.go",
+      "sha256": "5c1a4260635173ea24589d97bd6f528be902ac90ca90075fed52f076d30a2c3a",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/publish_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/publish_test.go",
+      "sha256": "281b31c6d2833d71cc55651ab2d8a8e74595f0953fe503368e1669f849a47fe3",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/publish_upload_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/publish_upload_test.go",
+      "sha256": "67e85b8b4aa48367a00b0380448ddf1e66c3d6b9a9d7b9779175293a6ab910d6",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/publish_video.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/publish_video.go",
+      "sha256": "f25a424ced2ca4cc8742e5bd12829233df0bbe89860e3797b3eb3994675471da",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/scroll_progress.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/scroll_progress.go",
+      "sha256": "6446949104f15cdd285c352a35efe419cbaeb6afa15f320f430071b991a1ed34",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/scroll_progress_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/scroll_progress_test.go",
+      "sha256": "85804d0d7a6e3100a7fab7b4128afce0697026461a336250a0cb50d75db12caa",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/scroll_since.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/scroll_since.go",
+      "sha256": "d62e6250737a3efd4414e5bab51c10e4e4150654a234e374b0a54e6ee63cd675",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/scroll_since_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/scroll_since_test.go",
+      "sha256": "957bed006b5a5cc1c56d1d0ff7b81b12ff20406668dcb436e992b9760d0caf0f",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/search.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/search.go",
+      "sha256": "7aa6ad3e11b7ae5bdcc25845d0471f61516df741e640eee4a79467d4735d1aca",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/search_evidence.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/search_evidence.go",
+      "sha256": "48e1982a6726a8bcd1eea239c413499723baeb2054a4255a9bb5687eed995e63",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/search_integration_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/search_integration_test.go",
+      "sha256": "989e17540e45e4cc4facf35891a223afbee746476aea61bcf04455f5031305aa",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/search_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/search_test.go",
+      "sha256": "4dc9cae67146d99493ae24b79eff3db8645dc5d8c177aa65f35a87395093fd65",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/session_state.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/session_state.go",
+      "sha256": "395f91c4422544de34fc6dd00fed5a582091fd0ece8d9941aa754900eb9c1398",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/share_count_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/share_count_test.go",
+      "sha256": "9b4ea78f681c5dfe961a0db3db2f6937aacd358d9dac128b148c75c04651df51",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/share_selection.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/share_selection.go",
+      "sha256": "f91e7067a0cdd8b3560eb8a0f025bcf4a32750f1b6646cce19d96e75ddcaed77",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/share_selection_browser_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/share_selection_browser_test.go",
+      "sha256": "47dd62254f82759ee242ad1569e9f3ccf0272c648b93f85d26c4892a6f4eae44",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/smoke.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/smoke.go",
+      "sha256": "fb329c1dc580e05dca86f6fa16e754b3ca8db88861c155d395fb59606dbdc33e",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/smoke_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/smoke_test.go",
+      "sha256": "bc1d249149d687b2dcd1746965f820044fae254efefe51eb2cafc062e3a12138",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/types.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/types.go",
+      "sha256": "3a79d75d15f64d560160d6453007fe509b429bb0f84baf0c97b2d1606e1261b1",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/types_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/types_test.go",
+      "sha256": "d10d29264ee6f56b4e5fdc5f4dc01437577c0d9c598d4b00a6fccb0a9c95e02b",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/user_profile.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/user_profile.go",
+      "sha256": "ce01bae4cd30d6643ae5916b2e84d45644c2786f29b56e57743797faad805f95",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    },
+    {
+      "source": "/home/pcd/Development/xhs-analysis/crawler/xiaohongshu-mcp/xiaohongshu/user_profile_tab_test.go",
+      "destination": "adapters/xhs-web/xiaohongshu-mcp/xiaohongshu/user_profile_tab_test.go",
+      "sha256": "ab62b3ff79af073304f9fee5c178a0c1a7ab6db7606dd86a54b4e159989192db",
+      "treatment": "copied_actual_worktree_source",
+      "category": "xhs_web"
+    }
+  ]
+}
