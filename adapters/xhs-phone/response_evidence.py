@@ -88,3 +88,29 @@ def classify_transport(wire, invocation_started_at_ms, invocation_finished_at_ms
             'fresh_server_roundtrip_observed':state in {'fresh_network_response','fresh_network_revalidation','fresh_cronet_network_response'},
             'basis':'Native Cronet cache flag when uniquely correlated; otherwise OkHttp response metadata',
             'transport':transport,'cronet_response':native,'matching_cronet_callbacks':len(lower)}
+
+
+def private_media(result, records):
+    """Bind transient CDN URLs to verified notes and exact redacted fields."""
+    operation=result.get('response_operation') or result.get('operation')
+    payload=result.get('response',{}).get('data')
+    if operation=='user_posted':
+        notes=payload.get('notes',[]) if isinstance(payload,dict) else []
+    elif operation in {'image_detail','video_detail'}:
+        notes=[n for group in payload for n in ([group] if operation=='video_detail' else group.get('note_list',[])) if n.get('id')==result.get('note_id')] if isinstance(payload,list) else []
+    else:return []
+    out=[]
+    for record in records:
+        try:
+            path=record['path'];url=record['url'];parsed=urlsplit(url)
+            if parsed.scheme not in {'http','https'} or parsed.username or parsed.password or parsed.port not in {None,80,443} or not (parsed.hostname=='xhscdn.com' or parsed.hostname.endswith('.xhscdn.com')):continue
+            if not path or path[0] not in {'cover','images_list','image_list','images','imageList'} or path[-1] not in {'url','urlDefault','url_default','url_size_large','urlSizeLarge','urlPre','url_pre'}:continue
+            if any(not (type(key) is int and key>=0) and key not in {'info_list','infoList'} for key in path[1:-1]):continue
+            matches=[n for n in notes if n.get('id')==record['note_id']]
+            if len(matches)!=1:continue
+            value=matches[0]
+            for key in path:value=value[key]
+            if clean(url)!=value:continue
+            out.append(record)
+        except (ValueError,TypeError,KeyError,IndexError,AttributeError):continue
+    return out

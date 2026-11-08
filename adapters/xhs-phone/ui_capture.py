@@ -9,7 +9,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from response_evidence import request_matches, request_target_matches, classify_transport, bridge_result
+from response_evidence import request_matches, request_target_matches, classify_transport, bridge_result, private_media
 from runtime_redaction import clean
 
 class CaptureError(RuntimeError):
@@ -104,7 +104,7 @@ class UiResponseCapture:
         self.clock_ms = clock_ms or (lambda: time.time()*1000)
         self.monotonic = monotonic
 
-    def read(self, operation, contract, values, trigger, *, timeout=30, guard=lambda: None, valid_note_url=lambda u,n: False, related_contracts=None, notify_response=None):
+    def read(self, operation, contract, values, trigger, *, timeout=30, guard=lambda: None, valid_note_url=lambda u,n: False, related_contracts=None, notify_response=None, private_media_enabled=False):
         if not 0 < timeout <= 300:
             raise ValueError('Invalid capture timeout')
         ready, changed = threading.Event(), threading.Event()
@@ -150,6 +150,8 @@ class UiResponseCapture:
             if errors:
                 raise CaptureError(errors[0])
             script.exports_sync.allowpath(contract['path'])
+            if private_media_enabled:
+                script.exports_sync.allowmedia()
             for extra in (related_contracts or {}).values():
                 script.exports_sync.allowpath(extra['path'])
             if operation in {'image_detail','video_detail'}:
@@ -238,6 +240,8 @@ class UiResponseCapture:
                               'captured_at_ms':wire['at'],'device_captured_at_ms':wire.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',
                               'action_started_at_ms':start,'action_finished_at_ms':now}
+                    if private_media_enabled:
+                        result['private_media']=private_media(result,script.exports_sync.takemedia(wire.get('observation_id')))
                     if operation=='search':
                         result['effective_sort']=next(q['value'] for q in semantic_request(wire['request'],operation)['query'] if q['name']=='sort')
                     if operation in {'image_detail','video_detail'}:
@@ -270,6 +274,8 @@ class UiResponseCapture:
                             extra_query=sorted((q['name'],q['value']) for q in extra.get('request',{}).get('query',[]))
                             extra_lower=[e for e in cronet if e.get('request',{}).get('path')==extra['request']['path'] and sorted((q['name'],q['value']) for q in e.get('request',{}).get('query',[]))==extra_query]
                             extras.append({'operation':operation,'input':clean(broad_values),'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'device_captured_at_ms':extra.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'transport_evidence':classify_transport(extra,start,now,extra_lower),'trigger':'ui'})
+                            if private_media_enabled:
+                                extras[-1]['private_media']=private_media(extras[-1],script.exports_sync.takemedia(extra.get('observation_id')))
                         if operation=='user_posted':
                             extras,replayed=posted_page_groups(body,extras,values.get('cursor'))
                             if replayed:result['replayed_pages']=replayed

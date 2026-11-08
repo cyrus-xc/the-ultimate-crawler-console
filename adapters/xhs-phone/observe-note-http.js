@@ -17,7 +17,29 @@ function retainObservedShare(body, request, observationId) {
     observedShares.set(observationId, notes[0].share_info.link);
   }
 }
+let privateMediaEnabled = false;
+const observedMedia = new Map();
+function retainObservedMedia(body, observationId) {
+  if (!privateMediaEnabled || observedMedia.size >= 100) return;
+  const data=body?.data;
+  const notes=Array.isArray(data)?data.flatMap(n=>Array.isArray(n?.note_list)?n.note_list:[n]):(data?.notes||[]);
+  const fields=['cover','images_list','image_list','images','imageList'];
+  const urls=new Set(['url','urlDefault','url_default','url_size_large','urlSizeLarge','urlPre','url_pre']);
+  const records=[];
+  function walk(value,path,noteId) {
+    if(Array.isArray(value))return value.forEach((v,i)=>walk(v,[...path,i],noteId));
+    if(!value||typeof value!=='object')return;
+    for(const [key,v] of Object.entries(value)) {
+      if(urls.has(key)&&typeof v==='string'&&/^https?:\/\/(?:[a-z0-9-]+\.)*xhscdn\.com\//i.test(v))records.push({note_id:noteId,path:[...path,key],url:v});
+      else if(['info_list','infoList'].includes(key))walk(v,[...path,key],noteId);
+    }
+  }
+  for(const note of notes)if(/^[a-f0-9]{24}$/.test(note?.id||''))for(const key of fields)walk(note[key],[key],note.id);
+  observedMedia.set(observationId,records);
+}
 rpc.exports = {
+  allowmedia() { privateMediaEnabled=true; observedMedia.clear(); },
+  takemedia(observationId) { const records=observedMedia.get(observationId)||[]; observedMedia.delete(observationId); return records; },
   observerclock() { return Date.now(); },
   allowshare(noteId, path) {
     const selectedPaths=Array.isArray(path)?path:[path];
@@ -146,6 +168,7 @@ Java.perform(() => {
             // Only the requested note's observed URL crosses the private RPC.
             // Events and all capture files continue to receive clean(body).
             retainObservedShare(body, request, observationId);
+            retainObservedMedia(body, observationId);
             emit({event:'response_json', at:Date.now(), request, status:res.code(),
               observation_id:observationId,
               received_at_ms:String(res.receivedResponseAtMillis()), body:clean(body),

@@ -88,3 +88,31 @@ Files are mode 0600 inside mode-0700 directories. Earlier failed attempts are
 retained separately and do not substitute for these successful receipts. No raw
 signed URL or credential belongs in this document. This acceptance proves these
 operations on the tested phone, not universal compatibility with every device.
+
+### Transient native image URLs
+
+Only discovery enables a private observer RPC sideband for observed `xhscdn.com`
+image URLs. It retains the complete original URL before generic decoding and
+redaction, then binds it to the verified note, explicit image field path, and
+matching redacted value. Only detached normalized `imageList`/`cover` fields are
+restored; response evidence, `native_responses`, and `_native_original` stay
+redacted. Video stream URLs and unrelated hosts are excluded. Ordinary queued
+captures do not enable this channel. Authenticated discovery clients must download
+these URLs in memory and persist local artifact references, never signed media
+URLs in observations, logs, reports, or smoke-test receipts.
+
+
+Private-media fix validation (2026-11-08):
+
+- `ENABLE_TIKHUB_NETWORK=0 ENABLE_LLM_NETWORK=0 PYTHON=.venv/bin/python npm test`:
+  256 Node and 62 Python tests passed. Coverage includes ordinary queue opt-out,
+  exact note/field/host binding, and detached projection without evidence mutation.
+- `node --check adapters/xhs-phone/observe-note-http.js` and `git diff --check` passed.
+- Real `android:c7dee0b3` count 20 returned 22 cards; all 22 cover signatures
+  were present and none redacted. The previously failing cover downloaded with
+  HTTP 200 (80,351 bytes, image/heif), using User-Agent Mozilla/5.0 and the XHS
+  homepage Referer. Empty complete returned 200 and released the device.
+- Only a safe summary was persisted at
+  `/tmp/watch-visual-verification/phone-private/private-media-verification.json`;
+  original media URLs were never saved by that verification script. This verifies
+  the crawler download path, not the downstream LLM run.

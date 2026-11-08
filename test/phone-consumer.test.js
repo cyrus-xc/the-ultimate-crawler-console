@@ -17,7 +17,7 @@ function fixture(t,input=base){
 test('phone consumer preserves the whole loaded page and captures only after UI input',async t=>{
  const f=fixture(t);f.replies[0].response.data.items.push({id:id(3),desc:'second'});f.worker.dispatch();await Promise.all(f.worker.active.values());
  assert.equal(f.store.request(f.request.id).state,'succeeded');const results=f.store.results(f.request.id);assert.equal(results[0].payload.data.raw.feeds.length,2);
- assert.deepEqual(f.events,['search','submit','sort','drain','close','drain']);assert.equal(f.captures[0].values.query.keyword,'词');assert.equal(f.captures[0].values.query.page_size,undefined);
+ assert.deepEqual(f.events,['search','submit','sort','drain','close','drain']);assert.equal(f.captures[0].privateMedia,false);assert.equal(f.captures[0].values.query.keyword,'词');assert.equal(f.captures[0].values.query.page_size,undefined);
 });
 test('pagination reads App pages sequentially and checkpoints actual cursors',async t=>{
  const f=fixture(t,{...base,params:{max_items:10}});f.replies[0].response.data.has_more=true;f.replies[0].response.data.cursor='actual1';f.replies.push({response:{data:{items:[{id:id(3)}],has_more:false,cursor:'actual2'}}});
@@ -173,4 +173,17 @@ test('discovery video cards use one detail capture action and preserve the selec
  f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'video body',type:'video',user:{userid:id(2)}}]}]}};
  f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{_raw:{noteCard:{type:'video'}}}}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(f.captures[0].operation,'image_detail');assert.equal(f.captures[0].values.note_id,id(1));assert.deepEqual(f.events.slice(0,3),['card','back','profile-confirmed']);
+});
+
+test('discovery media restores only detached normalized image fields',()=>{
+ const nid=id(1),url='https://sns-img.xhscdn.com/a%2Fb?sign=private%2Bsignature',safe='https://sns-img.xhscdn.com/a/b?sign=REDACTED';
+ const raw={id:nid,desc:'body',images_list:[{info_list:[{url:safe}]}],cover:{url:safe}};
+ const result={operation:'user_posted',captured_at_ms:1000,response:{data:{notes:[raw]}},private_media:[{note_id:nid,path:['images_list',0,'info_list',0,'url'],url},{note_id:nid,path:['cover','url'],url}]};
+ const out=envelope(result,'profile.posts',{user_id:id(2)}).data;
+ assert.equal(out.raw.feeds[0].noteCard.imageList[0].info_list[0].url,url);
+ assert.equal(out.raw.feeds[0].noteCard.cover.url,url);
+ assert.equal(out.raw.feeds[0].noteCard._native_original.images_list[0].info_list[0].url,safe);
+ assert.equal(out.response.data.notes[0].images_list[0].info_list[0].url,safe);
+ assert.equal(result.response.data.notes[0].cover.url,safe);
+ assert.equal(out.private_media,undefined);
 });

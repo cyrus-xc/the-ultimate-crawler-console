@@ -1,12 +1,12 @@
 'use strict';
 const {spawn}=require('node:child_process');const {StringDecoder}=require('node:string_decoder');const path=require('node:path');
 const error=code=>Object.assign(Error(code),{code,scope:'device'});
-async function captureResponse({python,contractPath,endpoint,pid,operation,values,trigger,guard,signal,timeoutSeconds=45,spawnProcess=spawn}){
+async function captureResponse({python,contractPath,endpoint,pid,operation,values,trigger,guard,signal,timeoutSeconds=45,privateMedia=false,spawnProcess=spawn}){
  if(typeof guard!=='function'||typeof trigger!=='function'||!Number.isInteger(pid)||pid<1||!/^127\.0\.0\.1:\d{1,5}$/.test(endpoint)||!Number.isFinite(timeoutSeconds)||timeoutSeconds<=0||timeoutSeconds>300)throw error('INVALID_CAPTURE_CONFIG');
  let encoded;try{encoded=JSON.stringify(values);}catch{throw error('INVALID_CAPTURE_INPUT');}
  if(!values||typeof values!=='object'||Array.isArray(values)||Buffer.byteLength(encoded)>1024*1024)throw error('INVALID_CAPTURE_INPUT');
  await guard();if(signal?.aborted)throw signal.reason;
- const child=spawnProcess(python,['-B',path.join(__dirname,'capture_cli.py'),'--contract',contractPath,'--endpoint',endpoint,'--pid',String(pid),'--operation',operation,'--timeout',String(timeoutSeconds)],{stdio:['pipe','pipe','ignore'],env:{...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'}});
+ const child=spawnProcess(python,['-B',path.join(__dirname,'capture_cli.py'),'--contract',contractPath,'--endpoint',endpoint,'--pid',String(pid),'--operation',operation,'--timeout',String(timeoutSeconds),...(privateMedia?['--private-media']:[])],{stdio:['pipe','pipe','ignore'],env:{...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'}});
  const decoder=new StringDecoder('utf8');let buffer='',bytes=0,result=null,failure=null,action=null,actionDone=false,responseReady=false,killTimer,actionFailure=null;
  const stop=reason=>{if(!failure)failure=reason;child.kill('SIGTERM');if(!killTimer)killTimer=setTimeout(()=>child.kill('SIGKILL'),2000);};
  const abort=()=>stop(signal.reason||error('STOP_REQUESTED'));

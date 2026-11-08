@@ -225,3 +225,20 @@ class DualDetailCaptureTests(unittest.TestCase):
             session.scripts[-1].emit(response)
         result=capture.read('image_detail',CONTRACT,{'note_id':N},trigger,related_contracts={'video_detail':video},valid_note_url=valid_note_url)
         self.assertEqual(result['response_operation'],'video_detail');self.assertEqual(result['response']['data'][0]['share_info']['link'],link)
+
+class PrivateDiscoveryMediaTests(unittest.TestCase):
+    def test_identity_field_host_and_redacted_value_binding(self):
+        from response_evidence import private_media
+        from runtime_redaction import clean
+        url='https://sns-img.xhscdn.com/a%2Fb?sign=private%2Bsignature&t=1'
+        note={'id':N,'images_list':[{'info_list':[{'url':clean(url)}]}]}
+        result={'operation':'user_posted','response':{'data':{'notes':[note]}}}
+        record={'note_id':N,'path':['images_list',0,'info_list',0,'url'],'url':url}
+        self.assertEqual(private_media(result,[record]),[record])
+        self.assertEqual(note['images_list'][0]['info_list'][0]['url'],clean(url))
+        for change in ({'note_id':'b'*24},{'url':'https://evil.test/a?sign=private'}, {'path':['video','stream','url']},{'url':'https://sns-img.xhscdn.com/different?sign=private'}):
+            self.assertEqual(private_media(result,[{**record,**change}]),[])
+        detail={'operation':'image_detail','response_operation':'video_detail','note_id':N,'response':{'data':[note,{'id':'b'*24}]}}
+        self.assertEqual(private_media(detail,[record]),[record])
+        detail['note_id']='b'*24
+        self.assertEqual(private_media(detail,[record]),[])

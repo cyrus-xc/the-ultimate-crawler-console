@@ -5,7 +5,7 @@ const redact=(x,key='')=>Array.isArray(x)?x.map(v=>redact(v)):x&&typeof x==='obj
 function note(raw){
  const r=raw.note||raw.note_card||raw,m=r.interact_info||r.interactInfo||r,u=r.user||r.user_info||r.author||{};
  const sticky=first(r,'is_top','is_pinned','sticky')??first(m,'sticky','is_top'),tags=r.hash_tag||r.tag_info||r.tag_list||[];
- return {noteId:String(first(r,'id','note_id','noteId')||''),type:first(r,'type','note_type'),title:first(r,'title','display_title')||'',displayTitle:first(r,'title','display_title')||'',desc:first(r,'desc','description')||'',time:first(r,'time','create_time','timestamp'),lastUpdateTime:first(r,'last_update_time','update_time'),user:{userId:String(first(u,'userid','user_id','userId','id')||''),nickname:first(u,'nickname','nick_name','name')||'',avatar:first(u,'images','image','avatar')||''},ipLocation:first(r,'ip_location','ipLocation'),interactInfo:{likedCount:first(m,'liked_count','likes','likedCount'),collectedCount:first(m,'collected_count','collectedCount','collect_count'),commentCount:first(m,'comments_count','comment_count','commentCount'),shareCount:first(m,'shared_count','share_count','shareCount'),sticky},imageList:r.images_list||r.image_list||r.images||[],video:r.video_info_v2||r.video||{},tagList:(Array.isArray(tags)?tags:[]).filter(t=>t&&typeof t==='object').map(t=>({name:t.name??null})),poi:r.poi||r.poi_info||{},_native_original:redact(r)};
+ return {noteId:String(first(r,'id','note_id','noteId')||''),type:first(r,'type','note_type'),title:first(r,'title','display_title')||'',displayTitle:first(r,'title','display_title')||'',desc:first(r,'desc','description')||'',time:first(r,'time','create_time','timestamp'),lastUpdateTime:first(r,'last_update_time','update_time'),user:{userId:String(first(u,'userid','user_id','userId','id')||''),nickname:first(u,'nickname','nick_name','name')||'',avatar:first(u,'images','image','avatar')||''},ipLocation:first(r,'ip_location','ipLocation'),interactInfo:{likedCount:first(m,'liked_count','likes','likedCount'),collectedCount:first(m,'collected_count','collectedCount','collect_count'),commentCount:first(m,'comments_count','comment_count','commentCount'),shareCount:first(m,'shared_count','share_count','shareCount'),sticky},imageList:r.images_list||r.image_list||r.images||r.imageList||[],video:r.video_info_v2||r.video||{},tagList:(Array.isArray(tags)?tags:[]).filter(t=>t&&typeof t==='object').map(t=>({name:t.name??null})),poi:r.poi||r.poi_info||{},_native_original:redact(r)};
 }
 const count=v=>v===null||v===undefined||typeof v==='boolean'||String(v).trim()===''?null:Number.isSafeInteger(Number(v))&&Number(v)>=0?Number(v):null;
 function listObservation(record,provenance){
@@ -38,6 +38,21 @@ function envelope(result,operation,target){
   const records=items(p,'items','notes','note_list');data.raw={feeds:records.map(card)};
   if(operation==='profile.posts'){
    data.raw.profile_user_id=target.user_id;data.native_list_observations=Object.fromEntries(records.map(r=>[note(r).noteId,listObservation(r,evidence)]));data.unread_notes=[];
+  }
+ }
+ // Restore only normalized, detached image fields. Evidence remains redacted.
+ const projected=[data.raw.note,...(data.raw.feeds||[]).map(f=>f.noteCard)].filter(Boolean);
+ for(const n of projected){
+  n.imageList=structuredClone(n.imageList);
+  for(const media of result.private_media||[]){
+   if(media.note_id!==n.noteId)continue;
+   const [field,...path]=media.path;
+   let value;
+   if(field==='cover'){n.cover??=structuredClone(n._native_original.cover);value=n.cover;}
+   else if(['images_list','image_list','images','imageList'].includes(field))value=n.imageList;
+   else continue;
+   for(const key of path.slice(0,-1))value=value?.[key];
+   if(value&&Object.hasOwn(value,path.at(-1)))value[path.at(-1)]=media.url;
   }
  }
  return {success:true,provider:'native_phone',transport:'native_phone',observed_at,data};

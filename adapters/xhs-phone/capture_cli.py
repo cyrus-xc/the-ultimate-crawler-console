@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--endpoint',required=True)
     parser.add_argument('--pid',type=int,required=True)
     parser.add_argument('--operation',required=True)
+    parser.add_argument('--private-media',action='store_true')
     parser.add_argument('--timeout',type=float,default=45)
     args=parser.parse_args()
     session=None
@@ -63,7 +64,7 @@ def main():
                 raise RuntimeError('ACTION_NOT_CONFIRMED')
         stage='capture'
         related={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else ({name:value for name,value in contract['operations'].items() if name in {'image_detail','video_detail'} and name!=args.operation} if args.operation in {'image_detail','video_detail'} else None)
-        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url,related_contracts=related,notify_response=lambda:emit({'event':'response_ready'}))
+        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,private_media_enabled=args.private_media,valid_note_url=valid_note_url,related_contracts=related,notify_response=lambda:emit({'event':'response_ready'}))
         emit({'event':'result','result':result})
         return 0
     except Exception as error:
