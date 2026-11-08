@@ -99,6 +99,8 @@ class Store {
       this.event(null,'device.presence',{device_id:deviceId,present});
     });
   }
+  // Dispatch policy v1: prefer available phones; retain stable ID order within each kind.
+  preferredDevices(devices) {return [...devices].sort((a,b)=>(a.kind==='android'?0:1)-(b.kind==='android'?0:1)||a.id.localeCompare(b.id));}
   compatible(d,p) {
     return (!p.params.native_request?.representation||d.kind===(p.params.native_request.representation==='ui_identity'?'android':'web')) && p.routing.kinds.includes(d.kind) && (!p.routing.device_ids.length||p.routing.device_ids.includes(d.id)) &&
       d.capabilities.some(c=>c.platform===p.platform&&c.operation===p.operation && (p.params.native_request?.kind!=='location_page'||(c.native_kinds||[]).includes('location_page')) && (p.params.native_request?.representation==='ui_identity'?(c.representations||[]).includes('ui_identity'):(!c.representations||c.representations.includes(p.params.native_request?.representation))) &&
@@ -180,7 +182,7 @@ class Store {
           if(candidates.some(d=>d.quarantined)){this.state(r.id,'waiting_resources','DEVICE_QUARANTINED');continue;}
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE request_id=? AND state='queued'").run(canonical({code:'NO_AVAILABLE_DEVICE'}),r.id);this.settle(r.id);continue;
         }
-        const free=healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id)));
+        const free=this.preferredDevices(healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id))));
         const competing=rows.some(other=>other.id!==r.id && free.some(d=>this.compatible(d,parse(other.payload))) &&
           this.db.prepare("SELECT 1 FROM units WHERE request_id=? AND state='queued'").get(other.id));
         const target=parallelism(p.effort,free.length+running,competing);

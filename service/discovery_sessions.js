@@ -93,7 +93,7 @@ class DiscoverySessions {
   const query=normalize(input,this.now()),payload={platform:'xiaohongshu',operation:'profile.posts',params:{},routing:query.routing};
   const devices=this.store.devices().filter(d=>!d.owner&&this.store.compatible(d,payload)&&this.store.healthy(d,payload)&&this.store.compatible(d,{...payload,operation:'post.detail'})&&this.adapters.get(d.id));
   if(!devices.length)throw fail('NO_AVAILABLE_DISCOVERY_DEVICE');
-  const id=randomUUID(),device=devices[0],lease=this.store.externalLease(device.id,'discovery:'+scope+':'+id);
+  const id=randomUUID(),device=this.store.preferredDevices(devices)[0],lease=this.store.externalLease(device.id,'discovery:'+scope+':'+id);
   const s={id,scope,device_id:device.id,kind:device.kind,adapter:this.adapters.get(device.id),query,lease,deadline:this.now()+query.timeout_seconds*1000,controller:new AbortController(),cards:new Map(),dates:new Map(),probes:new Map(),navigation:{cards:[],index:0},state:'collecting'};this.sessions.set(id,s);
   s.timer=setInterval(()=>{try{this.guard(s);this.store.heartbeat(s.lease);}catch(e){this.cancel(id,scope,e).catch(()=>{});}},this.heartbeatMs);s.timer.unref();
   const disconnect=()=>this.cancel(id,scope,fail('CLIENT_DISCONNECTED')).catch(()=>{});signal?.addEventListener('abort',disconnect,{once:true});

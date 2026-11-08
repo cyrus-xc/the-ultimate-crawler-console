@@ -64,3 +64,14 @@ test('worker renews lease throughout a long fake operation',async t=>{
  const s=setup(t,{leaseMs:40});register(s,'phone');const r=s.submit(request('heartbeat'));
  const scheduler=new Scheduler(s,new Map([['phone',{version:'1',execute:async({input})=>{await sleep(75);await input(()=>{});}}]]),{pollMs:2,heartbeatMs:5});scheduler.start();await until(()=>s.request(r.id).state==='succeeded');await scheduler.close();assert.equal(s.devices()[0].quarantined,0);
 });
+
+test('dispatch prefers compatible idle phones independent of IDs and respects routing and availability',t=>{
+ for(const scenario of ['both','busy','web-only','bound-web','unsupported','faulted']){
+  const s=setup(t);register(s,'web:xhs:default');register(s,'z-phone',scenario==='unsupported'?'douyin':'xiaohongshu');
+  if(scenario==='busy')s.externalLease('z-phone','operator');
+  if(scenario==='faulted')s.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(JSON.stringify({xiaohongshu:'LOGIN_REQUIRED'}),'z-phone');
+  const routing=scenario==='web-only'?{kinds:['web']}:scenario==='bound-web'?{device_ids:['web:xhs:default']}:{kinds:['web','android']};
+  s.submit(request(scenario,'xiaohongshu',{routing}));
+  assert.equal(s.claim().device_id,scenario==='both'?'z-phone':'web:xhs:default',scenario);
+ }
+});

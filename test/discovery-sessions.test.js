@@ -106,3 +106,16 @@ test('Android card discovery omits the unused legacy profile-header request',asy
  const {sessions,calls}=setup(t,{kind:'android'});
  const r=await sessions.open(request);assert.equal(calls[0].params.native_request.kind,undefined);await sessions.complete(r.session_id,{selected_ids:[]});
 });
+
+test('discovery shares phone-first dispatch and honors explicit Web routing',async t=>{
+ const {store,sessions}=setup(t);
+ store.register({id:'z-phone',kind:'android',serial:'z-phone',capabilities:['profile.posts','post.detail'].map(operation=>({platform:'xiaohongshu',operation}))});
+ sessions.adapters.set('z-phone',sessions.adapters.get('web:xhs:default'));
+ const first=await sessions.open(request);assert.equal(first.device_id,'z-phone');
+ await sessions.complete(first.session_id,{selected_ids:[]});
+ const lease=store.externalLease('z-phone','operator');
+ const busy=await sessions.open(request);assert.equal(busy.device_id,'web:xhs:default');
+ await sessions.complete(busy.session_id,{selected_ids:[]});store.releaseExternal(lease);
+ const explicit=await sessions.open({...request,routing:{kinds:['web']}});assert.equal(explicit.device_id,'web:xhs:default');
+ await sessions.complete(explicit.session_id,{selected_ids:[]});
+});

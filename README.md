@@ -9,6 +9,8 @@ are enabled explicitly; a phone advertises only its configured verified capabili
 Pipeline business decisions remain in xhs-analysis. See [deployment and recovery](docs/DEPLOYMENT_ZH.md)
 and [phone verification](docs/PHONE_UI_ACCEPTANCE_ZH.md) for operational limits.
 
+Dispatch prefers an available compatible Android phone over Web, regardless of device ID or `routing.kinds` order. Explicit kind/device restrictions still apply; Web remains eligible when no compatible phone is free. This applies to both queued requests and two-round discovery sessions.
+
 `auto` can use the only compatible device. With two or more compatible devices it leaves one free, or two under competing demand when capacity permits. `half` rounds up. Each pagination chain stays sequential; a request can parallelize independent targets. An expired lease quarantines its device until the supervisor confirms that the old input process has stopped.
 
 ## Development
