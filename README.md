@@ -24,6 +24,8 @@ Tests use simulated adapters and temporary databases. HTTP tests only listen on 
 
 ## Local API
 
+See the [API index](contracts/API_INDEX.md) for request and two-round discovery contracts.
+
 Configure `CRAWLER_SERVICE_TOKEN_FILE` to a private file containing a random service credential of at least 32 characters. Do not commit or print this credential. Set `CRAWLER_RUNTIME_DIR` for the SQLite state directory and optionally `CRAWLER_PORT` (default 18323). Run `npm start`; the service binds to `127.0.0.1` only. Platform sessions and existing pipeline data are not copied or touched.
 
 All `/v1` endpoints require `Authorization: Bearer <credential>`. Direct browser origins are rejected; use the existing authenticated console backend as the proxy. `/health` is a minimal read-only probe. Requests use `crawler.request.v1` and `POST /v1/requests`; polling, results, durable event pagination, pause/resume/cancel/retry are available. Durable SSE is available through the events endpoint with Accept: text/event-stream. Explicit PNG display sessions, exclusive phone control and fenced Web desktop access are also exposed to the console proxy.

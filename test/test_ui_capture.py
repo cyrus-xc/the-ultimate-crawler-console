@@ -197,3 +197,31 @@ class CaptureTests(unittest.TestCase):
         value=clean({'data':{'xsec_token':'fixture-only','xsecToken':'fixture-only','id':N}})
         self.assertEqual(value,{'data':{'id':N}})
 if __name__=='__main__':unittest.main()
+
+class DualDetailCaptureTests(unittest.TestCase):
+    def test_one_click_accepts_registered_video_format_with_both_query_and_body_identity(self):
+        video={**CONTRACT,'path':'/api/sns/v4/note/videofeed'}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2);response=wire();response['request']['path']=video['path'];clicks=[]
+        response['body']['data']=response['body']['data'][0]['note_list']
+        result=capture.read('image_detail',CONTRACT,{'note_id':N},lambda:(clicks.append(1),session.scripts[-1].emit(response)),related_contracts={'video_detail':video})
+        self.assertEqual(len(clicks),1);self.assertEqual(result['response_operation'],'video_detail');self.assertEqual(result['operation'],'image_detail')
+        response['body']['data'][0]['id']='b'*24
+        with self.assertRaisesRegex(CaptureError,'IDENTITY_MISMATCH'):
+            capture.read('image_detail',CONTRACT,{'note_id':N},lambda:session.scripts[-1].emit(response),related_contracts={'video_detail':video})
+    def test_wrong_host_or_target_on_video_format_is_never_accepted(self):
+        video={**CONTRACT,'path':'/api/sns/v4/note/videofeed'}
+        for mutation in ['host','query']:
+            session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2);response=wire();response['request']['path']=video['path']
+            if mutation=='host':response['request']['host']='wrong.test'
+            else:response['request']['query'][0]['value']='b'*24
+            with self.assertRaisesRegex(CaptureError,'CAPTURE_TIMEOUT'):
+                capture.read('image_detail',CONTRACT,{'note_id':N},lambda:session.scripts[-1].emit(response),related_contracts={'video_detail':video},timeout=.005)
+    def test_direct_video_payload_retains_only_the_observed_target_share_link(self):
+        video={**CONTRACT,'path':'/api/sns/v4/note/videofeed'}
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2);response=wire();response['request']['path']=video['path'];response['body']['data']=response['body']['data'][0]['note_list']
+        link='https://www.xiaohongshu.com/explore/'+N+'?xsec_token=fixture-only'
+        def trigger():
+            session.scripts[-1].takeshare=lambda observation:link
+            session.scripts[-1].emit(response)
+        result=capture.read('image_detail',CONTRACT,{'note_id':N},trigger,related_contracts={'video_detail':video},valid_note_url=valid_note_url)
+        self.assertEqual(result['response_operation'],'video_detail');self.assertEqual(result['response']['data'][0]['share_info']['link'],link)

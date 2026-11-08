@@ -167,3 +167,10 @@ test('header timeout recovery requires complete zero-response diagnostics and sh
   f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(restarts,item.afterHeader?1:0);assert.notEqual(f.store.request(f.request.id).state,'succeeded');
  }
 });
+test('discovery video cards use one detail capture action and preserve the selected identity',async t=>{
+ const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
+ f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'video body',type:'video',user:{userid:id(2)}}]}]}};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{_raw:{noteCard:{type:'video'}}}}})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(f.captures[0].operation,'image_detail');assert.equal(f.captures[0].values.note_id,id(1));assert.deepEqual(f.events.slice(0,3),['card','back','profile-confirmed']);
+});

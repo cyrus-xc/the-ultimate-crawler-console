@@ -271,6 +271,19 @@
           "type": "java.lang.String"
         }
       ]
+    },
+    "video_detail": {
+      "http_method": "GET",
+      "allowed_hosts": [
+        "rec.xiaohongshu.com"
+      ],
+      "path": "/api/sns/v4/note/videofeed",
+      "parameters": [
+        {
+          "name": "note_id",
+          "type": "java.lang.String"
+        }
+      ]
     }
   }
 }

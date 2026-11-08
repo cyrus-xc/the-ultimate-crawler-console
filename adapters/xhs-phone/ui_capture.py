@@ -59,7 +59,7 @@ def verify_payload(operation, values, wire, contract):
     if operation in {'image_detail', 'video_detail'}:
         if not isinstance(payload, list):
             raise CaptureError('NATIVE_DETAIL_SHAPE_MISMATCH')
-        notes = [n for g in payload if isinstance(g,dict) for n in g.get('note_list',[]) if isinstance(n,dict)]
+        notes = [n for n in payload if isinstance(n,dict)] if operation=='video_detail' else [n for g in payload if isinstance(g,dict) for n in g.get('note_list',[]) if isinstance(n,dict)]
         if not any(n.get('id') == values.get('note_id') for n in notes):
             raise CaptureError('NATIVE_DETAIL_IDENTITY_MISMATCH')
     elif operation == 'comments':
@@ -132,7 +132,7 @@ class UiResponseCapture:
             if payload.get('event') == 'response_json':
                 responses.append(payload)
                 if notify_response and action_start[0] is not None and not notified[0] and payload.get('at',-1) >= action_start[0]:
-                    if request_matches({**payload,'request':semantic_request(payload.get('request',{}),operation)},matching_contract,values):
+                    if matched_contract(payload) is not None:
                         notified[0] = True
                         notify_response()
             if payload.get('event') == 'cronet_response_started':
@@ -153,12 +153,23 @@ class UiResponseCapture:
             for extra in (related_contracts or {}).values():
                 script.exports_sync.allowpath(extra['path'])
             if operation in {'image_detail','video_detail'}:
-                script.exports_sync.allowshare(values['note_id'],contract['path'])
+                share_paths=[contract['path']]+[c['path'] for name,c in (related_contracts or {}).items() if name in {'image_detail','video_detail'}]
+                script.exports_sync.allowshare(values['note_id'],share_paths if len(share_paths)>1 else share_paths[0])
             # Defaults inferred for direct API invocations are not UI controls.
             # Match only explicitly requested/validated fields; caller must first
             # confirm supported parameter translations, never silently drop them.
             matching_contract = copy.deepcopy(contract)
             matching_contract['parameters'] = [p for p in contract['parameters'] if p['name'] in values]
+            matching_contracts={operation:matching_contract}
+            if operation in {'image_detail','video_detail'}:
+                for name,c in (related_contracts or {}).items():
+                    if name in {'image_detail','video_detail'}:
+                        alternate=copy.deepcopy(c)
+                        alternate['parameters']=[p for p in c['parameters'] if p['name'] in values]
+                        matching_contracts[name]=alternate
+            def matched_contract(wire):
+                return next(((name,c) for name,c in matching_contracts.items() if request_matches({**wire,'request':semantic_request(wire.get('request',{}),name)},c,values)),None)
+
             # Phone clocks are not necessarily host-synchronised. Compare action
             # boundaries in host time, while retaining the original device time.
             try:
@@ -176,6 +187,18 @@ class UiResponseCapture:
             # the clock calibration (a device clock ahead must not admit them).
             responses.clear();cronet.clear()
             start = self.clock_ms();action_start[0] = start
+            def response_shape(value, depth=0):
+                if isinstance(value,dict):
+                    result={'kind':'object','keys':list(value)[:40]}
+                    if depth<3:result['children']={k:response_shape(v,depth+1) for k,v in value.items() if k in {'data','note_list','notes','items','note','note_card','id','note_id','noteId'}}
+                    return result
+                if isinstance(value,list):return {'kind':'array','size':len(value),'sample':[response_shape(v,depth+1) for v in value[:2]]} if depth<4 else {'kind':'array','size':len(value)}
+                return {'kind':type(value).__name__}
+            def target_id_paths(value, path='', depth=0):
+                if depth>8:return []
+                if isinstance(value,dict):return [p for k,v in list(value.items())[:100] for p in target_id_paths(v,path+'/'+str(k),depth+1)][:20]
+                if isinstance(value,list):return [p for i,v in enumerate(value[:100]) for p in target_id_paths(v,path+'/'+str(i),depth+1)][:20]
+                return [path] if values.get('note_id') and value==values['note_id'] else []
             def diagnostics():
                 broad_values = copy.deepcopy(values)
                 for key in ('cursor','start','page','page_context','search_id','search_session_id'):
@@ -183,10 +206,14 @@ class UiResponseCapture:
                     if isinstance(broad_values.get('query'),dict):broad_values['query'].pop(key,None)
                 broad_contract = copy.deepcopy(matching_contract)
                 broad_contract['parameters'] = [p for p in broad_contract['parameters'] if p['name'] in broad_values]
-                return {'events':event_counts,'observed_requests':[
-                    {'path':r.get('request',{}).get('path'),'host':r.get('request',{}).get('host'),'status':r.get('status'),
+                return {'expected_path':matching_contract['path'],'expected_method':matching_contract['http_method'],'events':event_counts,'observed_requests':[
+                    {'path':r.get('request',{}).get('path'),'host':r.get('request',{}).get('host'),'method':r.get('request',{}).get('method'),'status':r.get('status'),
+                     'response_shape':response_shape(r['body']) if isinstance(r.get('body'),dict) else None,
+                     'target_id_paths':target_id_paths(r.get('body')),
                      'query_names':[q.get('name') for q in r.get('request',{}).get('query',[])],
-                     'requested_page_match':request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},matching_contract,values),
+                     'note_id_query_matches':bool(values.get('note_id')) and any(q.get('name')=='note_id' and q.get('value')==values['note_id'] for q in r.get('request',{}).get('query',[])),
+                     'response_note_identity_matches':bool(values.get('note_id')) and any(n.get('id')==values['note_id'] for g in ((r.get('body') or {}).get('data') or []) if isinstance(g,dict) for n in ([g] if g.get('id') else g.get('note_list',[])) if isinstance(n,dict)),
+                     'requested_page_match':matched_contract(r) is not None,
                      'target_match_without_pagination':request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},broad_contract,broad_values)}
                     for r in (responses+cronet)[:20]]}
             guard()
@@ -199,13 +226,14 @@ class UiResponseCapture:
                 if errors:
                     raise CaptureError(errors[0])
                 now = self.clock_ms()
-                matching = [r for r in responses if isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and request_matches({**r,'request':semantic_request(r.get('request',{}),operation)},matching_contract,values)]
+                matching = [r for r in responses if isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and matched_contract(r) is not None]
                 if matching:
                     wire = matching[0]
-                    body = verify_payload(operation,values,wire,contract)
-                    lower = [e for e in cronet if request_target_matches(semantic_request(e.get('request',{}),operation),matching_contract,values)]
+                    response_operation,response_contract=matched_contract(wire)
+                    body = verify_payload(response_operation,values,wire,response_contract)
+                    lower = [e for e in cronet if request_target_matches(semantic_request(e.get('request',{}),response_operation),response_contract,values)]
                     evidence = classify_transport(wire,start,now,lower)
-                    result = {'operation':operation,'note_id':values.get('note_id'),'input':clean(values),
+                    result = {'operation':operation,'response_operation':response_operation,'note_id':values.get('note_id'),'input':clean(values),
                               'response':body,'request':wire['request'],'status':wire['status'],
                               'captured_at_ms':wire['at'],'device_captured_at_ms':wire.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',

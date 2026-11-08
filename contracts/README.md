@@ -1,5 +1,7 @@
 # Request contract version 1
 
+Other APIs: [API index](API_INDEX.md), including [two-round discovery](discovery-sessions-v1.md).
+
 `service/contract.js` currently owns runtime validation and defaults. The schema
 version is `crawler.request.v1`. Do not create a second independently maintained
 validator in a pipeline.

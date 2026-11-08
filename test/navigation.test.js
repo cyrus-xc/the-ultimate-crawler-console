@@ -100,3 +100,34 @@ test('read-only profile assertion never dismisses an overlay or navigates',async
  const nav=new XhsNavigation(adb,{guard:()=>{}});await nav.assertProfile();assert.equal(inputs,0);
  adb.ui=async()=>oplusWarning();await assert.rejects(nav.assertProfile(),{code:'PROFILE_RESTORE_UNCONFIRMED'});assert.equal(inputs,0);
 });
+test('discovery relocates backwards one screen and taps only the unique observed card title',async()=>{
+ const target={title:'older target',index:2},current={title:'current',index:10},commands=[];let view=0;
+ const adb={ui:async()=>[{...node('已选定笔记'),width:0,height:0},{...node(view?'older target':'current'),center:[300,500],width:600,height:1000}],shell:async(...args)=>{commands.push(args);view=1;},tap:async n=>commands.push(['tap',n.text]),wait:async()=>{}};
+ const nav=new XhsNavigation(adb,{guard:()=>{}}),state={card:target,cards:[target,current],index:10};await nav.openDiscoveryCard(state);
+ assert.equal(commands[0][0],'input');assert.equal(commands[0][1],'swipe');assert.ok(commands[0][3]<commands[0][5]);assert.deepEqual(commands.at(-1),['tap','older target']);assert.equal(state.index,2);
+});
+test('discovery refuses ambiguous card titles without deep-link or blind swipe',async()=>{
+ let inputs=0;const nav=new XhsNavigation({ui:async()=>[node('已选定笔记'),{...node('same'),center:[10,20]},{...node('same'),center:[30,40]}],shell:async()=>inputs++,tap:async()=>inputs++},{guard:()=>{}});
+ await assert.rejects(nav.openDiscoveryCard({card:{title:'same',index:1},cards:[],index:3}),{code:'DISCOVERY_CARD_LOCATOR_AMBIGUOUS'});assert.equal(inputs,0);
+});
+test('observed combined accessibility card description identifies full title without substring guessing',async()=>{
+ const {discoveryTitle}=require('../adapters/xhs-phone/navigation');const title='完整标题,内含逗号';
+ const card={'content-desc':'视频,'+title+',来自测试作者,18840赞，',center:[300,500],class:'android.widget.FrameLayout',clickable:'true'};
+ assert.equal(discoveryTitle(card),title);assert.notEqual(discoveryTitle({'content-desc':'不相关说明'+title}),title);
+ let tapped;const nav=new XhsNavigation({ui:async()=>[node('已选定笔记'),card],tap:async n=>{tapped=n;},wait:async()=>{}},{guard:()=>{}});
+ await nav.openDiscoveryCard({card:{title,index:2},cards:[{title,index:2}],index:20});assert.equal(tapped,card);
+});
+test('scrolled discovery profile restore is proven by profile tab and known grid without requiring offscreen header',async()=>{
+ const nav=new XhsNavigation({ui:async()=>[node('已选定笔记'),{'content-desc':'视频,known title,来自测试作者,10赞，'}]},{guard:()=>{}});
+ await nav.assertDiscoveryProfile({cards:[{title:'known title'}]});
+ await assert.rejects(nav.assertDiscoveryProfile({cards:[{title:'different'}]}),{code:'PROFILE_RESTORE_UNCONFIRMED'});
+});
+test('profile pagination obeys capture-local cancellation before another gesture',async()=>{
+ let inputs=0;const nav=new XhsNavigation({ui:async()=>[],shell:async()=>inputs++},{guard:()=>{}});const guard=()=>{throw Object.assign(Error('capture stopped'),{code:'CAPTURE_TIMEOUT'});};
+ await assert.rejects(nav.firstPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});await assert.rejects(nav.nextPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});assert.equal(inputs,0);
+});
+test('discovery waits for observed grid readiness without an input while cards render',async()=>{
+ let reads=0,taps=0,swipes=0;const card={'content-desc':'视频,title,来自测试作者,1赞，',center:[200,500]};
+ const nav=new XhsNavigation({ui:async()=>++reads<3?[node('已选定笔记')]:[node('已选定笔记'),card],wait:async()=>{},tap:async()=>taps++,shell:async()=>swipes++},{guard:()=>{}});
+ const state={card:{title:'title',index:2},cards:[{title:'title',index:2}],index:20};await nav.openDiscoveryCard(state);assert.equal(reads,3);assert.equal(taps,1);assert.equal(swipes,0);assert.equal(state.trace.filter(x=>x.action==='wait_for_profile_grid').length,2);
+});

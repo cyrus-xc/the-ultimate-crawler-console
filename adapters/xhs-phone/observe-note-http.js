@@ -10,9 +10,9 @@ const paths = new Set([
 let shareTarget = null;
 const observedShares = new Map();
 function retainObservedShare(body, request, observationId) {
-  if (!shareTarget || request.path !== shareTarget.path || !Array.isArray(body.data)) return;
-  const notes = body.data.flatMap(group => Array.isArray(group?.note_list) ? group.note_list : [])
-    .filter(note => note?.id === shareTarget.noteId);
+  if (!shareTarget || !shareTarget.paths.includes(request.path) || !Array.isArray(body.data)) return;
+  const records=request.path==='/api/sns/v4/note/videofeed'?body.data:body.data.flatMap(group => Array.isArray(group?.note_list) ? group.note_list : []);
+  const notes = records.filter(note => note?.id === shareTarget.noteId);
   if (notes.length === 1 && typeof notes[0].share_info?.link === 'string' && observedShares.size < 20) {
     observedShares.set(observationId, notes[0].share_info.link);
   }
@@ -20,8 +20,9 @@ function retainObservedShare(body, request, observationId) {
 rpc.exports = {
   observerclock() { return Date.now(); },
   allowshare(noteId, path) {
-    if (!/^[a-f0-9]{24}$/.test(noteId) || !paths.has(path)) throw new Error('INVALID_SHARE_TARGET');
-    shareTarget = {noteId, path};
+    const selectedPaths=Array.isArray(path)?path:[path];
+    if (!/^[a-f0-9]{24}$/.test(noteId) || !selectedPaths.length || selectedPaths.some(p=>!paths.has(p))) throw new Error('INVALID_SHARE_TARGET');
+    shareTarget = {noteId, paths:selectedPaths};
     observedShares.clear();
   },
   takeshare(observationId) {

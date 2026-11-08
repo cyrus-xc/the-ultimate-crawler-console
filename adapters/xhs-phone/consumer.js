@@ -111,23 +111,23 @@ class PhoneConsumer {
     context.guard();let trigger,values;
     if(operation==='search.posts'){
      values={query:{keyword:claim.target.keyword,sort,filters:'[]',...(page===0?{page:1}:lastCursor?.page?{page:Number(lastCursor.page)+1}:{})}};
-     if(page===0){await nav.search(claim.target.keyword,{submit:false});trigger=async()=>{await nav.submitSearch();await nav.sort(sort);};}else trigger=control=>nav.nextPage(control?.responseReady);
+     if(page===0){await nav.search(claim.target.keyword,{submit:false});trigger=async()=>{await nav.submitSearch();await nav.sort(sort);};}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
     }else if(operation==='profile.get'){values={query:{user_id:claim.target.user_id}};trigger=()=>nav.openProfile(claim.target.user_id);}
     else if(operation==='profile.posts'){
      values={user_id:claim.target.user_id,...(page===0?{cursor:''}:lastCursor?.cursor?{cursor:lastCursor.cursor}:{})};
-     trigger=page===0?async control=>{if(!profileOpened){await nav.openProfile(claim.target.user_id);await adb.wait(500);}await nav.firstPage(control?.responseReady);}:async control=>{
+     trigger=page===0?async control=>{if(!profileOpened){await nav.openProfile(claim.target.user_id);await adb.wait(500);}await nav.firstPage(control?.responseReady,control);}:async control=>{
       // Detail deep links may return to Home, not the previous profile. Restore
       // under this page's observer so replay/prefetch responses remain visible.
       const restoring=profileNeedsRestore;
       if(restoring){await nav.restoreProfile(claim.target.user_id);profileNeedsRestore=false;}
-      await nav.nextPage(control?.responseReady,{maxSwipes:restoring?Math.min(12*(pages+1),120):12});
+      await nav.nextPage(control?.responseReady,{maxSwipes:restoring?Math.min(12*(pages+1),120):12,guard:control?.guard});
      };
     }
-    else if(operation==='post.detail'){values={note_id:claim.target.post_id};trigger=()=>nav.openNote(claim.target.post_id);}
+    else if(operation==='post.detail'){values={note_id:claim.target.post_id};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
     else if(operation==='post.comments'){
      values={note_id:claim.target.post_id,...(page===0?{start:''}:lastCursor?.cursor?{start:lastCursor.cursor}:{})};
-     if(page===0){trigger=async()=>{await nav.openNote(claim.target.post_id);await adb.wait(500);await nav.comments();};}else trigger=control=>nav.nextPage(control?.responseReady);
-    }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady);}
+     if(page===0){trigger=async()=>{await nav.openNote(claim.target.post_id);await adb.wait(500);await nav.comments();};}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
+    }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady,{guard:control?.guard});}
     let result;
     try{result=page===0&&operation==='profile.posts'&&initialProfilePage?initialProfilePage:await capture(NATIVE[operation],values,trigger);}
     catch(error){
@@ -140,6 +140,7 @@ class PhoneConsumer {
      result=await capture(NATIVE[operation],values,trigger);
     }
     if(operation==='search.posts'&&page===0)nav.confirmSortResponse(result.effective_sort);
+    if(operation==='post.detail'&&context.discovery){await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
     const {value,captures}=combinedEnvelope(result,operation,claim.target);value.phase='result';lastCursor=observedCursor(captures.at(-1));
     const records=value.data.raw.feeds||value.data.raw.comments?.list||[];
     // Disconnected observations are preserved above, but cannot prove that

@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--timeout',type=float,default=45)
     args=parser.parse_args()
     session=None
+    stage='configuration'
     try:
         import frida
         contract=json.loads(Path(args.contract).read_text())
@@ -33,6 +34,7 @@ def main():
         if not isinstance(values,dict):raise RuntimeError('INVALID_CAPTURE_INPUT')
         operation=contract['operations'].get(args.operation)
         if not operation:raise RuntimeError('UNSUPPORTED_OPERATION')
+        stage='attachment'
         remote=frida.get_device_manager().add_remote_device(args.endpoint)
         process=next((p for p in remote.enumerate_processes() if p.pid==args.pid),None)
         if process is None:
@@ -59,13 +61,15 @@ def main():
                 raise CaptureError(action['code'])
             if action.get('action')!='done':
                 raise RuntimeError('ACTION_NOT_CONFIRMED')
-        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url,related_contracts={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else None,notify_response=lambda:emit({'event':'response_ready'}))
+        stage='capture'
+        related={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else ({name:value for name,value in contract['operations'].items() if name in {'image_detail','video_detail'} and name!=args.operation} if args.operation in {'image_detail','video_detail'} else None)
+        result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,valid_note_url=valid_note_url,related_contracts=related,notify_response=lambda:emit({'event':'response_ready'}))
         emit({'event':'result','result':result})
         return 0
     except Exception as error:
         code=str(error)
         if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}',code):code='CAPTURE_FAILED'
-        emit({'event':'error','code':code,**({'diagnostics':error.diagnostics} if getattr(error,'diagnostics',None) else {})})
+        emit({'event':'error','code':code,'diagnostics':{'exception_type':type(error).__name__,'stage':stage,**(getattr(error,'diagnostics',None) or {})}})
         return 1
     finally:
         if session is not None:

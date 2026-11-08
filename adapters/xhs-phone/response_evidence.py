@@ -21,8 +21,9 @@ def bridge_result(result, link, valid_note_url):
     if token.strip('[]<>').upper() == 'REDACTED':
         return output
     payload = output.get('response', {}).get('data')
+    actual_operation=output.get('response_operation') or output.get('operation')
     notes = [note for group in payload if isinstance(group, dict)
-             for note in group.get('note_list', []) if isinstance(note, dict) and note.get('id') == nid] if isinstance(payload, list) else []
+             for note in ([group] if actual_operation=='video_detail' else group.get('note_list', [])) if isinstance(note, dict) and note.get('id') == nid] if isinstance(payload, list) else []
     if len(notes) == 1:
         notes[0]['share_info'] = {**(notes[0].get('share_info') or {}), 'link': link}
     return output

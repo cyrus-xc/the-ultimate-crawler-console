@@ -60,3 +60,10 @@ test('navigation exhaustion returns observer diagnostics before capture cleanup'
   assert.equal(e.code,'PHONE_PAGE_RESPONSE_UNOBSERVED');assert.equal(e.diagnostics.events.response_json,1);return true;
  });assert.equal(reported,true);
 });
+test('observer failure propagates a local guard to stop further navigation while its action drains',async()=>{
+ const {options,child}=fixture();let attemptedAfterFailure=false;
+ await assert.rejects(captureResponse({...options,trigger:async control=>{
+  child.stdout.write(JSON.stringify({event:'error',code:'CAPTURE_TIMEOUT'})+'\n');await new Promise(resolve=>setImmediate(resolve));
+  control.guard();attemptedAfterFailure=true;
+ }}),{code:'CAPTURE_TIMEOUT'});assert.equal(attemptedAfterFailure,false);
+});

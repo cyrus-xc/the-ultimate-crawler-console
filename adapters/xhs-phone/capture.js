@@ -22,7 +22,7 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
    if(failure)continue;
    if(message.event==='perform_action'){
     if(action){stop(error('CAPTURE_PROTOCOL_INVALID'));continue;}
-    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger({responseReady:()=>responseReady});await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(reason=>{
+    action=(async()=>{await guard();if(signal?.aborted)throw signal.reason;await trigger({responseReady:()=>responseReady,guard:()=>{if(failure)throw failure;if(signal?.aborted)throw signal.reason;}});await guard();if(signal?.aborted)throw signal.reason;actionDone=true;child.stdin.write(JSON.stringify({action:'done'})+'\n');})().catch(reason=>{
      if(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED'].includes(reason?.code)){
       // Let the observer return bounded packet diagnostics before it detaches.
       actionFailure=reason;child.stdin.write(JSON.stringify({action:'failed',code:reason.code})+'\n');
@@ -38,7 +38,7 @@ async function captureResponse({python,contractPath,endpoint,pid,operation,value
   }
  });
  try{
-  const code=await new Promise(resolve=>{child.once('error',()=>{failure=error('CAPTURE_LAUNCH_FAILED');});child.once('close',resolve);child.stdin.write(encoded+'\n');});
+  const code=await new Promise(resolve=>{child.once('error',()=>{failure=error('CAPTURE_LAUNCH_FAILED');});child.once('close',code=>{if(!failure&&(code!==0||!result))failure=error('CAPTURE_FAILED');resolve(code);});child.stdin.write(encoded+'\n');});
   // Do not release a device lease while a triggered ADB action is still draining.
   if(action)await action;
   if(failure)throw failure;

@@ -4,6 +4,9 @@ const {writeAndroidClipboard}=require('../../android/android_clipboard');
 const {UiLocator,SORT_ANCHORS}=require('../../android/ui_locator');
 const SORT_LABELS={general:'综合',time_descending:'最新',popularity_descending:'最多点赞',comment_descending:'最多评论',collect_descending:'最多收藏'};
 const label=n=>String(n?.text||n?.['content-desc']||'').trim();
+// Observed profile cards expose one clickable accessibility description, not
+// necessarily an independent title node. Parse its bounded native structure.
+function discoveryTitle(node){const value=label(node);const match=value.match(/^(?:视频|图文|笔记|图片),([\s\S]+),来自[\s\S]+,[\d.,万亿]+赞[，,]?$/);return match?match[1].trim():value;}
 const failed=code=>{throw new DevicePause(code,code);};
 function choose(nodes,predicate,code){const found=nodes.filter(predicate);if(found.length!==1)failed(code);return found[0];}
 function isProfileUi(nodes){
@@ -104,6 +107,36 @@ class XhsNavigation {
     if(!this.pendingSort || this.pendingSort.value!==canonical)failed('SORT_RESPONSE_MISMATCH');
     const result=this.locator.confirm(this.pendingSort.candidate,'response_sort_verified');this.pendingSort=null;return result;
   }
+  async openDiscoveryCard(state,control={}){
+    const target=state.card;
+    if(!target||!target.title)failed('DISCOVERY_CARD_LOCATOR_UNAVAILABLE');
+    // Reposition the current grid only. Never replace an unlocated card with a
+    // deep link; the passive capture subsequently verifies the selected note ID.
+    const direction=target.index<state.index?-1:1;let waitingForGrid=0;state.trace=[];
+    for(let attempt=0;attempt<60;attempt++){
+      control.guard?.();const nodes=await this.ui();control.guard?.();
+      const profileTab=nodes.some(n=>/^(?:已选定)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(label(n)));
+      if(!profileTab){state.trace.push({action:'wait_for_profile_grid',profile_tab:false});if(waitingForGrid++<12){await this.adb.wait(250);attempt--;continue;}failed('DISCOVERY_GRID_POSITION_UNOBSERVED');}
+      const matches=nodes.filter(n=>n.center&&discoveryTitle(n)===target.title);
+      const unique=[...new Map(matches.map(n=>[n.center.join(','),n])).values()];
+      if(unique.length>1)failed('DISCOVERY_CARD_LOCATOR_AMBIGUOUS');
+      if(unique.length===1){state.trace.push({action:'tap',index:target.index,profile_tab:true,title_match:'exact_observed_title'});await this.action(()=>{control.guard?.();return this.adb.tap(unique[0]);});state.index=target.index;return;}
+      // Use visible known titles to choose the nearest direction, rather than
+      // replaying the profile from its first page for every date probe.
+      const visible=state.cards.filter(c=>c.title&&nodes.some(n=>discoveryTitle(n)===c.title));
+      if(!visible.length){state.trace.push({action:'wait_for_profile_grid',profile_tab:true,known_indices:[]});if(waitingForGrid++<12){await this.adb.wait(250);attempt--;continue;}failed('DISCOVERY_GRID_POSITION_UNOBSERVED');}waitingForGrid=0;
+      const low=Math.min(...visible.map(c=>c.index)),high=Math.max(...visible.map(c=>c.index));
+      if(target.index>=low&&target.index<=high)failed('DISCOVERY_CARD_LOCATOR_UNAVAILABLE');
+      const move=target.index<low?-1:target.index>high?1:direction;state.trace.push({action:'swipe',direction:move,known_indices:visible.map(c=>c.index)});await this.swipe(move,control);
+    }
+    failed('DISCOVERY_CARD_NOT_FOUND');
+  }
+  async assertDiscoveryProfile(state){
+    const nodes=await this.ui(),labels=nodes.map(label);
+    const notesTab=labels.some(t=>/^(?:已选定)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(t));
+    const knownCard=nodes.some(n=>state.cards.some(c=>c.title&&discoveryTitle(n)===c.title));
+    if(!notesTab||!knownCard)failed('PROFILE_RESTORE_UNCONFIRMED');state.trace?.push({action:'profile_restored',profile_tab:true,known_card:true});
+  }
   async openNote(noteId){
     if(!/^[a-f0-9]{24}$/.test(noteId))failed('INVALID_NOTE_ID');
     await this.shell('am','start','-a','android.intent.action.VIEW','-d',`xhsdiscover://item/${noteId}`,'-p','com.xingin.xhs');
@@ -119,6 +152,7 @@ class XhsNavigation {
     await this.guard();
     if(!isProfileUi(await this.adb.ui()))failed('PROFILE_RESTORE_UNCONFIRMED');
   }
+
   async restoreProfile(userId){
     await this.openProfile(userId);
     for(let attempt=0;attempt<3;attempt++){
@@ -140,25 +174,25 @@ class XhsNavigation {
     else await this.swipe();
   }
   async back(){await this.shell('input','keyevent','4');await this.adb.wait(350);}
-  async refresh(){
+  async refresh(control={}){
     const nodes=await this.ui(),width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0)),height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
     if(width<200||height<400)failed('VIEWPORT_UNAVAILABLE');
-    await this.shell('input','swipe',Math.round(width*.5),Math.round(height*.35),Math.round(width*.5),Math.round(height*.8),'450');await this.adb.wait(500);
+    await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(width*.5),Math.round(height*.35),Math.round(width*.5),Math.round(height*.8),'450');});await this.adb.wait(500);
   }
-  async firstPage(responseReady=()=>false){
-    for(let attempt=0;attempt<8;attempt++){if(responseReady())return;await this.refresh();}
+  async firstPage(responseReady=()=>false,control={}){
+    for(let attempt=0;attempt<8;attempt++){control.guard?.();if(responseReady())return;await this.refresh(control);}
     if(!responseReady())failed('PHONE_FIRST_PAGE_UNOBSERVED');
   }
-  async nextPage(responseReady=()=>false,{maxSwipes=12}={}){
+  async nextPage(responseReady=()=>false,{maxSwipes=12,guard=()=>{}}={}){
     if(!Number.isInteger(maxSwipes)||maxSwipes<1||maxSwipes>120)failed('INVALID_PAGE_SWIPE_LIMIT');
-    for(let attempt=0;attempt<maxSwipes;attempt++){if(responseReady())return;await this.swipe();}
+    for(let attempt=0;attempt<maxSwipes;attempt++){guard();if(responseReady())return;await this.swipe(1,{guard});}
     if(!responseReady())failed('PHONE_PAGE_RESPONSE_UNOBSERVED');
   }
-  async swipe(){
+  async swipe(direction=1,control={}){
     const nodes=await this.ui();const width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0));const height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
     if(width<200||height<400)failed('VIEWPORT_UNAVAILABLE');
-    await this.shell('input','swipe',Math.round(width*.5),Math.round(height*.78),Math.round(width*.5),Math.round(height*.3),'450');
+    await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(width*.5),Math.round(height*(direction<0?.3:.78)),Math.round(width*.5),Math.round(height*(direction<0?.78:.3)),'450');});
     await this.adb.wait(500);
   }
 }
-module.exports={XhsNavigation,SORT_LABELS,label,choose};
+module.exports={XhsNavigation,SORT_LABELS,label,choose,discoveryTitle};

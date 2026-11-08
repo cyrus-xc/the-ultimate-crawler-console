@@ -22,6 +22,7 @@ function cursor(url) {
 }
 function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
+  const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway});
   const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
   const drainPhone=async lease=>{const action=phoneActions.get(lease.token);if(action){action.controller.abort(problem('STOP_REQUESTED',409));await action.promise.catch(()=>{});}};
   const drainDesktop=async lease=>{const active=desktopActions.get(lease.token);if(active){await active.adapter.close();await active.promise.catch(()=>{});}};
@@ -45,6 +46,9 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(url.pathname==='/v1/capabilities'&&req.method==='GET')return send(200,{operations:OPERATIONS,devices:store.devices().map(d=>({device_id:d.id,capabilities:d.capabilities}))});
       if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>({...d,...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT json_extract(payload,'$.code') code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? ORDER BY seq DESC LIMIT 1").get(d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null}))});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
+      if(url.pathname==='/v1/discovery-sessions'&&req.method==='POST'){const input=await body(req),controller=new AbortController();const disconnect=()=>{if(!res.writableEnded)controller.abort();};res.once('close',disconnect);try{return send(201,await discovery.open(input,scope,controller.signal));}finally{res.removeListener('close',disconnect);}}
+      const discoveryRoute=url.pathname.match(/^\/v1\/discovery-sessions\/([0-9a-f-]+)\/(complete|cancel)$/);
+      if(discoveryRoute&&req.method==='POST'){const input=await body(req);return send(200,await (discoveryRoute[2]==='complete'?discovery.complete(discoveryRoute[1],input,scope):discovery.cancel(discoveryRoute[1],scope)));}
       if(url.pathname==='/v1/requests'&&req.method==='POST')return send(202,store.submit(await body(req),scope));
       if(url.pathname==='/v1/desktop/close'&&req.method==='POST'){const input=await body(req);if(!['web:xhs:default','web:douyin:default'].includes(input.lease?.device_id))throw problem('WEB_DEVICE_REQUIRED',409);await desktopAction(input.lease,'close');return send(200,{closed:true});}
       if(url.pathname==='/v1/desktop/qr'&&req.method==='POST'){
@@ -182,11 +186,11 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       throw problem('METHOD_NOT_ALLOWED',405);
     } catch(error) {
       // Never echo exception text, request bodies, access URLs, or credentials.
-      if(!res.destroyed&&!res.headersSent)send(error.status||500,{error:{code:error.status?error.code:'INTERNAL_ERROR',scope:'service'}});
+      if(!res.destroyed&&!res.headersSent)send(error.status||500,{error:{code:error.status?error.code:'INTERNAL_ERROR',scope:'service',...(error.discovery_diagnostics?{diagnostics:error.discovery_diagnostics}:{})}});
     }
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.drainDesktop=async()=>{await Promise.all([...desktopActions.values()].map(async active=>{await active.adapter.close();await active.promise.catch(()=>{});}));};
+  server.drainDesktop=async()=>{await discovery.close();await Promise.all([...desktopActions.values()].map(async active=>{await active.adapter.close();await active.promise.catch(()=>{});}));};
   return server;
 }
 module.exports={createServer};

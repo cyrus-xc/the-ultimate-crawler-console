@@ -23,8 +23,8 @@ function items(payload,...keys){
 }
 function envelope(result,operation,target){
  const p=result.response?.data||{},observed_at=new Date(result.captured_at_ms).toISOString();
- const evidence={operation:result.operation,observed_at,trigger:'ui',transport_evidence:result.transport_evidence,request:redact(result.request)};
- const data={raw:{},native_evidence:[evidence],observed_at,end_observed:p.has_more===false,stop_reason:p.has_more===false?'native_end_observed':'native_page_limit',native_operation:result.operation,response:result.response,request:result.request};
+ const evidence={operation:result.response_operation||result.operation,observed_at,trigger:'ui',transport_evidence:result.transport_evidence,request:redact(result.request)};
+ const data={raw:{},native_evidence:[evidence],observed_at,end_observed:p.has_more===false,stop_reason:p.has_more===false?'native_end_observed':'native_page_limit',native_operation:result.response_operation||result.operation,response:result.response,request:result.request};
  if(operation==='post.detail'){
   const found=items(p,'note_list','notes','items').filter(r=>note(r).noteId===target.post_id);if(found.length!==1)throw Object.assign(Error('NATIVE_NOTE_IDENTITY_MISMATCH'),{code:'NATIVE_NOTE_IDENTITY_MISMATCH',scope:'item'});
   const raw=found[0];if(!('desc'in raw||'description'in raw))throw Object.assign(Error('NATIVE_DETAIL_BODY_UNOBSERVED'),{code:'NATIVE_DETAIL_BODY_UNOBSERVED',scope:'item'});
