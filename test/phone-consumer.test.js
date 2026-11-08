@@ -187,3 +187,18 @@ test('discovery media restores only detached normalized image fields',()=>{
  assert.equal(result.response.data.notes[0].cover.url,safe);
  assert.equal(out.private_media,undefined);
 });
+
+test('discovery comments relocate the selected card and restore profile before next selection',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),comments:async()=>f.events.push('comments'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
+ f.replies[0]={response:{data:{comments:[{id:'c1',content:'observed'}],has_more:false}}};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.deepEqual(f.events,['card','comments','back','profile-confirmed','drain','close','drain']);
+});
+
+test('discovery comment drawer permits one additional verified Back',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});let checks=0;
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>{},back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>{if(++checks===1)throw Object.assign(Error(),{code:'PROFILE_RESTORE_UNCONFIRMED'});}});
+ f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(checks,2);assert.equal(f.events.filter(e=>e==='back').length,2);
+});

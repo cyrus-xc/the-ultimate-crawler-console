@@ -126,7 +126,7 @@ class PhoneConsumer {
     else if(operation==='post.detail'){values={note_id:claim.target.post_id};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
     else if(operation==='post.comments'){
      values={note_id:claim.target.post_id,...(page===0?{start:''}:lastCursor?.cursor?{start:lastCursor.cursor}:{})};
-     if(page===0){trigger=async()=>{await nav.openNote(claim.target.post_id);await adb.wait(500);await nav.comments();};}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
+     if(page===0){trigger=async control=>{if(context.discovery)await nav.openDiscoveryCard(context.discovery,control);else await nav.openNote(claim.target.post_id);await adb.wait(500);await nav.comments();};}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
     }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady,{guard:control?.guard});}
     let result;
     try{result=page===0&&operation==='profile.posts'&&initialProfilePage?initialProfilePage:await capture(NATIVE[operation],values,trigger);}
@@ -195,6 +195,10 @@ class PhoneConsumer {
     // Keep the entire page. Only stop on an affirmatively dated non-pinned row.
     if(beforeSince)break;
     if(noGrowth>=2)throw failure('PHONE_PAGINATION_STALLED','device');
+   }
+   if(operation==='post.comments'&&context.discovery){
+    await nav.back();
+    try{await nav.assertDiscoveryProfile(context.discovery);}catch(error){if(error.code!=='PROFILE_RESTORE_UNCONFIRMED')throw error;await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
    }
   }catch(error){failureCaught=error;if(['ACCOUNT_REQUIRED','LOGIN_OR_VERIFICATION_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','APP_VERSION_MISMATCH'].includes(error.code))error.scope='platform';throw error;}
   finally{

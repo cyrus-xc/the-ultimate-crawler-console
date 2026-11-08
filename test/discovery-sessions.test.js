@@ -28,10 +28,10 @@ test('first round keeps lease, no detail reads; empty second round releases; rep
  assert.equal(result.cards.length,30);assert.equal(result.cards[0].body,null);assert.equal(result.coverage.complete,true);assert.ok(store.devices()[0].owner);assert.equal(calls.filter(c=>c.operation==='post.detail').length,0);
  const done=await sessions.complete(result.session_id,{selected_ids:[]});assert.equal(done.released,true);assert.equal(store.devices()[0].owner,null);assert.deepEqual(await sessions.complete(result.session_id,{selected_ids:[]}),done);
 });
-test('only returned IDs, at most three; details share same fenced lease and request share capture',async t=>{
+test('only returned IDs, at most ten; details share same fenced lease and request share capture',async t=>{
  const {sessions,store,calls}=setup(t);const r=await sessions.open(request);
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(30)]}),{code:'INVALID_DISCOVERY_SELECTION'});
- await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(1),id(2),id(3),id(4)]}),{code:'INVALID_DISCOVERY_SELECTION'});
+ await assert.rejects(sessions.complete(r.session_id,{selected_ids:Array.from({length:11},(_,i)=>id(i+1))}),{code:'INVALID_DISCOVERY_SELECTION'});
  const done=await sessions.complete(r.session_id,{selected_ids:[id(1)]});assert.equal(done.details[0].data.raw.note.desc,'real body');assert.equal(store.devices()[0].owner,null);assert.equal(calls.find(c=>c.operation==='post.detail').params.native_request.capture_share,true);
 });
 test('date boundary probes use cached ordered indices and return only inclusive range',async t=>{
@@ -118,4 +118,35 @@ test('discovery shares phone-first dispatch and honors explicit Web routing',asy
  await sessions.complete(busy.session_id,{selected_ids:[]});store.releaseExternal(lease);
  const explicit=await sessions.open({...request,routing:{kinds:['web']}});assert.equal(explicit.device_id,'web:xhs:default');
  await sessions.complete(explicit.session_id,{selected_ids:[]});
+});
+
+test('count exclusion replenishes quota without detail reads and exposes observed likes',async t=>{
+ const {sessions,calls}=setup(t,{total:60});const adapter=sessions.adapters.get('web:xhs:default'),execute=adapter.execute;
+ adapter.execute=ctx=>execute({...ctx,commit:page=>{for(const item of page.items||[])for(const row of item.value.data.raw.feeds||[]){row.noteCard.interactInfo.sticky=parseInt(row.id,16)<=3;row.noteCard.interactInfo.likedCount='12';}ctx.commit(page);}});
+ const r=await sessions.open({...request,count:40,exclude_pinned:true});assert.deepEqual(calls.map(c=>c.params.max_items),[40,60]);assert.equal(r.cards.length,57);assert.ok(r.cards.every(c=>c.is_pinned===false&&c.like_count===12));assert.equal(r.coverage.excluded_pinned_count,3);assert.equal(r.coverage.target_met,true);await sessions.complete(r.session_id,{selected_ids:[]});
+});
+test('genuine short profile differs from an incomplete count walk',async t=>{
+ const {sessions}=setup(t,{total:8});const short=await sessions.open({...request,exclude_pinned:true});assert.equal(short.coverage.end_observed,true);assert.equal(short.coverage.target_met,false);assert.equal(short.coverage.stop_reason,'profile_end');await sessions.complete(short.session_id,{selected_ids:[]});
+ const adapter=sessions.adapters.get('web:xhs:default'),execute=adapter.execute;adapter.execute=ctx=>execute({...ctx,commit:page=>{for(const i of page.items){i.value.data.end_observed=false;i.value.data.stop_reason='no_growth';}ctx.commit(page);}});
+ const incomplete=await sessions.open({...request,exclude_pinned:true});assert.equal(incomplete.coverage.end_observed,false);assert.equal(incomplete.coverage.target_met,false);assert.equal(incomplete.coverage.stop_reason,'no_growth');await sessions.complete(incomplete.session_id,{selected_ids:[]});
+});
+test('excluded count refuses unknown pin evidence and unknown likes stay null',async t=>{
+ const {sessions,store}=setup(t);const adapter=sessions.adapters.get('web:xhs:default'),execute=adapter.execute;adapter.execute=ctx=>execute({...ctx,commit:page=>{for(const i of page.items)for(const row of i.value.data.raw.feeds)delete row.noteCard.interactInfo.sticky;ctx.commit(page);}});
+ await assert.rejects(sessions.open({...request,exclude_pinned:true}),{code:'DISCOVERY_PIN_STATE_UNOBSERVED'});assert.equal(store.devices()[0].owner,null);
+ for(const value of [undefined,null,'',true,'bad','1万',[],{},'1e2'])assert.equal(card({id:id(1),noteCard:{interactInfo:{likedCount:value}}},0).like_count,null);
+ assert.equal(card({id:id(1),noteCard:{interactInfo:{likedCount:0}}},0).like_count,0);
+});
+test('ten selected notes forward bounded Web comment options and completion options are idempotent',async t=>{
+ const {sessions,calls}=setup(t),r=await sessions.open(request),selection={selected_ids:Array.from({length:10},(_,i)=>id(i+1)),comments:true,comment_target:20,comment_seconds:300,comment_mode:'limited_lazy_load_on_scroll',comment_lazy_load_limit:2};
+ const result=await sessions.complete(r.session_id,selection);assert.equal(result.details.length,10);for(const call of calls.filter(c=>c.operation==='post.detail')){assert.equal(call.params.native_request.comments,true);assert.equal(call.params.native_request.target,20);assert.equal(call.params.native_request.seconds,300);assert.equal(call.params.native_request.comment_lazy_load_limit,2);}
+ assert.deepEqual(await sessions.complete(r.session_id,selection),result);await assert.rejects(sessions.complete(r.session_id,{...selection,comments:false}),{code:'DISCOVERY_SELECTION_CONFLICT'});
+});
+test('unavailable phone comment capability leaves session available for empty completion',async t=>{
+ const {sessions}=setup(t,{kind:'android'}),r=await sessions.open(request);await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(1)],comments:true}),{code:'UNSUPPORTED_OPERATION'});assert.equal((await sessions.complete(r.session_id,{selected_ids:[]})).released,true);
+});
+
+test('phone comments keep capped coverage incomplete and preserve page evidence',async t=>{
+ const {sessions,store}=setup(t,{kind:'android'});store.register({id:'web:xhs:default',kind:'android',serial:'fixture',capabilities:['profile.posts','post.detail','post.comments'].map(operation=>({platform:'xiaohongshu',operation}))});
+ const adapter=sessions.adapters.get('web:xhs:default'),execute=adapter.execute;adapter.execute=ctx=>ctx.claim.payload.operation==='post.comments'?ctx.commit({items:[{value:{phase:'result',data:{raw:{comments:{list:[{id:'one',content:'real'}]}},end_observed:false,stop_reason:'native_page_limit',native_evidence:[{operation:'comments'}]}}}]}):execute(ctx);
+ const r=await sessions.open(request),done=await sessions.complete(r.session_id,{selected_ids:[id(1)],comments:true});assert.equal(done.details[0].data.raw.comments.list[0].content,'real');assert.equal(done.details[0].data.comments_complete,false);assert.equal(done.details[0].data.stop_reason,'native_page_limit');assert.equal(done.details[0].data.end_observed,false);assert.equal(done.details[0].data.comment_evidence.length,1);
 });

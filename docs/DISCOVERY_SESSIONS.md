@@ -9,7 +9,11 @@ jobs cannot claim that device during the wait. The service renews the lease and
 honors a bounded conversation deadline. Empty second-round IDs explicitly release.
 
 Count mode uses the existing sequential profile collectors and preserves full
-loaded pages. Date mode uses directly observed profile dates when available,
+loaded pages. Optional `exclude_pinned` replenishes the count using only observed
+non-pinned cards; unknown pin state fails. Default behavior still includes pins.
+Observed end is reported separately from reaching the requested quota, so short
+incomplete collection cannot become evidence of a small portfolio. Public cards
+now retain observed numeric likes; unknown counters remain null. Date mode uses directly observed profile dates when available,
 then probes only missing dates and binary-searches cached card indices for the
 requested boundaries. It independently evaluates pinned cards. No date is derived
 from a note ID. This is binary searching loaded indices, not random access to
@@ -116,3 +120,20 @@ Private-media fix validation (2026-11-08):
   `/tmp/watch-visual-verification/phone-private/private-media-verification.json`;
   original media URLs were never saved by that verification script. This verifies
   the crawler download path, not the downstream LLM run.
+
+## Portfolio discovery extension
+
+Round two supports up to ten selected cards and optional bounded comments. The
+contract documents the options and native/Web differences. Android comment reads
+use the existing verified operation, reopen the observed selected card without a
+note-deep-link fallback, and restore the profile afterward. Profile metadata is
+exposed only when already observed, without adding a legacy phone header read.
+These changes are covered offline; no new physical-device acceptance is claimed.
+
+Offline extension validation (2026-11-08):
+`ENABLE_TIKHUB_NETWORK=0 ENABLE_LLM_NETWORK=0 PYTHON=.venv/bin/python npm test`
+passed 266 Node tests and 62 Python tests. `node --check` passed for discovery
+sessions and phone consumer; `git diff --check` passed. Added cases cover pinned
+quota replenishment, genuine exhaustion versus incomplete loading, unknown pin
+and like evidence, ten-note comments and option idempotence, missing phone comment
+capability, capped comment evidence, and bounded profile restoration.

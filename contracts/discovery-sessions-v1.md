@@ -19,13 +19,19 @@ failure. Both Web and Android use the same contract.
 ```json
 {"schema_version":"crawler.discovery.v1","platform":"xiaohongshu",
  "user_id":"<observed 24-hex UID>","routing":{"kinds":["web","android"],"device_ids":[]},
- "mode":"count","count":20,"timeout_seconds":7200}
+ "mode":"count","count":40,"exclude_pinned":true,"timeout_seconds":7200}
 ```
 
 Exactly one mode:
 - `count`: integer 1..1000, no startdate/enddate. Collect whole pages until the
   count is reached; returning extra cards is intentional. Short/incomplete
   coverage is explicit, never silently reported as meeting the count.
+  Optional `exclude_pinned: true` excludes observed pinned cards before counting
+  the quota and from returned cards. It replays increasing profile targets until
+  enough non-pinned cards, observed profile end, no growth, or the 1000-card bound.
+  Unknown pin evidence fails with `DISCOVERY_PIN_STATE_UNOBSERVED`. Omitted/false
+  preserves the original count behavior, including pinned cards. This option is
+  count-only. Count never reads detail bodies in round one.
 - `date`: `startdate` required, `enddate` optional, no count. Both are ISO 8601
   timestamps with timezone. Omitted enddate is the service clock at open.
   Inclusive `[startdate,enddate]`; only cards within that range are returned.
@@ -46,12 +52,27 @@ Response (201):
  "device_id":"web:xhs:default","state":"awaiting_selection",
  "expires_at":"2026-11-08T12:00:00.000Z",
  "cards":[{"note_id":"<observed ID>","title":"observed title",
-   "body":null,"body_observed":false,"cover_url":"<observed URL or null>",
+   "body":null,"body_observed":false,"like_count":null,"cover_url":"<observed URL or null>",
    "published_at":null,"is_pinned":false,"observed_url":null,"index":0}],
  "coverage":{"complete":true,"stop_reason":"target_loaded",
-   "loaded_count":20,"returned_count":20,"date_probe_count":0,
+   "loaded_count":40,"returned_count":40,"date_probe_count":0,
+   "target_met":true,"end_observed":false,"eligible_count":40,"excluded_pinned_count":0,
    "order_assumption":"non_pinned_newest_first"}}
 ```
+
+For count, `complete` and `target_met` mean the requested quota was reached.
+`end_observed: true` proves that a short profile is exhausted; `false` with
+`target_met: false` is incomplete coverage, not proof of a newcomer. These two
+flags can both be true. Full pages are retained, so downstream business sampling
+chooses its requested number from returned cards. Card order is observation order,
+not likes rank. `like_count` is an observed nonnegative integer or null; missing or
+abbreviated values are not guessed as zero. `eligible_count` is returned-card count;
+`excluded_pinned_count` counts observed pins excluded from a count request.
+
+The response also includes `profile: null` or the observed envelope
+`{profile: raw.profile, profile_user_id, native_profile?}`. Only an actually
+returned, identity-matched profile header is exposed. No extra header operation
+is added to phone discovery; its profile can be null.
 
 Directly observed list time/create_time fields populate `published_at` with
 `published_at_source: "profile_payload"`. No date is ever derived from note IDs.
@@ -73,10 +94,31 @@ probe data stays within the session and is not presented as card text.
 {"selected_ids":[]}
 ```
 
-Choose 0..3 unique IDs from the returned cards. Each selected note is read on the
+Choose 0..10 unique IDs from the returned cards. Each selected note is read on the
 same reserved device; Web requests actual share capture, Android preserves an
 actually observed share link when supplied by its response. A missing share URL
 is not manufactured. Empty selection performs no detail read and still releases.
+
+Optional completion fields are `comments` (boolean, default false),
+`comment_target` (1..100, default 20), `comment_seconds` (1..3600, default 300),
+`comment_mode` (`sample` or `limited_lazy_load_on_scroll`, default latter), and
+`comment_lazy_load_limit` (1..20, default 2). Web uses the existing detail/comment
+collector and these native options. Android requires verified `post.comments`
+capability, relocates the same selected card, captures up to the target/page/time
+budget, and restores the profile before the next selection. Its page budget is
+`comment_lazy_load_limit`; it does not claim Web's reply-expansion behavior.
+Missing Android capability leaves the session available for empty completion.
+
+Comments appear in the existing `data.raw.comments.list` envelope. Android also
+preserves per-page `comment_evidence`, `comments_stop_reason`, and
+`comments_complete` based on observed end only. A capped collection is not complete.
+Details preserve existing observed share/evidence envelopes. Empty selection still
+performs no detail/comment reads. Repeating completion must retain the same IDs
+and effective comment options. Business-specific smaller selection limits belong
+to callers (CampaignWatch continues selecting at most three).
+
+`detail` is not a third round-one mode: it is the selected-note operation in round
+two, also independently available as queued `post.detail`.
 
 Response: `{session_id,state:"completed",details:[{note_id,data}],released:true}`.
 `data` is the existing adapter detail data envelope (raw note plus observation
