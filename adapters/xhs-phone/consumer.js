@@ -20,6 +20,7 @@ function combinedEnvelope(result,operation,target){
   if(values.some(v=>Array.isArray(v.data.raw.feeds)))value.data.raw.feeds=feeds;
   if(values.some(v=>v.data.raw.comments))value.data.raw.comments={list:comments};
   value.data.native_evidence=values.flatMap(v=>v.data.native_evidence||[]);
+  if(operation==='post.comments')value.data.non_comment_count=values.reduce((total,v)=>total+(v.data.non_comment_count||0),0);
   if(Object.keys(observations).length)value.data.native_list_observations=observations;
   value.data.end_observed=values.at(-1).data.end_observed;value.data.stop_reason=values.at(-1).data.stop_reason;
  }

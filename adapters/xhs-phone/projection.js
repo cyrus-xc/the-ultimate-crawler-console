@@ -16,7 +16,7 @@ function listObservation(record,provenance){
  return {source_type:'xhs_native_app_user_posted',note_id:n.noteId,user_id:n.user.userId||null,author_user_id:n.user.userId||null,create_time:time,liked_count:count(m.likedCount),collected_count:count(m.collectedCount),comment_count:count(m.commentCount),shared_count:count(m.shareCount),collected_at:provenance.observed_at,is_pinned:typeof m.sticky==='boolean'?m.sticky:null,native_evidence:[provenance]};
 }
 function card(r){const n=note(r);return {id:n.noteId,modelType:'note',noteCard:n};}
-function comment(r){const u=r.user||r.user_info||{};return {id:first(r,'id','comment_id'),content:first(r,'content','text')||'',userInfo:{userId:first(u,'userid','user_id','id'),nickname:u.nickname??null},likeCount:first(r,'like_count','liked_count'),createTime:first(r,'time','create_time'),ipLocation:r.ip_location??null,subCommentCount:first(r,'sub_comment_count','sub_comments_count'),subComments:(r.sub_comments||[]).filter(x=>x&&typeof x==='object').map(comment),_native_original:redact(r)};}
+function comment(r,path=[],nonCommentPaths=new Set()){const u=r.user||r.user_info||{};return {id:first(r,'id','comment_id'),content:first(r,'content','text')||'',userInfo:{userId:first(u,'userid','user_id','id'),nickname:u.nickname??null},likeCount:first(r,'like_count','liked_count'),createTime:first(r,'time','create_time'),ipLocation:r.ip_location??null,subCommentCount:first(r,'sub_comment_count','sub_comments_count'),subComments:(r.sub_comments||[]).flatMap((x,index)=>{const childPath=[...path,'sub_comments',index];return x&&typeof x==='object'&&!nonCommentPaths.has(JSON.stringify(childPath))?[comment(x,childPath,nonCommentPaths)]:[];}),_native_original:redact(r)};}
 function items(payload,...keys){
  if(Array.isArray(payload))return payload.flatMap(r=>!r||typeof r!=='object'?[]:keys.some(k=>Array.isArray(r[k]))?items(r[keys.find(k=>Array.isArray(r[k]))],...keys):[r]);
  for(const k of keys)if(Array.isArray(payload?.[k]))return payload[k].filter(x=>x&&typeof x==='object');return [];
@@ -25,6 +25,8 @@ function envelope(result,operation,target){
  const p=result.response?.data||{},observed_at=new Date(result.captured_at_ms).toISOString();
  const evidence={operation:result.response_operation||result.operation,observed_at,trigger:'ui',transport_evidence:result.transport_evidence,request:redact(result.request)};
  if(Number.isInteger(result.ignored_comment_payloads))evidence.ignored_comment_payloads=result.ignored_comment_payloads;
+ const nonCommentRows=result.verified_identity?.non_comment_rows||[];
+ if(nonCommentRows.length){evidence.non_comment_count=nonCommentRows.length;evidence.non_comment_rows=nonCommentRows;}
  const data={raw:{},native_evidence:[evidence],observed_at,end_observed:p.has_more===false,stop_reason:p.has_more===false?'native_end_observed':'native_page_limit',native_operation:result.response_operation||result.operation,response:result.response,request:result.request};
  if(operation==='post.detail'){
   const found=items(p,'note_list','notes','items').filter(r=>note(r).noteId===target.post_id);if(found.length!==1)throw Object.assign(Error('NATIVE_NOTE_IDENTITY_MISMATCH'),{code:'NATIVE_NOTE_IDENTITY_MISMATCH',scope:'item'});
@@ -34,7 +36,11 @@ function envelope(result,operation,target){
  }else if(operation==='profile.get'){
   const profile=p.user||p.user_info||p,id=String(first(profile,'userid','user_id','id')||'');if(id!==target.user_id)throw Object.assign(Error('NATIVE_USER_IDENTITY_MISMATCH'),{code:'NATIVE_USER_IDENTITY_MISMATCH',scope:'item'});
   data.raw={profile_user_id:id,native_profile:profile,profile:{basicInfo:{nickname:first(profile,'nickname','name')||'',desc:profile.desc||''},interactions:[]},feeds:[]};data.end_observed=true;
- }else if(operation==='post.comments')data.raw={comments:{list:items(p,'comments','comment_list','items').map(comment)}};
+ }else if(operation==='post.comments'){
+  const excluded=new Set(nonCommentRows.map(row=>JSON.stringify(row.path)));
+  data.raw={comments:{list:items(p,'comments','comment_list','items').flatMap((row,index)=>{const rowPath=['data','comments',index];return excluded.has(JSON.stringify(rowPath))?[]:[comment(row,rowPath,excluded)];})}};
+  data.non_comment_count=nonCommentRows.length;
+ }
  else {
   const records=items(p,'items','notes','note_list');data.raw={feeds:records.map(card)};
   if(operation==='profile.posts'){

@@ -65,3 +65,40 @@ UI 身份辅助补验收成功：仅开启已指定的 XHS ui_identity 能力后
 地点搜索辅助真机尚未通过：请求 `a5befdb1-6c68-44f1-91bf-5a442e66f2fd` 已执行正常搜索输入，但返回 `VENUE_SEARCH_TAB_MISSING`（最终请求因无替代设备为 NO_AVAILABLE_DEVICE）。一次后续 UI 检查确认当前可见分类为“全部、用户、商品、图片、视频、问点点”，没有“地点”。不将成功输入视作地点采集成功，生产应移除该未验证能力。证据 `/tmp/phone-production-smoke-Mqha7f/result.json`。DY UI helper 未取得已观察 video 目标，保持未启用。检查后 OnePlus lease 已释放，无后台串流。
 
 抖音手机辅助登录补充：手机正常确认已成功使 Web 二维码状态从 new 进入 scanned，随后 Web 返回业务码 2046 并显示需要用户完成的短信身份验证。此处为当时的交接状态。随后用户已完成短信验证，后台确认登录，精确重启 Web worker 后认证保持，四类真实采集及 pipeline 物化均通过；未绕过平台验证。诊断/验证墙分类及保留当前页面的聚焦行为共 9 项 Python 测试通过。详见 `DEPLOYMENT_ZH.md` 的当前交接说明。
+
+## 评论归属错误复现（2026-11-10）
+
+历史真实响应重放复现了 `NATIVE_COMMENT_IDENTITY_MISMATCH`：评论数组中含一张
+`show_type=nps` 的问卷卡，带问卷 DSL，没有评论的 note_id、正文或作者。
+该包原有 14 条父记录、含子记录共 25 条，其中实际评论为 13 条父评论、含回复共 24 条。
+问卷不是评论；不能仅凭它缺少 note_id 判断为跨帖子回包，也不能依据普通的
+hidden/invalid/status 标志猜测它是被删除或隐藏的评论。此历史包复现了同类错误，
+并不证明每一次既有错误都由该问卷卡引起。
+
+另一个离线回包序列复现了候选选择问题：被拒绝的错误评论回包会再次进入
+预加载页处理，导致随后已收到正确回包仍返回 related_errors。已拒绝候选必须在
+两条路径保持排除；只有错误回包时仍保留原错误，不能冒充成功。
+
+已读到真实评论后，下一页没有观察到响应，消费者保留已读行与断点、明确标注
+partial，并执行现有返回主页的导航清理；首屏没有数据时仍报错。这只处理评论
+读取与返回路径，不新增身份验证、App 重启或 Frida 修复逻辑。
+
+修复后的历史包经过实际 Python capture → JSON → Node projection 链路：原始
+响应两阶段均未变，输出 24 条真实评论及 non_comment_count=1；不因问卷卡误报
+partial。只对结构明确的 NPS 行生成非评论路径元数据，真实评论缺失或冲突的
+note_id 仍拒绝。预加载页使用自己的路径元数据，合并时累计非评论数。
+
+本地完整验收 `PYTHON=.venv/bin/python ENABLE_TIKHUB_NETWORK=0
+ENABLE_LLM_NETWORK=0 PYTHONDONTWRITEBYTECODE=1 npm test`：Node 274、Python 72
+全部通过。最初使用系统 Python 的命令因缺少 cv2 失败，按 README 指定虚拟环境
+重跑后通过，没有修改依赖或弱化测试。
+
+替代设备 Redmi 的被动响应实测通过：目标菠菠糖的主页三页 21+10+10，保留
+41 张卡片（40 张非置顶）；独立评论探测两页 15+15，30 条真实主评论。运行时
+清理及租约释放确认后，仅增加已经验证的 profile.posts/post.comments 能力。
+搜索仍未启用。此轮不再读取 OLIVA。
+
+Web 独立完整流程 run166 的六阶段均为 success，采集 40 卡、10 详情、71 条评论。
+一条详情的评论保留 partial，所有详情的作者均对应目标，评论关联错误为 0。
+模型代理 127.0.0.1:18190 拒绝连接，因此 10 条内容分类 UNKNOWN、评分部分缺失；
+报告已生成，但不能把阶段 success 当成完整内容分析通过。

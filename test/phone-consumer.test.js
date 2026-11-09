@@ -237,3 +237,12 @@ test('an unobserved first comment page cannot become successful partial coverage
  f.replies[0]=Object.assign(Error(),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});f.worker.dispatch();await Promise.all(f.worker.active.values());
  assert.equal(f.store.results(f.request.id).length,0);assert.equal(f.store.request(f.request.id).units[0].error.code,'PHONE_PAGE_RESPONSE_UNOBSERVED');
 });
+test('combined comment pages count only projected comments while retaining survey evidence',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}],params:{max_items:20}});
+ const capture=(cid,more)=>({captured_at_ms:1000,operation:'comments',request:{query:[]},response:{data:{comments:[{id:cid,content:'observed'},{id:'survey-'+cid,show_type:'nps'}],has_more:more}},verified_identity:{non_comment_rows:[{path:['data','comments',1],kind:'nps_questionnaire'}]}});
+ f.replies[0]={...capture('c1',true),related_pages:[capture('c2',false)]};
+ f.worker.dispatch();await Promise.all(f.worker.active.values());const value=f.store.results(f.request.id)[0].payload;
+ assert.equal(f.store.request(f.request.id).state,'succeeded');assert.deepEqual(value.data.raw.comments.list.map(c=>c.id),['c1','c2']);
+ assert.equal(value.data.non_comment_count,2);assert.equal(value.data.native_evidence.length,2);assert.equal(value.data.end_observed,true);
+ assert.equal(value.data.native_responses.reduce((total,r)=>total+r.response.data.comments.length,0),4);
+});

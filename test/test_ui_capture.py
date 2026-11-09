@@ -251,6 +251,43 @@ class CommentIdentityDiagnosticsTests(unittest.TestCase):
             verify_payload('comments',{'note_id':N},wire,{})
         self.assertEqual(error.exception.diagnostics['comment_identity'],{'total':2,'missing':1,'different':0})
 
+class NpsCommentCaptureTests(unittest.TestCase):
+    def packet(self):
+        import json
+        return json.loads((Path(__file__).parent/'fixtures/nps-comments.json').read_text())
+    def capture(self,packet):
+        session=Session()
+        return UiResponseCapture(session,clock_ms=lambda:2).read('comments',{**CONTRACT,'path':'/comments'},{'note_id':N},lambda:session.scripts[-1].emit(packet),timeout=.005)
+    def test_nps_questionnaire_is_classified_without_changing_raw_body(self):
+        packet=self.packet();original=copy.deepcopy(packet['body'])
+        result=self.capture(packet)
+        self.assertEqual(result['response'],original)
+        self.assertEqual(result['verified_identity']['non_comment_rows'],[{'path':['data','comments',1],'kind':'nps_questionnaire'}])
+        self.assertEqual(result['ignored_comment_payloads'],0)
+    def test_real_comment_missing_identity_remains_an_error(self):
+        packet=self.packet();del packet['body']['data']['comments'][0]['note_id']
+        with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):self.capture(packet)
+    def test_prefetched_page_keeps_its_own_non_comment_paths(self):
+        first=self.packet();extra=copy.deepcopy(first)
+        extra['request']['query'].append({'name':'start','value':'next'})
+        session=Session()
+        def trigger():
+            session.scripts[-1].emit(first);session.scripts[-1].emit(extra)
+        result=UiResponseCapture(session,clock_ms=lambda:2).read('comments',{**CONTRACT,'path':'/comments'},{'note_id':N},trigger,timeout=.005)
+        self.assertEqual(result['related_pages'][0]['verified_identity'],result['verified_identity'])
+        self.assertEqual(result['related_pages'][0]['response'],extra['body'])
+    def test_different_comment_identity_remains_an_error(self):
+        packet=self.packet();packet['body']['data']['comments'][0]['note_id']='b'*24
+        with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):self.capture(packet)
+    def test_nps_marker_alone_cannot_exempt_a_real_comment(self):
+        for field,value in (('content','real comment'),('author',{'id':'real-author'})):
+            with self.subTest(field=field):
+                packet=self.packet();packet['body']['data']['comments'][1][field]=value
+                with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):self.capture(packet)
+    def test_nps_without_questionnaire_structure_remains_an_error(self):
+        packet=self.packet();packet['body']['data']['comments'][1]['dsl_info']['content']='{}'
+        with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):self.capture(packet)
+
 class CommentResponseSequenceTests(unittest.TestCase):
     def packet(self,note):
         return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':'/comments','query':[{'name':'note_id','value':N}]},'status':200,'body':{'code':0,'success':True,'data':{'comments':[{'id':'comment','note_id':note}]}},'transport':{}}
@@ -263,6 +300,21 @@ class CommentResponseSequenceTests(unittest.TestCase):
         result=capture.read('comments',contract,{'note_id':N},trigger,timeout=.05)
         self.assertEqual(result['response']['data']['comments'][0]['note_id'],N)
         self.assertEqual(result['ignored_comment_payloads'],1)
+        self.assertNotIn('related_errors',result)
+        self.assertNotIn('related_pages',result)
+    def test_wrong_prefetched_comment_body_is_not_reintroduced_as_a_related_error(self):
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        def trigger():
+            session.scripts[-1].emit(self.packet(N))
+            session.scripts[-1].emit(self.packet('b'*24))
+            page=self.packet(N);page['body']['data']['comments'][0]['id']='next-comment'
+            page['request']['query'].append({'name':'start','value':'next'})
+            session.scripts[-1].emit(page)
+        result=capture.read('comments',{**CONTRACT,'path':'/comments'},{'note_id':N},trigger,timeout=.05)
+        self.assertNotIn('related_errors',result)
+        self.assertEqual(result['ignored_comment_payloads'],1)
+        self.assertEqual(len(result['related_pages']),1)
+        self.assertEqual(result['related_pages'][0]['response']['data']['comments'][0]['note_id'],N)
     def test_only_wrong_comment_body_remains_an_error(self):
         session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
         with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):

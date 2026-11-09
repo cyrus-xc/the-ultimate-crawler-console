@@ -46,7 +46,20 @@ def semantic_request(request, operation):
     result['query'] = [q for q in result.get('query', []) if q['name'] not in {'sort','filters'}] + [{'name':'sort','value':effective}, {'name':'filters','value':json.dumps(remaining,ensure_ascii=False,separators=(',',':'))}]
     return result
 
-def verify_payload(operation, values, wire, contract):
+def is_nps_questionnaire(row):
+    """The App inserts NPS survey cards into its native comments array."""
+    if row.get('show_type') != 'nps' or any(key in row for key in ('note_id','content','text','user','user_info','author')):
+        return False
+    dsl = row.get('dsl_info')
+    if not isinstance(dsl,dict) or not isinstance(dsl.get('content'),str):
+        return False
+    try:
+        content = json.loads(dsl['content'])
+    except (ValueError,TypeError):
+        return False
+    return isinstance(content,dict) and isinstance(content.get('questionnaire_id'),str) and bool(content['questionnaire_id']) and isinstance(content.get('questions'),list)
+
+def verify_payload(operation, values, wire, contract, *, verified_identity=None):
     """Retain native HTTP/business success and entity validation."""
     body = wire.get('body')
     if wire.get('status') in {401, 403, 461, 471} or (isinstance(body, dict) and body.get('code') == 300011):
@@ -65,11 +78,20 @@ def verify_payload(operation, values, wire, contract):
     elif operation == 'comments':
         if not isinstance(payload,dict) or not isinstance(payload.get('comments'),list):
             raise CaptureError('NATIVE_COMMENT_SHAPE_MISMATCH')
-        comments = [n for parent in payload['comments'] for n in [parent]+parent.get('sub_comments',[])]
+        comments, non_comment_rows = [], []
+        for index,parent in enumerate(payload['comments']):
+            rows = [(parent,['data','comments',index])] + [(row,['data','comments',index,'sub_comments',child]) for child,row in enumerate(parent.get('sub_comments',[]))]
+            for row,path in rows:
+                if is_nps_questionnaire(row):
+                    non_comment_rows.append({'path':path,'kind':'nps_questionnaire'})
+                else:
+                    comments.append(row)
         if any(n.get('note_id') != values.get('note_id') for n in comments):
             raise CaptureError('NATIVE_COMMENT_IDENTITY_MISMATCH', {'comment_identity':{
                 'total':len(comments),'missing':sum(not n.get('note_id') for n in comments),
                 'different':sum(bool(n.get('note_id')) and n.get('note_id')!=values.get('note_id') for n in comments)}})
+        if verified_identity is not None:
+            verified_identity['non_comment_rows'] = non_comment_rows
     elif operation == 'user_info':
         if not isinstance(payload,dict) or payload.get('userid') != values.get('query',{}).get('user_id'):
             raise CaptureError('NATIVE_USER_IDENTITY_MISMATCH')
@@ -235,8 +257,9 @@ class UiResponseCapture:
                 if matching:
                     wire = matching[0]
                     response_operation,response_contract=matched_contract(wire)
+                    verified_identity = {}
                     try:
-                        body = verify_payload(response_operation,values,wire,response_contract)
+                        body = verify_payload(response_operation,values,wire,response_contract,verified_identity=verified_identity)
                     except CaptureError as error:
                         if response_operation != 'comments' or str(error) != 'NATIVE_COMMENT_IDENTITY_MISMATCH':
                             raise
@@ -251,6 +274,8 @@ class UiResponseCapture:
                               'captured_at_ms':wire['at'],'device_captured_at_ms':wire.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',
                               'action_started_at_ms':start,'action_finished_at_ms':now}
+                    if verified_identity:
+                        result['verified_identity'] = verified_identity
                     if response_operation == 'comments':
                         result['ignored_comment_payloads'] = len(rejected_comments)
                     if private_media_enabled:
@@ -276,17 +301,22 @@ class UiResponseCapture:
                         broad_contract['parameters'] = [p for p in broad_contract['parameters'] if p['name'] in broad_values]
                         extras = []; related_errors=[]
                         for extra in responses:
-                            if extra is wire or not isinstance(extra.get('at'),(int,float)) or not start <= extra['at'] <= now:
+                            if extra is wire or id(extra) in rejected_comments or not isinstance(extra.get('at'),(int,float)) or not start <= extra['at'] <= now:
                                 continue
                             if not request_matches({**extra,'request':semantic_request(extra.get('request',{}),operation)},broad_contract,broad_values):
                                 continue
                             try:
-                                extra_body=verify_payload(operation,broad_values,extra,contract)
+                                extra_identity = {}
+                                extra_body=verify_payload(operation,broad_values,extra,contract,verified_identity=extra_identity)
                             except CaptureError as error:
+                                if operation == 'comments' and str(error) == 'NATIVE_COMMENT_IDENTITY_MISMATCH':
+                                    rejected_comments.add(id(extra));continue
                                 related_errors.append(str(error));continue
                             extra_query=sorted((q['name'],q['value']) for q in extra.get('request',{}).get('query',[]))
                             extra_lower=[e for e in cronet if e.get('request',{}).get('path')==extra['request']['path'] and sorted((q['name'],q['value']) for q in e.get('request',{}).get('query',[]))==extra_query]
                             extras.append({'operation':operation,'input':clean(broad_values),'response':extra_body,'request':extra['request'],'status':extra['status'],'captured_at_ms':extra['at'],'device_captured_at_ms':extra.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'transport_evidence':classify_transport(extra,start,now,extra_lower),'trigger':'ui'})
+                            if extra_identity:
+                                extras[-1]['verified_identity'] = extra_identity
                             if private_media_enabled:
                                 extras[-1]['private_media']=private_media(extras[-1],script.exports_sync.takemedia(extra.get('observation_id')))
                         if operation=='user_posted':
@@ -336,6 +366,8 @@ class UiResponseCapture:
                                 if self.monotonic() >= related_deadline:
                                     break
                                 changed.wait(min(.1, related_deadline-self.monotonic()));changed.clear()
+                    if operation == 'comments':
+                        result['ignored_comment_payloads'] = len(rejected_comments)
                     return result
                 remaining=deadline-self.monotonic()
                 if remaining<=0:

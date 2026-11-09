@@ -1,0 +1,14 @@
+{
+  "event": "response_json",
+  "at": 2,
+  "request": {"method": "GET", "host": "example.test", "path": "/comments", "query": [{"name": "note_id", "value": "aaaaaaaaaaaaaaaaaaaaaaaa"}]},
+  "status": 200,
+  "body": {"code": 0, "success": true, "data": {"has_more": false, "comments": [
+    {"id": "parent", "note_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "content": "observed parent", "user": {"userid": "author"}, "sub_comments": [
+      {"id": "reply", "note_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "content": "observed reply", "user": {"userid": "reply-author"}}
+    ]},
+    {"id": "00000000-0000-0000-0000-000000000000", "show_type": "nps", "comment_type": 0, "hidden": false, "invalid": false, "status": 0,
+      "dsl_info": {"template_id": "fixture-template", "content": "{\"questionnaire_id\":\"fixture-questionnaire\",\"questions\":[{\"question_id\":\"fixture-question\",\"subject\":\"fixture\",\"options\":[]}]}"}}
+  ]}},
+  "transport": {}
+}
