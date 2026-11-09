@@ -83,17 +83,14 @@ class PhoneConsumer {
   let failureCaught;
   try{
    let session=await runtime.ensure();context.guard();
-   let attachmentRestarted=false,restoreDiscovery=false;
+   let attachmentRestarted=false;
    const capture=async(native,values,trigger)=>{
-    const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(async()=>{if(restoreDiscovery){await nav.restoreProfile(context.discovery.user_id);context.discovery.index=0;restoreDiscovery=false;}return trigger(control);}),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
+    const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
     try{return await read();}catch(error){
      // Attachment failed before perform_action: no UI input or response could
      // have occurred. A single ordinary App restart gives Frida a fresh PID.
-     const recoverable=error.diagnostics?.stage==='attachment'&&(
-      ['APP_PROCESS_EXITED','APP_IDENTITY_TIMEOUT','APP_IDENTITY_UNAVAILABLE'].includes(error.code)||
-      error.code==='CAPTURE_FAILED'&&['ProcessNotRespondingError','ProcessNotFoundError'].includes(error.diagnostics?.exception_type));
-     if(attachmentRestarted||!recoverable)throw error;
-     attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();restoreDiscovery=Boolean(context.discovery?.user_id);return read();
+     if(attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||error.diagnostics?.exception_type!=='ProcessNotRespondingError')throw error;
+     attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();return read();
     }
    };
    const seen=new Set(context.resume.seen_ids||[]),detailSeen=new Set(claim.checkpoint?.detail_seen_ids||[]),skipDetails=new Set(params.native_request?.profile_skip_ids||[]),anchors=new Set(params.native_request?.profile_anchor_ids||[]);let pages=0,noGrowth=0,profileOpened=false,profileNeedsRestore=false,firstPageRestarted=false,initialProfilePage=null,lastCursor=null,noteFailures=claim.checkpoint?.note_failures_in_row||0;

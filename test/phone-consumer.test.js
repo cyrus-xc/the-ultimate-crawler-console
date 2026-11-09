@@ -221,12 +221,3 @@ test('discovery comment drawer permits one additional verified Back',async t=>{
  f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(checks,2);assert.equal(f.events.filter(e=>e==='back').length,2);
 });
-
-test('exited discovery App restores the profile before retrying its selected card with a fresh PID',async t=>{
- const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});let calls=0;
- f.runtime.restartApp=async()=>{f.events.push('restart');return {pid:2,endpoint:'127.0.0.1:4000'};};
- f.consumer.navFactory=()=>({restoreProfile:async uid=>{assert.equal(uid,id(2));f.events.push('restore');},openDiscoveryCard:async()=>f.events.push('card'),back:async()=>{},assertDiscoveryProfile:async()=>{}});
- f.consumer.capture=async options=>{f.captures.push(options);if(++calls===1)throw Object.assign(Error('APP_PROCESS_EXITED'),{code:'APP_PROCESS_EXITED',diagnostics:{stage:'attachment'}});await options.trigger();return {captured_at_ms:1000,status:200,operation:options.operation,request:{query:[]},response:{data:[{note_list:[{id:id(1),desc:'body',user:{userid:id(2)}}]}]}};};
- f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{user_id:id(2),card:{note_id:id(1)},index:5}})});
- f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.deepEqual(f.captures.map(c=>c.pid),[1,2]);assert.deepEqual(f.events.slice(0,3),['restart','restore','card']);
-});
