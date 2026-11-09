@@ -20,6 +20,16 @@ test('cancellation aborts adapter before device lock is released',async t=>{
   })}]]),{heartbeatMs:2});worker.dispatch();s.transition(r.id,'cancel');assert.equal(s.devices()[0].owner,r.id);
   await Promise.all(worker.active.values());assert.ok(interrupted);assert.equal(s.request(r.id).state,'cancelled');assert.equal(s.devices()[0].owner,null);
 });
+test('capture failure releases the lease and records only safe failure diagnostics',async t=>{
+ const s=setup(t),r=s.submit(input),worker=new LocalWorker(s,new Map([['p',{version:'1',execute:async()=>{
+  throw Object.assign(Error('CAPTURE_FAILED'),{code:'CAPTURE_FAILED',scope:'device',diagnostics:{stage:'attachment',exception_type:'TransportError',observed_requests:['private']}});
+ }}]]));
+ worker.dispatch();await Promise.all(worker.active.values());
+ assert.equal(s.devices()[0].owner,null);
+ const failure=s.events(r.id).find(e=>e.type==='unit.failed');
+ assert.deepEqual(failure.payload.diagnostics,{stage:'attachment',exception_type:'TransportError'});
+ assert.equal(JSON.stringify(failure).includes('private'),false);
+});
 
 test('manual continuation waits for pipeline decision before next action',async t=>{
  const s=setup(t),r=s.submit({...input,continuation:{mode:'manual'}});let completed=false;

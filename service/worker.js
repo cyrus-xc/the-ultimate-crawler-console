@@ -82,7 +82,9 @@ class LocalWorker {
         const r=this.store.request(claim.request_id);
         if(['pausing','cancelling'].includes(r.state))this.store.stopped(claim);
         else if(this.closing && e.code==='STOP_REQUESTED')this.store.yield(claim);
-        else this.store.fail(claim,{code:e.code||'ADAPTER_FAILED',scope:['item','device','platform'].includes(e.scope)?e.scope:'device'});
+        else {const diagnostics=e.diagnostics,stage=diagnostics?.stage,exceptionType=diagnostics?.exception_type;
+          this.store.fail(claim,{code:e.code||'ADAPTER_FAILED',scope:['item','device','platform'].includes(e.scope)?e.scope:'device',
+            ...(e.code==='CAPTURE_FAILED'&&['configuration','attachment','capture'].includes(stage)&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(exceptionType||'')?{diagnostics:{stage,exception_type:exceptionType}}:{})});}
       }catch(lost){if(lost.code==='DEVICE_COMMAND_ACTIVE'){this.store.quarantine(claim.device_id,'DEVICE_COMMAND_ACTIVE');return;}if(!['LEASE_LOST','ATTEMPT_LOST'].includes(lost.code))throw lost;}
     } finally {clearInterval(interval);clearTimeout(timeout);this.stoppers.delete(claim.attempt_id);}
   }

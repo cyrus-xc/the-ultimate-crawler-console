@@ -240,7 +240,7 @@ class Store {
         this.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(canonical({...parse(d.faults),[claim.payload.platform]:error.code}),claim.device_id);
       }
       this.db.prepare('UPDATE units SET state=?,error=? WHERE id=?').run(error.scope==='item'?'failed':'queued',canonical(error),claim.unit_id);
-      this.finish(claim,'failed',error);this.event(claim.request_id,'unit.failed',{unit_id:claim.unit_id,device_id:claim.device_id,code:error.code});this.settle(claim.request_id);
+      this.finish(claim,'failed',error);this.event(claim.request_id,'unit.failed',{unit_id:claim.unit_id,device_id:claim.device_id,code:error.code,...(error.diagnostics?{diagnostics:error.diagnostics}:{})});this.settle(claim.request_id);
     });
   }
   transition(id,action) {
