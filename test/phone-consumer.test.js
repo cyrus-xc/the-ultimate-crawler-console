@@ -93,6 +93,25 @@ test('cached profile first page is retried once after ordinary App restart with 
  assert.deepEqual(f.captures.map(c=>c.pid),[1,2]);assert.equal(f.events.filter(x=>x==='restart').length,1);
  assert.equal(f.events.filter(x=>x==='profile').length,2);
 });
+test('nonresponsive Frida attachment restarts once before any page action',async t=>{
+ const f=fixture(t);let restarts=0,calls=0;
+ f.runtime.restartApp=async()=>{restarts++;return {pid:2,endpoint:'127.0.0.1:4000'};};
+ f.consumer.capture=async options=>{
+  calls++;f.captures.push(options);
+  if(calls===1)throw Object.assign(Error('CAPTURE_FAILED'),{code:'CAPTURE_FAILED',diagnostics:{stage:'attachment',exception_type:'ProcessNotRespondingError'}});
+  await options.trigger();return {captured_at_ms:1000,status:200,operation:options.operation,request:{query:[]},effective_sort:'general',response:{data:{items:[{id:id(1),desc:'body'}],has_more:false}}};
+ };
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(restarts,1);
+ assert.deepEqual(f.captures.map(c=>c.pid),[1,2]);assert.equal(f.events.filter(x=>x==='submit').length,1);
+});
+test('nonresponsive attachment retries only once',async t=>{
+ const f=fixture(t);let restarts=0;
+ f.runtime.restartApp=async()=>{restarts++;return {pid:2,endpoint:'127.0.0.1:4000'};};
+ f.consumer.capture=async()=>{throw Object.assign(Error('CAPTURE_FAILED'),{code:'CAPTURE_FAILED',scope:'device',diagnostics:{stage:'attachment',exception_type:'ProcessNotRespondingError'}});};
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(restarts,1);assert.equal(f.store.devices()[0].health,'unavailable');assert.equal(f.store.devices()[0].owner,null);
+});
 test('first-page retry is bounded and never restarts on login or verification',async t=>{
  for(const code of ['PHONE_FIRST_PAGE_UNOBSERVED','LOGIN_REQUIRED','VERIFICATION_REQUIRED']){
   const f=fixture(t,{...base,operation:'profile.posts',targets:[{user_id:id(2)}]});let restarts=0;

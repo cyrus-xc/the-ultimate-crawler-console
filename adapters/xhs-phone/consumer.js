@@ -83,7 +83,16 @@ class PhoneConsumer {
   let failureCaught;
   try{
    let session=await runtime.ensure();context.guard();
-   const capture=async(native,values,trigger)=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
+   let attachmentRestarted=false;
+   const capture=async(native,values,trigger)=>{
+    const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
+    try{return await read();}catch(error){
+     // Attachment failed before perform_action: no UI input or response could
+     // have occurred. A single ordinary App restart gives Frida a fresh PID.
+     if(attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||error.diagnostics?.exception_type!=='ProcessNotRespondingError')throw error;
+     attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();return read();
+    }
+   };
    const seen=new Set(context.resume.seen_ids||[]),detailSeen=new Set(claim.checkpoint?.detail_seen_ids||[]),skipDetails=new Set(params.native_request?.profile_skip_ids||[]),anchors=new Set(params.native_request?.profile_anchor_ids||[]);let pages=0,noGrowth=0,profileOpened=false,profileNeedsRestore=false,firstPageRestarted=false,initialProfilePage=null,lastCursor=null,noteFailures=claim.checkpoint?.note_failures_in_row||0;
    if(operation==='profile.posts'&&params.native_request?.kind==='profile'){
     const readInfo=()=>capture('user_info',{query:{user_id:claim.target.user_id}},()=>nav.openProfile(claim.target.user_id));
