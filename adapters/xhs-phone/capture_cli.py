@@ -13,6 +13,24 @@ def emit(value):
     with emit_lock:
         print(json.dumps(value,ensure_ascii=False),flush=True)
 
+def verify_app_identity(session, package, timeout=5):
+    checked=threading.Event();packages=[]
+    identity=session.create_script("Java.perform(function(){ const app=Java.use('android.app.ActivityThread').currentApplication(); send({package:app ? String(app.getPackageName()) : null}); });")
+    def identify(message, data):
+        if message.get('type')=='send':packages.append((message.get('payload') or {}).get('package'))
+        checked.set()
+    identity.on('message',identify)
+    try:
+        identity.load()
+        if not checked.wait(timeout):
+            raise CaptureError('APP_IDENTITY_TIMEOUT', {'identity_status':'timeout'})
+        if not packages or packages==[None]:
+            raise CaptureError('APP_IDENTITY_UNAVAILABLE', {'identity_status':'not_ready'})
+        if packages!=[package]:
+            raise RuntimeError('APP_MAIN_PROCESS_MISMATCH')
+    finally:
+        identity.unload()
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--contract',required=True)
@@ -39,22 +57,11 @@ def main():
         remote=frida.get_device_manager().add_remote_device(args.endpoint)
         process=next((p for p in remote.enumerate_processes() if p.pid==args.pid),None)
         if process is None:
-            raise RuntimeError('APP_MAIN_PROCESS_MISMATCH')
+            raise CaptureError('APP_PROCESS_EXITED', {'identity_status':'process_missing'})
         session=remote.attach(args.pid)
         # Frida process display names need not be Android package identifiers.
         # Verify the attached process from read-only Android application metadata.
-        checked=threading.Event();packages=[]
-        identity=session.create_script("Java.perform(function(){ const app=Java.use('android.app.ActivityThread').currentApplication(); send({package:app ? String(app.getPackageName()) : null}); });")
-        def identify(message, data):
-            if message.get('type')=='send':packages.append((message.get('payload') or {}).get('package'))
-            checked.set()
-        identity.on('message',identify)
-        try:
-            identity.load()
-            if not checked.wait(5) or packages!=[contract['package']]:
-                raise RuntimeError('APP_MAIN_PROCESS_MISMATCH')
-        finally:
-            identity.unload()
+        verify_app_identity(session, contract['package'])
         def trigger():
             emit({'event':'perform_action'})
             action=json.loads(sys.stdin.readline())

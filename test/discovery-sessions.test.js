@@ -28,6 +28,13 @@ test('first round keeps lease, no detail reads; empty second round releases; rep
  assert.equal(result.cards.length,30);assert.equal(result.cards[0].body,null);assert.equal(result.coverage.complete,true);assert.ok(store.devices()[0].owner);assert.equal(calls.filter(c=>c.operation==='post.detail').length,0);
  const done=await sessions.complete(result.session_id,{selected_ids:[]});assert.equal(done.released,true);assert.equal(store.devices()[0].owner,null);assert.deepEqual(await sessions.complete(result.session_id,{selected_ids:[]}),done);
 });
+test('cleanup completion cannot mask a failed detail capture as session busy',async t=>{
+ const {store,sessions}=setup(t,{failDetail:true});const r=await sessions.open(request);
+ await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(1)]}),{code:'DETAIL_FAILED'});
+ assert.equal(store.devices()[0].owner,null);
+ await assert.rejects(sessions.complete(r.session_id,{selected_ids:[]}),{code:'DETAIL_FAILED'});
+ assert.equal((await sessions.cancel(r.session_id)).released,true);
+});
 test('only returned IDs, at most ten; details share same fenced lease and request share capture',async t=>{
  const {sessions,store,calls}=setup(t);const r=await sessions.open(request);
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(30)]}),{code:'INVALID_DISCOVERY_SELECTION'});

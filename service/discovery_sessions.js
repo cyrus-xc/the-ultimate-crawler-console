@@ -46,6 +46,7 @@ class DiscoverySessions {
  constructor({store,adapters,gateway=null,now=()=>Date.now(),heartbeatMs}={}){this.store=store;this.adapters=adapters;this.gateway=gateway;this.now=now;this.sessions=new Map();this.heartbeatMs=heartbeatMs||Math.max(10,Math.floor(store.leaseMs/3));}
  guard(s){if(s.controller.signal.aborted)throw s.controller.signal.reason;if(this.now()>=s.deadline)throw fail('DISCOVERY_SESSION_EXPIRED');this.store.assertLease(s.lease,{externalOnly:true});if(this.store.devices().find(d=>d.id===s.device_id)?.quarantined)throw fail('DEVICE_QUARANTINED');}
  async run(s,operation,target,params={},maxPages=100,seconds=null){
+  s.navigation.user_id=s.query.user_id;
   this.guard(s);const operationDeadline=seconds===null?s.deadline:Math.min(s.deadline,this.now()+seconds*1000),operationSignal=seconds===null?s.controller.signal:AbortSignal.any([s.controller.signal,AbortSignal.timeout(seconds*1000)]),guard=()=>{this.guard(s);if(this.now()>=operationDeadline||operationSignal.aborted)throw fail('DISCOVERY_OPERATION_EXPIRED');};const values=[],claim={device_id:s.device_id,lease:s.lease,target,payload:{platform:'xiaohongshu',operation,params,limits:{max_pages:maxPages,execution_timeout_seconds:Math.max(1,Math.ceil((operationDeadline-this.now())/1000))},cache:{mode:'refresh'},continuation:{mode:'automatic'}}};
   const context={discovery:s.kind==='web'?undefined:s.navigation,claim,resume:{seen_ids:[],binding:s.id,cursor:null},signal:operationSignal,guard,input:async fn=>{guard();return fn();},commit:page=>{guard();for(const item of page.items||[])values.push(item.value);},waitForDecision:async()=>{this.guard(s);return 'continue';}};
   try{await s.adapter.execute(context);guard();return values;}catch(error){if(/^[A-Z][A-Z0-9_]{0,100}$/.test(error.code||''))error.status=error.status||409;
@@ -120,6 +121,7 @@ class DiscoverySessions {
   if(typeof comments!=='boolean'||!Number.isInteger(commentPages)||commentPages<1||commentPages>20||!Number.isInteger(commentTarget)||commentTarget<1||commentTarget>100||!Number.isInteger(commentSeconds)||commentSeconds<1||commentSeconds>3600||!['sample','limited_lazy_load_on_scroll'].includes(commentMode))throw fail('INVALID_DISCOVERY_SELECTION',400);
   const selection={ids,comments,commentPages,commentTarget,commentSeconds,commentMode};
   if(s.state==='completed'){if(JSON.stringify(selection)!==JSON.stringify(s.selection))throw fail('DISCOVERY_SELECTION_CONFLICT');return s.result;}
+  if(s.failure)throw s.failure;
   if(s.state!=='awaiting_selection')throw fail('DISCOVERY_SESSION_BUSY');this.guard(s);s.state='reading_details';s.selection=selection;
   if(comments&&ids.length&&s.kind==='android'&&!this.store.compatible(this.store.devices().find(d=>d.id===s.device_id),{platform:'xiaohongshu',operation:'post.comments',params:{},routing:s.query.routing})){s.state='awaiting_selection';throw fail('UNSUPPORTED_OPERATION');}
   s.work=(async()=>{const details=[];for(const id of ids){s.navigation.card=s.cards.get(id);const values=await this.run(s,'post.detail',{post_id:id},{native_request:{kind:'detail',id,user_id:s.query.user_id,target:comments?commentTarget:1,seconds:comments?commentSeconds:45,comments:comments&&s.kind==='web',capture_share:true,...(comments&&s.kind==='web'?{comment_mode:commentMode,comment_lazy_load_limit:commentPages}:{})}},commentPages);const value=[...values].reverse().find(v=>v.data?.raw);if(!value)throw fail('DISCOVERY_DETAIL_UNOBSERVED');
@@ -130,7 +132,7 @@ class DiscoverySessions {
    }
    details.push({note_id:id,data:value.data,...(s.kind==='android'?{navigation:s.navigation.trace||[]}: {})});}return details;})();
   try{const details=await s.work;await this.release(s);s.state='completed';return s.result={session_id:id,state:'completed',details,released:true};}
-  catch(error){await this.release(s).catch(()=>{});throw error;}
+  catch(error){s.failure=error;await this.release(s).catch(()=>{});throw error;}
  }
  async release(s){
   if(s.releasing)return s.releasing;
