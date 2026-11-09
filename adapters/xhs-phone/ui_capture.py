@@ -67,7 +67,9 @@ def verify_payload(operation, values, wire, contract):
             raise CaptureError('NATIVE_COMMENT_SHAPE_MISMATCH')
         comments = [n for parent in payload['comments'] for n in [parent]+parent.get('sub_comments',[])]
         if any(n.get('note_id') != values.get('note_id') for n in comments):
-            raise CaptureError('NATIVE_COMMENT_IDENTITY_MISMATCH')
+            raise CaptureError('NATIVE_COMMENT_IDENTITY_MISMATCH', {'comment_identity':{
+                'total':len(comments),'missing':sum(not n.get('note_id') for n in comments),
+                'different':sum(bool(n.get('note_id')) and n.get('note_id')!=values.get('note_id') for n in comments)}})
     elif operation == 'user_info':
         if not isinstance(payload,dict) or payload.get('userid') != values.get('query',{}).get('user_id'):
             raise CaptureError('NATIVE_USER_IDENTITY_MISMATCH')

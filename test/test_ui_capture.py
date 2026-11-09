@@ -242,3 +242,11 @@ class PrivateDiscoveryMediaTests(unittest.TestCase):
         self.assertEqual(private_media(detail,[record]),[record])
         detail['note_id']='b'*24
         self.assertEqual(private_media(detail,[record]),[])
+
+class CommentIdentityDiagnosticsTests(unittest.TestCase):
+    def test_missing_reply_identity_is_distinguished_from_conflicting_identity(self):
+        from ui_capture import verify_payload
+        wire={'status':200,'body':{'code':0,'success':True,'data':{'comments':[{'note_id':N,'sub_comments':[{'id':'reply'}]}]}}}
+        with self.assertRaises(CaptureError) as error:
+            verify_payload('comments',{'note_id':N},wire,{})
+        self.assertEqual(error.exception.diagnostics['comment_identity'],{'total':2,'missing':1,'different':0})

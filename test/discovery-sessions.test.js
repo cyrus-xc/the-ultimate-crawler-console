@@ -31,6 +31,8 @@ test('first round keeps lease, no detail reads; empty second round releases; rep
 test('cleanup completion cannot mask a failed detail capture as session busy',async t=>{
  const {store,sessions}=setup(t,{failDetail:true});const r=await sessions.open(request);
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(1)]}),{code:'DETAIL_FAILED'});
+ const failure=store.events(null).find(e=>e.type==='discovery.failed');
+ assert.equal(failure.payload.operation,'post.detail');assert.equal(failure.payload.code,'DETAIL_FAILED');assert.equal(failure.payload.selected_index,0);
  assert.equal(store.devices()[0].owner,null);
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:[]}),{code:'DETAIL_FAILED'});
  assert.equal((await sessions.cancel(r.session_id)).released,true);
