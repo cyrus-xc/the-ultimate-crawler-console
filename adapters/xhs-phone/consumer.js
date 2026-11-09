@@ -93,6 +93,7 @@ class PhoneConsumer {
      attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();return read();
     }
    };
+   let lastCommentPage,lastCommentCheckpoint;
    const seen=new Set(context.resume.seen_ids||[]),detailSeen=new Set(claim.checkpoint?.detail_seen_ids||[]),skipDetails=new Set(params.native_request?.profile_skip_ids||[]),anchors=new Set(params.native_request?.profile_anchor_ids||[]);let pages=0,noGrowth=0,profileOpened=false,profileNeedsRestore=false,firstPageRestarted=false,initialProfilePage=null,lastCursor=null,noteFailures=claim.checkpoint?.note_failures_in_row||0;
    if(operation==='profile.posts'&&params.native_request?.kind==='profile'){
     const readInfo=()=>capture('user_info',{query:{user_id:claim.target.user_id}},()=>nav.openProfile(claim.target.user_id));
@@ -140,6 +141,11 @@ class PhoneConsumer {
     let result;
     try{result=page===0&&operation==='profile.posts'&&initialProfilePage?initialProfilePage:await capture(NATIVE[operation],values,trigger);}
     catch(error){
+     if(operation==='post.comments'&&error.code==='PHONE_PAGE_RESPONSE_UNOBSERVED'&&lastCommentPage&&seen.size>0){
+      const partial={...lastCommentPage,data:{...lastCommentPage.data,raw:{comments:{list:[]}},end_observed:false,comments_complete:false,comment_error:error.code,stop_reason:'phone_page_response_unobserved'}};
+      context.commit({items:[{key:'post.comments:partial:'+claim.target.post_id,value:partial}],checkpoint:lastCommentCheckpoint});
+      await context.waitForDecision();break;
+     }
      // A warm profile may satisfy navigation from App cache without exposing a
      // first-page response. One ordinary restart refreshes it; never use this
      // recovery for login, verification, or later-page failures.
@@ -169,6 +175,7 @@ class PhoneConsumer {
      else if(beforeSince)value.data.stop_reason='since_reached';
     }
     const checkpoint={binding:context.resume.binding,device_id:claim.device_id,adapter_version:VERSION,cursor:lastCursor,seen_ids:[...seen],detail_seen_ids:[...detailSeen],note_failures_in_row:noteFailures,pages_read:pages,ui_resume:'replay_deduplicate',decision:{phase:'page'}};
+    if(operation==='post.comments'){lastCommentPage=value;lastCommentCheckpoint=checkpoint;}
     context.commit({items:[{key:operation+':'+digest(ids.length?ids:claim.target),value}],checkpoint});
     const decision=await context.waitForDecision();if(decision==='stop'||decision?.action==='stop')break;
     if(result.related_errors?.length)throw failure(result.related_errors[0],result.related_errors[0]==='LOGIN_OR_VERIFICATION_REQUIRED'?'platform':'device');

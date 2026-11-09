@@ -250,3 +250,20 @@ class CommentIdentityDiagnosticsTests(unittest.TestCase):
         with self.assertRaises(CaptureError) as error:
             verify_payload('comments',{'note_id':N},wire,{})
         self.assertEqual(error.exception.diagnostics['comment_identity'],{'total':2,'missing':1,'different':0})
+
+class CommentResponseSequenceTests(unittest.TestCase):
+    def packet(self,note):
+        return {'event':'response_json','at':2,'request':{'method':'GET','host':'example.test','path':'/comments','query':[{'name':'note_id','value':N}]},'status':200,'body':{'code':0,'success':True,'data':{'comments':[{'id':'comment','note_id':note}]}},'transport':{}}
+    def test_stale_comment_body_does_not_hide_later_correct_response(self):
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        contract={**CONTRACT,'path':'/comments'}
+        def trigger():
+            session.scripts[-1].emit(self.packet('b'*24))
+            session.scripts[-1].emit(self.packet(N))
+        result=capture.read('comments',contract,{'note_id':N},trigger,timeout=.05)
+        self.assertEqual(result['response']['data']['comments'][0]['note_id'],N)
+        self.assertEqual(result['ignored_comment_payloads'],1)
+    def test_only_wrong_comment_body_remains_an_error(self):
+        session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
+        with self.assertRaisesRegex(CaptureError,'NATIVE_COMMENT_IDENTITY_MISMATCH'):
+            capture.read('comments',{**CONTRACT,'path':'/comments'},{'note_id':N},lambda:session.scripts[-1].emit(self.packet('b'*24)),timeout=.005)

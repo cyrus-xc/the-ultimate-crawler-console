@@ -111,6 +111,7 @@ class UiResponseCapture:
             raise ValueError('Invalid capture timeout')
         ready, changed = threading.Event(), threading.Event()
         responses, cronet, errors, event_counts = [], [], [], {}
+        rejected_comments, comment_error = set(), None
         clock_offset = [0]
         action_start = [None]
         notified = [False]
@@ -230,11 +231,19 @@ class UiResponseCapture:
                 if errors:
                     raise CaptureError(errors[0])
                 now = self.clock_ms()
-                matching = [r for r in responses if isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and matched_contract(r) is not None]
+                matching = [r for r in responses if id(r) not in rejected_comments and isinstance(r.get('at'),(int,float)) and start <= r['at'] <= now and matched_contract(r) is not None]
                 if matching:
                     wire = matching[0]
                     response_operation,response_contract=matched_contract(wire)
-                    body = verify_payload(response_operation,values,wire,response_contract)
+                    try:
+                        body = verify_payload(response_operation,values,wire,response_contract)
+                    except CaptureError as error:
+                        if response_operation != 'comments' or str(error) != 'NATIVE_COMMENT_IDENTITY_MISMATCH':
+                            raise
+                        # A matching request alone does not validate the body.
+                        # Reject this candidate and wait for a valid response.
+                        rejected_comments.add(id(wire)); comment_error = error
+                        continue
                     lower = [e for e in cronet if request_target_matches(semantic_request(e.get('request',{}),response_operation),response_contract,values)]
                     evidence = classify_transport(wire,start,now,lower)
                     result = {'operation':operation,'response_operation':response_operation,'note_id':values.get('note_id'),'input':clean(values),
@@ -242,6 +251,8 @@ class UiResponseCapture:
                               'captured_at_ms':wire['at'],'device_captured_at_ms':wire.get('device_at_ms'),'observer_clock_offset_ms':clock_offset[0],'at_peek_limit':wire.get('at_peek_limit',False),
                               'transport_evidence':evidence,'trigger':'ui',
                               'action_started_at_ms':start,'action_finished_at_ms':now}
+                    if response_operation == 'comments':
+                        result['ignored_comment_payloads'] = len(rejected_comments)
                     if private_media_enabled:
                         result['private_media']=private_media(result,script.exports_sync.takemedia(wire.get('observation_id')))
                     if operation=='search':
@@ -328,6 +339,9 @@ class UiResponseCapture:
                     return result
                 remaining=deadline-self.monotonic()
                 if remaining<=0:
+                    if comment_error is not None:
+                        comment_error.diagnostics = {**diagnostics(), **(comment_error.diagnostics or {})}
+                        raise comment_error
                     raise CaptureError('CAPTURE_TIMEOUT', diagnostics())
                 changed.wait(min(0.1,remaining));changed.clear()
         finally:

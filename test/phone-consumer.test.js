@@ -221,3 +221,19 @@ test('discovery comment drawer permits one additional verified Back',async t=>{
  f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(checks,2);assert.equal(f.events.filter(e=>e==='back').length,2);
 });
+
+test('partial comment pagination retains observed rows and restores the profile before release',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}],params:{max_items:20}});
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>{},nextPage:async()=>{},back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
+ f.replies.splice(0,1,{response:{data:{comments:[{id:'c1',content:'observed'}],cursor:'next',has_more:true}}},Object.assign(Error(),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'}));
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());const rows=f.store.results(f.request.id).map(r=>r.payload);
+ assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(rows[0].data.raw.comments.list.length,1);
+ assert.equal(rows.at(-1).data.stop_reason,'phone_page_response_unobserved');assert.equal(rows.at(-1).data.comments_complete,false);assert.equal(rows.at(-1).data.end_observed,false);
+ assert.deepEqual(f.events.slice(0,2),['back','profile-confirmed']);assert.equal(f.store.devices()[0].owner,null);
+});
+test('an unobserved first comment page cannot become successful partial coverage',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}],params:{max_items:20}});
+ f.replies[0]=Object.assign(Error(),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.results(f.request.id).length,0);assert.equal(f.store.request(f.request.id).units[0].error.code,'PHONE_PAGE_RESPONSE_UNOBSERVED');
+});
