@@ -102,3 +102,41 @@ Web 独立完整流程 run166 的六阶段均为 success，采集 40 卡、10 �
 一条详情的评论保留 partial，所有详情的作者均对应目标，评论关联错误为 0。
 模型代理 127.0.0.1:18190 拒绝连接，因此 10 条内容分类 UNKNOWN、评分部分缺失；
 报告已生成，但不能把阶段 success 当成完整内容分析通过。
+
+Redmi 全流程 run167 固定 native_phone、设备 7e9c701e，关闭 Web 与历史证据回退。
+用户资料成功后，下一次 capture 在 attachment 阶段遇到 Frida TransportError，
+尚未读取评论，因此手机端完整流程本轮仍受阻。collect 已通过正常 API 停止，关联
+请求已取消；确认无 capture/ADB 子进程、无设备租约、无网关命令。设备保留
+unavailable/quarantined（RUNTIME_CLEANUP_FAILED），没有强行恢复为 ready。
+本次未增加 Frida 或 App 恢复逻辑。
+
+### 主仓库本地检查记录
+
+以下命令在 `xhs-analysis` 执行，测试环境均强制
+ENABLE_TIKHUB_NETWORK=0 / ENABLE_LLM_NETWORK=0，没有修改主仓库源码。
+
+| 实际命令 | 结果 |
+| --- | --- |
+| `.venv/bin/python -B -m unittest discover -s pipeline/Keyword/test -t .` | PASS，186 |
+| `.venv/bin/python -B -m unittest discover -s pipeline/CaseStudy/test -t .` | PASS，184 |
+| `.venv/bin/python -B -m unittest discover -s pipeline/KolPerformance/test -t .` | PASS，417，含 1 skip |
+| `.venv/bin/python -B -m unittest discover -s pipeline/MerchantReport/test -t .` | PASS，324 |
+| `.venv/bin/python -B -m unittest discover -s pipeline/DouyinKolPerformance/test -t .` | PASS，71 |
+| `.venv/bin/python -B -m unittest discover -s pipeline/DouyinCaseStudy/test -t .` | PASS，36 |
+| `.venv/bin/python -B -m unittest discover -s pipeline/CampaignWatch/test -t .` | PASS，319 |
+| `.venv/bin/python -B -m unittest discover -s HandyGadgets/kol_real_data_extraction/test -t .` | PASS，50 |
+| `.venv/bin/python -B -m pytest tests/douyin_analysis -q -p no:cacheprovider` | PASS，41 |
+| `npm --prefix app test` | FAIL：首轮 workbench 服务中断提示未显示；第二轮 rockhouse-browser 的 Server campaign select 不可见超时 |
+
+完整控制台检查两次均失败，不能宣称主仓库全套验收通过。原 npm 脚本已经使用
+test-concurrency=1；没有证据把失败归因于文件级并行，也没有修改断言或超时。
+日志目录 `/tmp/xhs-main-verification-jmdlc73z/`。
+
+两个失败文件单独复跑通过，以下命令 cwd 为 `xhs-analysis/app`：
+
+| 实际命令 | 结果 |
+| --- | --- |
+| `env ENABLE_TIKHUB_NETWORK=0 ENABLE_LLM_NETWORK=0 PYTHONDONTWRITEBYTECODE=1 node --test --test-concurrency=1 --test-timeout=600000 server/workbench.test.js` | PASS，10 |
+| `env ENABLE_TIKHUB_NETWORK=0 ENABLE_LLM_NETWORK=0 PYTHONDONTWRITEBYTECODE=1 node --test --test-concurrency=1 --test-timeout=600000 server/rockhouse-browser.test.js` | PASS，1 |
+
+这不能替代整套控制台验收通过；未将单文件成功覆盖两次全套失败记录。
