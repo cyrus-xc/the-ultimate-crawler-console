@@ -115,6 +115,20 @@ URL, raw response, authentication data, or arbitrary application state. Text URL
 and token assignments are redacted before return. DOM failure is represented by a
 bounded `unavailable_reason`; it does not retry collection or assert completion.
 
+The same evaluation also retains `dom_snapshot` (`xhs_profile_dom_snapshot_v1`)
+for a confirmed current profile's active published-note tab. It records the
+observed list container and nearby outside-tail structure, collapsing note cards
+to identity, bounded public text and the actually observed anchor pathname. Query
+parameters, fragments, complete URLs, unrelated inactive-tab content, executable
+markup and form content are omitted. Only tag/CSS path, visibility, semantic
+loading attributes and bounded text are retained; arbitrary attributes are not
+copied. The structure is limited to 256 nodes, depth 12, and 48 KiB serialized
+payload, with explicit `truncated` or `unavailable_reason` metadata. It is saved
+before normal empty completion closes the browser; lease/cleanup behavior is
+unchanged. Truncation, unavailable scope and all candidate text still leave the
+terminal decision unverified. This snapshot creates no additional DOM evaluation,
+scroll, navigation, or platform request.
+
 Current tests use synthetic DOM fixtures to verify propagation, negative cases,
 and redaction. They do not establish a genuine Xiaohongshu profile terminal
 signal. The remaining acceptance step requires one explicitly authorized, bounded

@@ -1,0 +1,156 @@
+{
+  "source": {
+    "run": "kol-raw-30d-web-end-20261111",
+    "observed_at": "2026-11-10T22:42:48.079138+00:00",
+    "sha256": "5a2f187017113886072240c7ad8b71eb602dfee673b4b450a401f857b20ff6c3"
+  },
+  "uid": "649070620000000012034448",
+  "cards": [
+    {
+      "note_id": "6aeed7fb0000000010013469",
+      "like_count": 10,
+      "is_pinned": false,
+      "index": 0
+    },
+    {
+      "note_id": "6aeaa7620000000003009871",
+      "like_count": 21,
+      "is_pinned": false,
+      "index": 1
+    },
+    {
+      "note_id": "6ae492000000000010010f1a",
+      "like_count": 19,
+      "is_pinned": false,
+      "index": 2
+    },
+    {
+      "note_id": "6ae0cb54000000002a033234",
+      "like_count": 8,
+      "is_pinned": false,
+      "index": 3
+    },
+    {
+      "note_id": "6adb1877000000002c026cb2",
+      "like_count": 13,
+      "is_pinned": false,
+      "index": 4
+    },
+    {
+      "note_id": "6ad6ed190000000028038f4b",
+      "like_count": 12,
+      "is_pinned": false,
+      "index": 5
+    },
+    {
+      "note_id": "6ad1d1b90000000014031457",
+      "like_count": 39,
+      "is_pinned": false,
+      "index": 6
+    },
+    {
+      "note_id": "6acec26700000000180295e2",
+      "like_count": 14,
+      "is_pinned": false,
+      "index": 7
+    },
+    {
+      "note_id": "6acad68f00000000120393a4",
+      "like_count": 18,
+      "is_pinned": false,
+      "index": 8
+    },
+    {
+      "note_id": "6ac6db40000000001b02d54d",
+      "like_count": 45,
+      "is_pinned": false,
+      "index": 9
+    },
+    {
+      "note_id": "6ac319c700000000150095ba",
+      "like_count": 23,
+      "is_pinned": false,
+      "index": 10
+    },
+    {
+      "note_id": "6abf14c0000000001b02d6c2",
+      "like_count": 49,
+      "is_pinned": false,
+      "index": 11
+    },
+    {
+      "note_id": "6abb50d3000000001802ef82",
+      "like_count": 39,
+      "is_pinned": false,
+      "index": 12
+    },
+    {
+      "note_id": "6ab8cd2b000000001b02de0c",
+      "like_count": 14,
+      "is_pinned": false,
+      "index": 13
+    },
+    {
+      "note_id": "6ab4d382000000001a0204ff",
+      "like_count": 28,
+      "is_pinned": false,
+      "index": 14
+    },
+    {
+      "note_id": "6ab0be080000000036014149",
+      "like_count": 32,
+      "is_pinned": false,
+      "index": 15
+    },
+    {
+      "note_id": "6aae0615000000002803ae89",
+      "like_count": 40,
+      "is_pinned": false,
+      "index": 16
+    },
+    {
+      "note_id": "6aab8fbf0000000012003926",
+      "like_count": 24,
+      "is_pinned": false,
+      "index": 17
+    },
+    {
+      "note_id": "6aa8f514000000002901339c",
+      "like_count": 35,
+      "is_pinned": false,
+      "index": 18
+    }
+  ],
+  "coverage": {
+    "complete": false,
+    "target_met": false,
+    "end_observed": false,
+    "eligible_count": 19,
+    "excluded_pinned_count": 0,
+    "stop_reason": "no_growth",
+    "loaded_count": 19,
+    "returned_count": 19,
+    "date_probe_count": 0,
+    "order_assumption": "non_pinned_newest_first"
+  },
+  "profile_end_observation": {
+    "active_tab": {
+      "index": 0,
+      "query": "note"
+    },
+    "identified_card_count": 19,
+    "last_card": {
+      "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(19)",
+      "note_id": "649070620000000012034448",
+      "visible": true
+    },
+    "loading_nodes": [],
+    "policy": "observed_terminal_v1",
+    "profile_uid_matches": true,
+    "schema": "xhs_profile_end_observation_v1",
+    "state_loading": {},
+    "tail_nodes": [],
+    "terminal_decision": "unverified",
+    "visible_identified_card_count": 11
+  }
+}

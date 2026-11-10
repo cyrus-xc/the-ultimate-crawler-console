@@ -7,19 +7,28 @@ const uid='a'.repeat(24),note='b'.repeat(24);
 function element(tag,classes=[],text='',attributes={}){
  const node={tagName:tag.toUpperCase(),classList:classes,innerText:text,attributes,children:[],parentElement:null,
   style:{display:'block',visibility:'visible'},box:{width:100,height:30,top:200,bottom:230,left:0,right:100},
-  getBoundingClientRect(){return this.box;},getAttribute(name){return this.attributes[name]??null;},querySelector(selector){return selector==='a.cover'?this.children.find(child=>child.classList.includes('cover')):null;}};
+  getBoundingClientRect(){return this.box;},getAttribute(name){return this.attributes[name]??null;},querySelector(selector){return selector==='a.cover'?this.children.find(child=>child.classList.includes('cover')):null;},
+  contains(other){for(let node=other;node;node=node.parentElement)if(node===this)return true;return false;},
+  closest(selector){for(let node=this;node;node=node.parentElement)if(node.classList.includes(selector.slice(1)))return node;return null;},
+  querySelectorAll(selector){const found=[];const visit=node=>{for(const child of node.children){if(child.classList.includes(selector.slice(1)))found.push(child);visit(child);}};visit(this);return found;}};
  Object.defineProperty(node,'nextElementSibling',{get(){const siblings=this.parentElement?.children||[];return siblings[siblings.indexOf(this)+1]||null;}});
  return node;
 }
 function append(parent,...children){for(const child of children){child.parentElement=parent;parent.children.push(child);}return parent;}
-function fixture({tail='THE END',loading=false,pathUid=uid,hidden=false}={}){
- const body=element('body'),list=element('div',['feeds-container']),card=element('section',['note-item']);
- append(card,element('a',['cover'],'',{href:`/explore/${note}?xsec_token=PRIVATE_ACCESS`}));
+function fixture({tail='THE END',loading=false,pathUid=uid,hidden=false,extraNodes=0,deepTail=false,sensitiveNodes=false,activeQuery='note',href=`/explore/${note}?xsec_token=PRIVATE_ACCESS`}={}){
+ const body=element('body'),container=element('div',['feeds-tab-container']),transform=element('div',['transform-container']),tab=element('div',['tab-content-item']),list=element('div',['feeds-container']),card=element('section',['note-item']);
+ append(card,element('a',['cover'],'',{href}));
  const end=element('div',['unverified-tail'],tail);if(hidden)end.style.display='none';
  const spinner=element('div',['spinner'],'',{role:'progressbar','aria-busy':'true'});if(!loading)spinner.style.display='none';
- append(body,append(list,card,end),spinner);
- const context={window:{__INITIAL_STATE__:{user:{activeTab:{value:{index:0,query:'note'}},loading:{value:loading},access_token:'PRIVATE_STATE'}}},
-  location:{pathname:'/user/profile/'+pathUid},innerHeight:800,innerWidth:1200,
+ append(list,card);if(!deepTail)append(list,end);
+ append(body,append(container,append(transform,append(tab,list)),...(deepTail?[end]:[])),spinner);
+ if(sensitiveNodes){
+  append(container,element('script',[],'PRIVATE_SCRIPT'),element('textarea',[],'PRIVATE_FORM',{value:'PRIVATE_ATTRIBUTE'}),
+   append(element('div',['tab-content-item']),element('span',[],'PRIVATE_INACTIVE')));
+ }
+ for(let i=0;i<extraNodes;i++)append(container,element('div',['tail-fixture'],'bounded-'+i+' '+ 'x'.repeat(1000)));
+ const context={window:{__INITIAL_STATE__:{user:{activeTab:{value:{index:0,query:activeQuery}},loading:{value:loading},access_token:'PRIVATE_STATE'}}},
+  URL,TextEncoder,location:{origin:'https://www.xiaohongshu.com',href:'https://www.xiaohongshu.com/user/profile/'+pathUid,pathname:'/user/profile/'+pathUid},innerHeight:800,innerWidth:1200,
   getComputedStyle:node=>node.style,document:{querySelectorAll:selector=>selector==='section.note-item'?[card]:[spinner]}};
  return JSON.parse(vm.runInNewContext(script,context)(uid));
 }
@@ -48,4 +57,61 @@ test('current page identity, loading and visibility are reported without decidin
  assert.equal(loading.loading_nodes.length,1);assert.equal(loading.terminal_decision,'unverified');
  assert.equal(fixture({hidden:true}).tail_nodes.length,0);
  assert.deepEqual(fixture({loading:false}).loading_nodes,[]);
+});
+
+test('captured Run179 mismatch is reproduced without claiming a raw href was retained',()=>{
+ const capture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/run179-profile-end-observation.json'),'utf8'));
+ const last=capture.cards.at(-1).note_id;
+ assert.equal(capture.cards.length,19);
+ assert.equal(capture.profile_end_observation.last_card.note_id,capture.uid);
+ assert.equal(capture.cards.some(card=>card.note_id===capture.profile_end_observation.last_card.note_id),false);
+ // The capture retained IDs, not href. This owner/note route is a clearly
+ // declared reproduction; it is not a newly fetched or manufactured share URL.
+ const result=fixture({href:`/user/profile/${capture.uid}/${last}?xsec_token=PRIVATE_ACCESS`});
+ assert.equal(result.last_card.note_id,last);
+ assert.equal(result.terminal_decision,'unverified','identity correction is not terminal proof');
+ assert.equal(result.end_observed,undefined);
+});
+
+test('only note routes identify a card; profile owners, query IDs and external hosts do not',()=>{
+ for(const href of [`/explore/${note}`,`/discovery/item/${note}`,`/user/profile/${uid}/${note}`,
+  `https://www.xiaohongshu.com/user/profile/${uid}/${note}?source=profile&xsec_token=PRIVATE_ACCESS`]){
+  assert.equal(fixture({href}).last_card.note_id,note);
+ }
+ for(const href of [`/user/profile/${uid}`,`/user/profile/${uid}?note_id=${note}`,`https://example.test/explore/${note}`,`/search_result?note_id=${note}`]){
+  assert.equal(fixture({href}).identified_card_count,0);
+  assert.equal(fixture({href}).last_card,null);
+ }
+});
+
+test('the same read retains bounded sanitized DOM beyond the inner three-level tail scan',()=>{
+ const result=fixture({deepTail:true,tail:'Observed terminal candidate https://example.test/?xsec_token=PRIVATE_URL xsec_token=PRIVATE_FIELD',href:`/user/profile/${uid}/${note}?xsec_token=PRIVATE_HREF`});
+ assert.deepEqual(result.tail_nodes,[],'this wrapper shape is outside the previous three-level tail scan');
+ const snapshot=result.dom_snapshot;
+ assert.equal(snapshot.schema,'xhs_profile_dom_snapshot_v1');
+ assert.equal(snapshot.truncated,false);
+ const serialized=JSON.stringify(snapshot);
+ assert.ok(serialized.includes('Observed terminal candidate'));
+ assert.ok(serialized.includes(`/user/profile/${uid}/${note}`),'retain actual path only, without query');
+ for(const secret of ['PRIVATE_','https://','xsec_token='])assert.equal(serialized.includes(secret),false,serialized);
+ assert.equal(result.terminal_decision,'unverified','a saved DOM candidate is not an end decision');
+ assert.equal(result.end_observed,undefined);
+});
+
+test('DOM evidence is bounded and refuses other profiles or non-published tabs',()=>{
+ const large=fixture({extraNodes:1000}).dom_snapshot;
+ assert.equal(large.truncated,true);
+ assert.ok(large.node_count<=256);
+ assert.ok(Buffer.byteLength(JSON.stringify(large))<=48*1024);
+ assert.equal(fixture({activeQuery:'fav'}).dom_snapshot.unavailable_reason,'PUBLISHED_PROFILE_SCOPE_UNCONFIRMED');
+ assert.equal(fixture({pathUid:'c'.repeat(24)}).dom_snapshot.unavailable_reason,'PUBLISHED_PROFILE_SCOPE_UNCONFIRMED');
+});
+
+test('DOM snapshot omits executable/form content, inactive tabs and non-allowlisted attributes',()=>{
+ const result=fixture({sensitiveNodes:true,tail:'public {"xsec_token":"PRIVATE_JSON", "access_token":"PRIVATE_ACCESS", "cookie":"PRIVATE_COOKIE", "password":"PRIVATE_PASSWORD"}'});
+ const value=JSON.stringify(result.dom_snapshot);
+ assert.equal(value.includes('PRIVATE_'),false,value);
+ assert.ok(value.includes('inactive_tab'));
+ assert.ok(value.includes('omitted_content'));
+ assert.equal(result.terminal_decision,'unverified');
 });
