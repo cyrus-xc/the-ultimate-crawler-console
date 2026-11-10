@@ -45,7 +45,7 @@ func ReadRawEvidence(ctx context.Context, page *rod.Page, kind, id string) (json
 // SmokeProfile 有界滚动，记录每轮数量，不把停滞误报成全部完成。
 // since (epoch ms, 0 = none) ends the scroll at the first unpinned card older
 // than it; see scroll_since.go for when that stop is refused.
-func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string, target int, since int64) (map[string]any, error) {
+func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string, target int, since int64, endPolicy string) (map[string]any, error) {
 	_, err := NewUserProfileAction(page).UserProfile(ctx, uid, token, TabNotes)
 	if err != nil {
 		return nil, err
@@ -151,6 +151,15 @@ func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string,
 		}
 	}
 	result := map[string]any{"raw": raw, "loaded_counts": counts, "stop_reason": stop, "requested": target, "end_observed": false}
+	if endPolicy == ProfileEndObservationPolicy {
+		// Exactly one additional DOM read after each existing bounded Go read.
+		// This observation is not a verified profile-terminal contract.
+		if stop == "client_stopped" || ctx.Err() != nil {
+			result["profile_end_observation"] = unavailableProfileEndObservation("READ_STOPPED")
+		} else {
+			result["profile_end_observation"] = observeProfileEnd(ctx, page, uid)
+		}
+	}
 	if walking {
 		result["profile_walk_version"] = ProfileWalkVersion
 		result["matched_note_id"] = matched

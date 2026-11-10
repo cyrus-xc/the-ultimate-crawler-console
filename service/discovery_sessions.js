@@ -12,12 +12,13 @@ function timestamp(value){
 }
 function dateInput(value){if(typeof value!=='string'||!/(?:Z|[+-]\d\d:\d\d)$/.test(value)||timestamp(value)===null)throw fail('INVALID_DISCOVERY_DATE',400);return timestamp(value);}
 function normalize(input,now){
- if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['schema_version','platform','user_id','routing','mode','count','startdate','enddate','timeout_seconds','exclude_pinned'].includes(k)))throw fail('INVALID_DISCOVERY_REQUEST',400);
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['schema_version','platform','user_id','routing','mode','count','startdate','enddate','timeout_seconds','exclude_pinned','profile_end_policy'].includes(k)))throw fail('INVALID_DISCOVERY_REQUEST',400);
  if(input.schema_version!=='crawler.discovery.v1'||input.platform!=='xiaohongshu'||!ID.test(input.user_id||''))throw fail('INVALID_DISCOVERY_REQUEST',400);
  const q={...input,routing:{kinds:['web','android'],device_ids:[],...input.routing},timeout_seconds:input.timeout_seconds??7200};
  if(!Number.isInteger(q.timeout_seconds)||q.timeout_seconds<30||q.timeout_seconds>86400)throw fail('INVALID_DISCOVERY_TIMEOUT',400);
  if(Object.keys(q.routing).some(k=>!['kinds','device_ids'].includes(k))||!Array.isArray(q.routing.kinds)||!q.routing.kinds.length||q.routing.kinds.some(x=>!['web','android'].includes(x))||!Array.isArray(q.routing.device_ids)||q.routing.device_ids.some(x=>typeof x!=='string'||!x))throw fail('INVALID_ROUTING',400);
  if(q.exclude_pinned!==undefined&&(typeof q.exclude_pinned!=='boolean'||q.mode!=='count'))throw fail('INVALID_DISCOVERY_MODE',400);
+ if(q.profile_end_policy!==undefined&&(q.profile_end_policy!=='observed_terminal_v1'||q.mode!=='count'))throw fail('INVALID_PROFILE_END_POLICY',400);
  if(q.mode==='count'){if(!Number.isInteger(q.count)||q.count<1||q.count>1000||q.startdate!==undefined||q.enddate!==undefined)throw fail('INVALID_DISCOVERY_MODE',400);}
  else if(q.mode==='date'){if(q.count!==undefined)throw fail('INVALID_DISCOVERY_MODE',400);q.start=dateInput(q.startdate);q.end=q.enddate===undefined?now:dateInput(q.enddate);if(q.start>q.end)throw fail('INVALID_TIME_RANGE',400);}
  else throw fail('INVALID_DISCOVERY_MODE',400);
@@ -71,10 +72,11 @@ class DiscoverySessions {
  async collect(s){
   let target=s.query.mode==='count'?s.query.count:20,reason='page_limit',complete=false,endObserved=false;
   for(let batch=0;batch<50;batch++){
-   const values=await this.run(s,'profile.posts',{user_id:s.query.user_id},{max_items:target,native_request:{...(s.kind==='web'?{kind:'profile',id:s.query.user_id}:{}),target,seconds:90,comments:false}});
+   const values=await this.run(s,'profile.posts',{user_id:s.query.user_id},{max_items:target,native_request:{...(s.kind==='web'?{kind:'profile',id:s.query.user_id,...(s.query.profile_end_policy?{profile_end_policy:s.query.profile_end_policy}:{})}:{}),target,seconds:90,comments:false}});
    let end=false,newCount=0;
    for(const value of values){const data=value.data||{},raw=data.raw||{};if(raw.profile&&raw.profile_user_id===s.query.user_id)s.profile={profile:raw.profile,profile_user_id:raw.profile_user_id,...(raw.native_profile?{native_profile:raw.native_profile}:{})};for(const row of raw.feeds||[]){const c=card(row,s.cards.size);if(c)c.published_at_source=c.published_at?'profile_payload':null;if(c&&c.is_pinned===null&&Array.isArray(raw.dom_cards)){const d=raw.dom_cards.find(d=>String(d.href||'').includes(c.note_id));if(d&&typeof d.sticky==='boolean')c.is_pinned=d.sticky;}if(c){const previous=s.cards.get(c.note_id);if(!previous){s.cards.set(c.note_id,c);newCount++;}else{for(const key of ['is_pinned','published_at','published_at_source','cover_url','like_count'])if(previous[key]===null&&c[key]!==null)previous[key]=c[key];if(!previous.title&&c.title)previous.title=c.title;}}}
-    if(value.phase==='result'){reason=data.stop_reason||reason;end ||= data.end_observed===true||reason==='native_end_observed';}}
+    if(value.phase==='result'){reason=data.stop_reason||reason;end ||= data.end_observed===true||reason==='native_end_observed';
+     if(s.kind==='web'&&s.query.profile_end_policy)s.profile_end_observation=data.profile_end_observation??null;}}
    endObserved ||= end;const all=[...s.cards.values()];s.navigation.cards=all;s.navigation.index=Math.max(0,all.length-1);
    if(s.query.mode==='count'){
     if(s.query.exclude_pinned&&all.some(c=>c.is_pinned===null))throw fail('DISCOVERY_PIN_STATE_UNOBSERVED');
@@ -114,7 +116,7 @@ class DiscoverySessions {
   s.timer=setInterval(()=>{try{this.guard(s);this.store.heartbeat(s.lease);}catch(e){this.cancel(id,scope,e).catch(()=>{});}},this.heartbeatMs);s.timer.unref();
   const disconnect=()=>this.cancel(id,scope,fail('CLIENT_DISCONNECTED')).catch(()=>{});signal?.addEventListener('abort',disconnect,{once:true});
   s.work=this.collect(s);if(signal?.aborted)disconnect();
-  try{await s.work;this.guard(s);s.state='awaiting_selection';return {schema_version:'crawler.discovery.v1',session_id:id,device_id:s.device_id,state:s.state,profile:s.profile||null,cards:s.returned.map(({_raw,...c})=>c),coverage:s.coverage,expires_at:new Date(s.deadline).toISOString()};}
+  try{await s.work;this.guard(s);s.state='awaiting_selection';return {schema_version:'crawler.discovery.v1',session_id:id,device_id:s.device_id,state:s.state,profile:s.profile||null,cards:s.returned.map(({_raw,...c})=>c),coverage:s.coverage,...(s.kind==='web'&&s.query.profile_end_policy?{profile_end_observation:s.profile_end_observation??null}:{}),expires_at:new Date(s.deadline).toISOString()};}
   catch(error){await this.release(s).catch(()=>{});throw error;}finally{signal?.removeEventListener('abort',disconnect);}
  }
  get(id,scope){const s=this.sessions.get(id);if(!s||s.scope!==scope)throw fail('DISCOVERY_SESSION_NOT_FOUND',404);return s;}

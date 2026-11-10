@@ -4,7 +4,7 @@ const {spawn}=require('node:child_process');const {randomBytes}=require('node:cr
 const {createInterface}=require('node:readline');
 const error=(code,scope='device')=>Object.assign(Error(code),{code,scope});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-const fields=new Set('profile_walk profile_walk_version profile_anchor_ids profile_skip_ids capture_share select_share kind id keyword xsec_token user_id target seconds comments comment_mode comment_lazy_load_limit sort_by since'.split(' '));
+const fields=new Set('profile_walk profile_walk_version profile_anchor_ids profile_skip_ids profile_end_policy capture_share select_share kind id keyword xsec_token user_id target seconds comments comment_mode comment_lazy_load_limit sort_by since'.split(' '));
 const kinds={'search.posts':'search','profile.get':'profile','profile.posts':'profile','post.detail':'detail','post.comments':'detail','place.posts':'poi'};
 function nativeRequest(claim){
  const p=claim.payload.params,t=claim.target,kind=kinds[claim.payload.operation];if(!kind)throw error('UNSUPPORTED_OPERATION','item');
@@ -13,6 +13,7 @@ function nativeRequest(claim){
  if(claim.payload.operation==='post.comments')Object.assign(q,{comments:true,comment_mode:'limited_lazy_load_on_scroll',comment_lazy_load_limit:Math.min(20,claim.payload.limits.max_pages)});
  if(p.native_request){if(typeof p.native_request!=='object'||Object.keys(p.native_request).some(k=>!fields.has(k)))throw error('INVALID_NATIVE_REQUEST','item');q={...q,...p.native_request};}
  if(q.kind!==kind||kind==='search'&&q.keyword!==t.keyword||kind!=='search'&&q.id!==(t.user_id||t.post_id||t.place_id))throw error('TARGET_MISMATCH','item');
+ if(q.profile_end_policy!==undefined&&(q.profile_end_policy!=='observed_terminal_v1'||kind!=='profile'||q.profile_walk||q.since||!(q.target>0)))throw error('INVALID_PROFILE_END_POLICY','item');
  if(t.observed_url){let u;try{u=new URL(t.observed_url);}catch{throw error('INVALID_OBSERVED_URL','item');}if(u.protocol!=='https:'||!['www.xiaohongshu.com','xiaohongshu.com'].includes(u.hostname)||u.pathname.split('/').filter(Boolean).at(-1)!==q.id)throw error('INVALID_OBSERVED_URL','item');q.xsec_token=u.searchParams.get('xsec_token')||q.xsec_token;}
  if(p.filters&&Object.keys(p.filters).length)throw error('UNSUPPORTED_FILTER','item');
  return q;

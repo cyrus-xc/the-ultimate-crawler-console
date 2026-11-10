@@ -22,23 +22,24 @@ const ShareSelectionVersion = xiaohongshu.ShareSelectionVersion
 const ProfileWalkVersion = xiaohongshu.ProfileWalkVersion
 
 type Request struct {
-	MaxPages       int      `json:"max_pages,omitempty"`
-	StreamPages    bool     `json:"stream_pages,omitempty"`
-	ProfileWalk    bool     `json:"profile_walk,omitempty"`
-	WalkVersion    string   `json:"profile_walk_version,omitempty"`
-	ProfileAnchors []string `json:"profile_anchor_ids,omitempty"`
-	ProfileSkip    []string `json:"profile_skip_ids,omitempty"`
-	CaptureShare   bool     `json:"capture_share,omitempty"`
-	SelectShare    bool     `json:"select_share,omitempty"`
-	Kind           string   `json:"kind" jsonschema:"profile, detail or search"`
-	ID             string   `json:"id,omitempty" jsonschema:"User ID or note ID"`
-	Keyword        string   `json:"keyword,omitempty" jsonschema:"Search keyword"`
-	Token          string   `json:"xsec_token,omitempty" jsonschema:"Private web access context"`
-	UserID         string   `json:"user_id,omitempty" jsonschema:"Known note author, used only for tab routing"`
-	Target         int      `json:"target,omitempty" jsonschema:"Card or parent comment target, 1 to 100; bounded comments up to 200"`
-	Seconds        int      `json:"seconds,omitempty" jsonschema:"Comment time budget: sample 1..90, limited_lazy_load_on_scroll 1..1800 seconds"`
-	Comments       bool     `json:"comments,omitempty" jsonschema:"Load parent comments and replies"`
-	CommentMode    string   `json:"comment_mode,omitempty" jsonschema:"sample or limited_lazy_load_on_scroll (bounded scroll-triggered lazy loading)"`
+	MaxPages         int      `json:"max_pages,omitempty"`
+	StreamPages      bool     `json:"stream_pages,omitempty"`
+	ProfileWalk      bool     `json:"profile_walk,omitempty"`
+	WalkVersion      string   `json:"profile_walk_version,omitempty"`
+	ProfileAnchors   []string `json:"profile_anchor_ids,omitempty"`
+	ProfileSkip      []string `json:"profile_skip_ids,omitempty"`
+	ProfileEndPolicy string   `json:"profile_end_policy,omitempty"`
+	CaptureShare     bool     `json:"capture_share,omitempty"`
+	SelectShare      bool     `json:"select_share,omitempty"`
+	Kind             string   `json:"kind" jsonschema:"profile, detail or search"`
+	ID               string   `json:"id,omitempty" jsonschema:"User ID or note ID"`
+	Keyword          string   `json:"keyword,omitempty" jsonschema:"Search keyword"`
+	Token            string   `json:"xsec_token,omitempty" jsonschema:"Private web access context"`
+	UserID           string   `json:"user_id,omitempty" jsonschema:"Known note author, used only for tab routing"`
+	Target           int      `json:"target,omitempty" jsonschema:"Card or parent comment target, 1 to 100; bounded comments up to 200"`
+	Seconds          int      `json:"seconds,omitempty" jsonschema:"Comment time budget: sample 1..90, limited_lazy_load_on_scroll 1..1800 seconds"`
+	Comments         bool     `json:"comments,omitempty" jsonschema:"Load parent comments and replies"`
+	CommentMode      string   `json:"comment_mode,omitempty" jsonschema:"sample or limited_lazy_load_on_scroll (bounded scroll-triggered lazy loading)"`
 	// CommentLazyLoadLimit 是 limited_lazy_load_on_scroll 模式下的懒加载页数上限：
 	// 每轮滚动懒加载算一页，达到该页数即停。0 使用默认（2）。其他模式忽略。
 	CommentLazyLoadLimit int    `json:"comment_lazy_load_limit,omitempty" jsonschema:"Scroll-triggered lazy-load page budget, default 2"`
@@ -51,6 +52,9 @@ var idPattern = regexp.MustCompile(`^[a-fA-F0-9]{24}$`)
 var poiPattern = regexp.MustCompile(`^[a-fA-F0-9]{8,64}$`)
 
 func (r Request) Validate() error {
+	if r.ProfileEndPolicy != "" && (r.ProfileEndPolicy != xiaohongshu.ProfileEndObservationPolicy || r.Kind != "profile" || r.ProfileWalk || r.Since != 0 || r.Target <= 0) {
+		return errors.New("INVALID_PROFILE_END_POLICY")
+	}
 	if r.MaxPages < 0 || r.MaxPages > 1000 {
 		return errors.New("INVALID_PAGE_LIMIT")
 	}
@@ -213,7 +217,7 @@ func readKind(ctx context.Context, page *rod.Page, r Request) (map[string]any, e
 	case "poi":
 		return xiaohongshu.ReadPOIEvidence(ctx, page, r.ID)
 	case "profile":
-		return xiaohongshu.ReadProfileEvidence(ctx, page, r.ID, r.Token, r.Target, r.Since)
+		return xiaohongshu.ReadProfileEvidence(ctx, page, r.ID, r.Token, r.Target, r.Since, r.ProfileEndPolicy)
 	case "search":
 		return xiaohongshu.ReadSearchEvidenceWithBudget(ctx, page, r.Keyword, r.Target, r.Seconds, r.SortBy)
 	default:

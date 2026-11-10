@@ -86,6 +86,43 @@ body is null and body_observed is false. Private date probes never populate the
 card body. `note_type` preserves the observed media type when present. Cover URLs are observed platform URLs; no cover is synthesized. The raw
 probe data stays within the session and is not presented as card text.
 
+## KOL profile-end observation (opt-in)
+
+A count-mode caller may explicitly send
+`"profile_end_policy":"observed_terminal_v1"`. The KOL evidence caller owns this
+opt-in; ordinary discovery, search, date-mode, and queued profile requests do not
+enable it. Other values and date-mode use are rejected. Android remains unchanged.
+An existing valid cached listing must not be refreshed merely to obtain this field.
+
+For opted-in Web reads, the first-round response adds
+`profile_end_observation`. Each existing Go profile read performs at most one
+additional DOM evaluation after its existing collection loop; a logical session
+may already contain multiple profile reads. The service retains only the last
+observation. This does not add navigation, scrolling, platform HTTP requests, or
+a second observation command.
+
+The observation is **not a profile-end decision**. Its schema is
+`xhs_profile_end_observation_v1`, with `terminal_decision:"unverified"`.
+`end_observed` remains false in the Web collector. Neither few cards, no growth,
+viewport geometry, loading flags, nor text such as another page's “THE END” proves
+that the current user's published-note list has ended.
+
+The observation contains only the current-profile UID match, active tab index and
+allowlisted tab kind, identified/visible card counts, the last identified card's
+note ID and bounded CSS path, up to six visible tail text/path candidates, bounded
+semantic loading-node paths, and boolean loading-state fields. It emits no page
+URL, raw response, authentication data, or arbitrary application state. Text URLs
+and token assignments are redacted before return. DOM failure is represented by a
+bounded `unavailable_reason`; it does not retry collection or assert completion.
+
+Current tests use synthetic DOM fixtures to verify propagation, negative cases,
+and redaction. They do not establish a genuine Xiaohongshu profile terminal
+signal. The remaining acceptance step requires one explicitly authorized, bounded
+KOL refresh through the business UI after the evidence policy is deployed. Preserve
+that run's observation and same-UID/list context, then derive and test a positive
+terminal rule from the actual evidence. Existing incomplete lists must not be
+rewritten to claim an end, and this observation opt-in cannot bypass cache policy.
+
 ## Round two (mandatory, including empty selection)
 
 `POST /v1/discovery-sessions/{session_id}/complete`

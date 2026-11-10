@@ -11,7 +11,7 @@ func SmokeRaw(ctx context.Context, p *rod.Page, kind, id string) (json.RawMessag
 	return ReadRawEvidence(ctx, p, kind, id)
 }
 func SmokeProfile(ctx context.Context, p *rod.Page, id, token string, target int) (map[string]any, error) {
-	return ReadProfileEvidence(ctx, p, id, token, target, 0)
+	return ReadProfileEvidence(ctx, p, id, token, target, 0, "")
 }
 func SmokeDetail(ctx context.Context, p *rod.Page, id, token string, target, seconds int) (map[string]any, error) {
 	return ReadDetailEvidence(ctx, p, id, token, target, seconds, "")
