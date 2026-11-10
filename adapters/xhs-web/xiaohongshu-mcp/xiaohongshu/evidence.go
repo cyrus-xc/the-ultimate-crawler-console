@@ -153,11 +153,13 @@ func ReadProfileEvidence(ctx context.Context, page *rod.Page, uid, token string,
 	result := map[string]any{"raw": raw, "loaded_counts": counts, "stop_reason": stop, "requested": target, "end_observed": false}
 	if endPolicy == ProfileEndObservationPolicy {
 		// Exactly one additional DOM read after each existing bounded Go read.
-		// This observation is not a verified profile-terminal contract.
+		// Only the opted-in independently reported total can establish end.
 		if stop == "client_stopped" || ctx.Err() != nil {
 			result["profile_end_observation"] = unavailableProfileEndObservation("READ_STOPPED")
 		} else {
-			result["profile_end_observation"] = observeProfileEnd(ctx, page, uid)
+			observation := observeProfileEnd(ctx, page, uid)
+			result["end_observed"] = confirmReportedProfileEnd(uid, raw, observation)
+			result["profile_end_observation"] = observation
 		}
 	}
 	if walking {

@@ -101,11 +101,19 @@ may already contain multiple profile reads. The service retains only the last
 observation. This does not add navigation, scrolling, platform HTTP requests, or
 a second observation command.
 
-The observation is **not a profile-end decision**. Its schema is
-`xhs_profile_end_observation_v1`, with `terminal_decision:"unverified"`.
-`end_observed` remains false in the Web collector. Neither few cards, no growth,
-viewport geometry, loading flags, nor text such as another page's “THE END” proves
-that the current user's published-note list has ended.
+The observation schema is `xhs_profile_end_observation_v1`. Its default decision
+is `terminal_decision:"unverified"`. An opted-in read sets `end_observed:true` and
+`terminal_decision:"observed"` only when the independently reported positive
+integer `userPageData.posted` from a successful profile result (success true,
+code zero) equals the unique published-note IDs in both the raw list and the
+complete, untruncated active-list DOM snapshot. Both scopes must match the
+requested UID and published-note tab, the last identified card must be visible,
+and no observed loading indicator may remain active. The total includes pinned
+notes; repeated cards do not increase the unique count. Terminal evidence records
+`kind:"profile_reported_total_v1"`, the original source, total and identified count.
+Missing, zero, fractional or string totals, unsuccessful profiles, wrong scope,
+loading, truncated observations and count mismatches remain unverified. Neither
+few cards, no growth, viewport geometry nor another page's “THE END” proves end.
 
 The observation contains only the current-profile UID match, active tab index and
 allowlisted tab kind, identified/visible card counts, the last identified card's
@@ -125,17 +133,17 @@ loading attributes and bounded text are retained; arbitrary attributes are not
 copied. The structure is limited to 256 nodes, depth 12, and 48 KiB serialized
 payload, with explicit `truncated` or `unavailable_reason` metadata. It is saved
 before normal empty completion closes the browser; lease/cleanup behavior is
-unchanged. Truncation, unavailable scope and all candidate text still leave the
+unchanged. Truncation, unavailable scope and candidate text alone leave the
 terminal decision unverified. This snapshot creates no additional DOM evaluation,
 scroll, navigation, or platform request.
 
-Current tests use synthetic DOM fixtures to verify propagation, negative cases,
-and redaction. They do not establish a genuine Xiaohongshu profile terminal
-signal. The remaining acceptance step requires one explicitly authorized, bounded
-KOL refresh through the business UI after the evidence policy is deployed. Preserve
-that run's observation and same-UID/list context, then derive and test a positive
-terminal rule from the actual evidence. Existing incomplete lists must not be
-rewritten to claim an end, and this observation opt-in cannot bypass cache policy.
+The reported-total rule is backed by one authorized same-capture fixture with
+19 published cards and independent posted total19. Offline replay drives the
+actual Go predicate through the discovery service into the unchanged Python
+sampler: confirmed end permits its existing 12–39-card fallback, while the
+original unverified observation remains incomplete. Negative fixtures exercise
+scope, metadata, loading and cardinality failures. Existing incomplete lists are
+never rewritten to claim end, and this opt-in cannot bypass evidence reuse.
 
 ## Round two (mandatory, including empty selection)
 

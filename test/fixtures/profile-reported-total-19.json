@@ -1,0 +1,791 @@
+{
+  "provenance": {
+    "capture": "kol-profile-list-only-20261110T230345Z",
+    "source_sha256": "e9cbe509cb1fbd73616cc7a2d214daf14006158d3f08042859ba5c2b3d28d433",
+    "raw_projection": "Only captured profile metadata and normalized card values, not an original native envelope."
+  },
+  "uid": "649070620000000012034448",
+  "raw": {
+    "profile": {
+      "posted": 19,
+      "result": {
+        "success": true,
+        "code": 0,
+        "message": "success"
+      }
+    },
+    "profile_user_id": "649070620000000012034448",
+    "active": {
+      "index": 0,
+      "query": "note"
+    },
+    "feeds": [
+      {
+        "id": "6aeed7fb0000000010013469",
+        "noteCard": {
+          "noteId": "6aeed7fb0000000010013469",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 10,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6aeaa7620000000003009871",
+        "noteCard": {
+          "noteId": "6aeaa7620000000003009871",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 21,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ae492000000000010010f1a",
+        "noteCard": {
+          "noteId": "6ae492000000000010010f1a",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 19,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ae0cb54000000002a033234",
+        "noteCard": {
+          "noteId": "6ae0cb54000000002a033234",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 8,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6adb1877000000002c026cb2",
+        "noteCard": {
+          "noteId": "6adb1877000000002c026cb2",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 13,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ad6ed190000000028038f4b",
+        "noteCard": {
+          "noteId": "6ad6ed190000000028038f4b",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 12,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ad1d1b90000000014031457",
+        "noteCard": {
+          "noteId": "6ad1d1b90000000014031457",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 39,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6acec26700000000180295e2",
+        "noteCard": {
+          "noteId": "6acec26700000000180295e2",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 14,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6acad68f00000000120393a4",
+        "noteCard": {
+          "noteId": "6acad68f00000000120393a4",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 18,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ac6db40000000001b02d54d",
+        "noteCard": {
+          "noteId": "6ac6db40000000001b02d54d",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 45,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ac319c700000000150095ba",
+        "noteCard": {
+          "noteId": "6ac319c700000000150095ba",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 23,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6abf14c0000000001b02d6c2",
+        "noteCard": {
+          "noteId": "6abf14c0000000001b02d6c2",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 49,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6abb50d3000000001802ef82",
+        "noteCard": {
+          "noteId": "6abb50d3000000001802ef82",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 39,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ab8cd2b000000001b02de0c",
+        "noteCard": {
+          "noteId": "6ab8cd2b000000001b02de0c",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 14,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ab4d382000000001a0204ff",
+        "noteCard": {
+          "noteId": "6ab4d382000000001a0204ff",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 28,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6ab0be080000000036014149",
+        "noteCard": {
+          "noteId": "6ab0be080000000036014149",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 32,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6aae0615000000002803ae89",
+        "noteCard": {
+          "noteId": "6aae0615000000002803ae89",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 40,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6aab8fbf0000000012003926",
+        "noteCard": {
+          "noteId": "6aab8fbf0000000012003926",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 24,
+            "sticky": false
+          }
+        }
+      },
+      {
+        "id": "6aa8f514000000002901339c",
+        "noteCard": {
+          "noteId": "6aa8f514000000002901339c",
+          "type": "video",
+          "interactInfo": {
+            "likedCount": 35,
+            "sticky": false
+          }
+        }
+      }
+    ]
+  },
+  "observation": {
+    "active_tab": {
+      "index": 0,
+      "query": "note"
+    },
+    "dom_snapshot": {
+      "bounds": {
+        "bottom": 800.2,
+        "height": 1549,
+        "left": 164,
+        "right": 1280,
+        "top": -748.8,
+        "width": 1116
+      },
+      "node_count": 55,
+      "outside_tail": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "children": [
+                        {
+                          "children": [],
+                          "css_path": "div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1) > div.btn-wrapper:nth-of-type(1) > svg.reds-icon:nth-of-type(1) > use:nth-of-type(1)",
+                          "tag": "use",
+                          "visible": true
+                        }
+                      ],
+                      "css_path": "div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1) > div.btn-wrapper:nth-of-type(1) > svg.reds-icon:nth-of-type(1)",
+                      "tag": "svg",
+                      "visible": true
+                    }
+                  ],
+                  "css_path": "div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1) > div.btn-wrapper:nth-of-type(1)",
+                  "tag": "div",
+                  "visible": true
+                },
+                {
+                  "children": [
+                    {
+                      "children": [],
+                      "css_path": "div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1) > div.tip-container:nth-of-type(2) > span.tip-text:nth-of-type(1)",
+                      "tag": "span",
+                      "visible": false
+                    }
+                  ],
+                  "css_path": "div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1) > div.tip-container:nth-of-type(2)",
+                  "tag": "div",
+                  "visible": false
+                }
+              ],
+              "css_path": "div.main-container:nth-of-type(3) > div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4) > div.back-top.active:nth-of-type(1)",
+              "tag": "div",
+              "visible": true
+            }
+          ],
+          "css_path": "div.layout.ai-layout.limit:nth-of-type(1) > div.main-container:nth-of-type(3) > div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.floating-btn-sets:nth-of-type(4)",
+          "tag": "div",
+          "visible": true
+        }
+      ],
+      "schema": "xhs_profile_dom_snapshot_v1",
+      "tree": {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(1)",
+                        "href_path": "/user/profile/649070620000000012034448/6aeed7fb0000000010013469",
+                        "note_id": "6aeed7fb0000000010013469",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(2)",
+                        "href_path": "/user/profile/649070620000000012034448/6aeaa7620000000003009871",
+                        "note_id": "6aeaa7620000000003009871",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(3)",
+                        "href_path": "/user/profile/649070620000000012034448/6ae492000000000010010f1a",
+                        "note_id": "6ae492000000000010010f1a",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(4)",
+                        "href_path": "/user/profile/649070620000000012034448/6ae0cb54000000002a033234",
+                        "note_id": "6ae0cb54000000002a033234",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(5)",
+                        "href_path": "/user/profile/649070620000000012034448/6adb1877000000002c026cb2",
+                        "note_id": "6adb1877000000002c026cb2",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(6)",
+                        "href_path": "/user/profile/649070620000000012034448/6ad6ed190000000028038f4b",
+                        "note_id": "6ad6ed190000000028038f4b",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(7)",
+                        "href_path": "/user/profile/649070620000000012034448/6ad1d1b90000000014031457",
+                        "note_id": "6ad1d1b90000000014031457",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(8)",
+                        "href_path": "/user/profile/649070620000000012034448/6acec26700000000180295e2",
+                        "note_id": "6acec26700000000180295e2",
+                        "tag": "section",
+                        "visible": false
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(9)",
+                        "href_path": "/user/profile/649070620000000012034448/6acad68f00000000120393a4",
+                        "note_id": "6acad68f00000000120393a4",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 乌龙茶品鉴\nうさとらChannel\n18",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(10)",
+                        "href_path": "/user/profile/649070620000000012034448/6ac6db40000000001b02d54d",
+                        "note_id": "6ac6db40000000001b02d54d",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 逛超市\nうさとらChannel\n45",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(11)",
+                        "href_path": "/user/profile/649070620000000012034448/6ac319c700000000150095ba",
+                        "note_id": "6ac319c700000000150095ba",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 另类纳豆吃法\nうさとらChannel\n23",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(12)",
+                        "href_path": "/user/profile/649070620000000012034448/6abf14c0000000001b02d6c2",
+                        "note_id": "6abf14c0000000001b02d6c2",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 麻辣烫体验\nうさとらChannel\n49",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(13)",
+                        "href_path": "/user/profile/649070620000000012034448/6abb50d3000000001802ef82",
+                        "note_id": "6abb50d3000000001802ef82",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 甜甜圈店\nうさとらChannel\n39",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(14)",
+                        "href_path": "/user/profile/649070620000000012034448/6ab8cd2b000000001b02de0c",
+                        "note_id": "6ab8cd2b000000001b02de0c",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 疫苗接种\nうさとらChannel\n14",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(15)",
+                        "href_path": "/user/profile/649070620000000012034448/6ab4d382000000001a0204ff",
+                        "note_id": "6ab4d382000000001a0204ff",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常 迪士尼之行\nうさとらChannel\n28",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(16)",
+                        "href_path": "/user/profile/649070620000000012034448/6ab0be080000000036014149",
+                        "note_id": "6ab0be080000000036014149",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常生活 青岛之行\nうさとらChannel\n32",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(17)",
+                        "href_path": "/user/profile/649070620000000012034448/6aae0615000000002803ae89",
+                        "note_id": "6aae0615000000002803ae89",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常生活分享 小猫取名记\nうさとらChannel\n40",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(18)",
+                        "href_path": "/user/profile/649070620000000012034448/6aab8fbf0000000012003926",
+                        "note_id": "6aab8fbf0000000012003926",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常生活 成员分享\nうさとらChannel\n24",
+                        "visible": true
+                      },
+                      {
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(19)",
+                        "href_path": "/user/profile/649070620000000012034448/6aa8f514000000002901339c",
+                        "note_id": "6aa8f514000000002901339c",
+                        "tag": "section",
+                        "text": "日本女生在上海的日常生活分享频道 开播啦~\nうさとらChannel\n35",
+                        "visible": true
+                      }
+                    ],
+                    "css_path": "div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1)",
+                    "tag": "div",
+                    "visible": true
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "children": [
+                                      {
+                                        "children": [
+                                          {
+                                            "children": [],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(1) > rect:nth-of-type(1)",
+                                            "tag": "rect",
+                                            "visible": false
+                                          }
+                                        ],
+                                        "css_path": "div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(1)",
+                                        "tag": "clippath",
+                                        "visible": false
+                                      },
+                                      {
+                                        "children": [
+                                          {
+                                            "children": [],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(2) > path:nth-of-type(1)",
+                                            "tag": "path",
+                                            "visible": false
+                                          }
+                                        ],
+                                        "css_path": "div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(2)",
+                                        "tag": "clippath",
+                                        "visible": false
+                                      },
+                                      {
+                                        "children": [
+                                          {
+                                            "children": [],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(3) > path:nth-of-type(1)",
+                                            "tag": "path",
+                                            "visible": false
+                                          }
+                                        ],
+                                        "css_path": "div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(3)",
+                                        "tag": "clippath",
+                                        "visible": false
+                                      },
+                                      {
+                                        "children": [
+                                          {
+                                            "children": [],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(4) > path:nth-of-type(1)",
+                                            "tag": "path",
+                                            "visible": false
+                                          }
+                                        ],
+                                        "css_path": "div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1) > clippath:nth-of-type(4)",
+                                        "tag": "clippath",
+                                        "visible": false
+                                      }
+                                    ],
+                                    "css_path": "div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > defs:nth-of-type(1)",
+                                    "tag": "defs",
+                                    "visible": false
+                                  },
+                                  {
+                                    "children": [
+                                      {
+                                        "children": [
+                                          {
+                                            "children": [
+                                              {
+                                                "children": [
+                                                  {
+                                                    "children": [
+                                                      {
+                                                        "children": [],
+                                                        "css_path": "g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > path:nth-of-type(1)",
+                                                        "tag": "path",
+                                                        "visible": false
+                                                      }
+                                                    ],
+                                                    "css_path": "g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1)",
+                                                    "tag": "g",
+                                                    "visible": false
+                                                  }
+                                                ],
+                                                "css_path": "svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1)",
+                                                "tag": "g",
+                                                "visible": false
+                                              }
+                                            ],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1)",
+                                            "tag": "g",
+                                            "visible": false
+                                          },
+                                          {
+                                            "children": [
+                                              {
+                                                "children": [
+                                                  {
+                                                    "children": [
+                                                      {
+                                                        "children": [],
+                                                        "css_path": "g:nth-of-type(1) > g:nth-of-type(2) > g:nth-of-type(1) > g:nth-of-type(1) > path:nth-of-type(1)",
+                                                        "tag": "path",
+                                                        "visible": false
+                                                      }
+                                                    ],
+                                                    "css_path": "g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(2) > g:nth-of-type(1) > g:nth-of-type(1)",
+                                                    "tag": "g",
+                                                    "visible": false
+                                                  }
+                                                ],
+                                                "css_path": "svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(2) > g:nth-of-type(1)",
+                                                "tag": "g",
+                                                "visible": false
+                                              }
+                                            ],
+                                            "css_path": "div.animate:nth-of-type(1) > svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(2)",
+                                            "tag": "g",
+                                            "visible": false
+                                          }
+                                        ],
+                                        "css_path": "div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1)",
+                                        "tag": "g",
+                                        "visible": false
+                                      }
+                                    ],
+                                    "css_path": "div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1) > g:nth-of-type(1)",
+                                    "tag": "g",
+                                    "visible": false
+                                  }
+                                ],
+                                "css_path": "div.tab-content-item:nth-of-type(1) > div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1) > svg:nth-of-type(1)",
+                                "tag": "svg",
+                                "visible": false
+                              }
+                            ],
+                            "css_path": "div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1) > div.animate:nth-of-type(1)",
+                            "tag": "div",
+                            "visible": false
+                          },
+                          {
+                            "children": [],
+                            "css_path": "div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1) > span:nth-of-type(1)",
+                            "tag": "span",
+                            "visible": false
+                          }
+                        ],
+                        "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.loading:nth-of-type(2) > div.feeds-loading:nth-of-type(1)",
+                        "tag": "div",
+                        "visible": false
+                      }
+                    ],
+                    "css_path": "div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.loading:nth-of-type(2)",
+                    "tag": "div",
+                    "visible": true
+                  }
+                ],
+                "css_path": "div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1)",
+                "tag": "div",
+                "visible": true
+              },
+              {
+                "css_path": "div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item.static-layout:nth-of-type(2)",
+                "inactive_tab": true,
+                "tag": "div",
+                "visible": false
+              }
+            ],
+            "css_path": "div.main-container:nth-of-type(3) > div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1)",
+            "tag": "div",
+            "visible": true
+          }
+        ],
+        "css_path": "div.layout.ai-layout.limit:nth-of-type(1) > div.main-container:nth-of-type(3) > div.with-side-bar.main-content:nth-of-type(2) > div.ai-mode.user-page:nth-of-type(1) > div.feeds-tab-container:nth-of-type(3)",
+        "tag": "div",
+        "visible": true
+      },
+      "truncated": false
+    },
+    "identified_card_count": 19,
+    "last_card": {
+      "css_path": "div.feeds-tab-container:nth-of-type(3) > div.transform-container:nth-of-type(1) > div.tab-content-item:nth-of-type(1) > div.feeds-container:nth-of-type(1) > section.note-item:nth-of-type(19)",
+      "href_path": "/user/profile/649070620000000012034448/6aa8f514000000002901339c",
+      "note_id": "6aa8f514000000002901339c",
+      "visible": true
+    },
+    "loading_nodes": [],
+    "policy": "observed_terminal_v1",
+    "profile_uid_matches": true,
+    "schema": "xhs_profile_end_observation_v1",
+    "state_loading": {},
+    "tail_nodes": [],
+    "terminal_decision": "unverified",
+    "visible_identified_card_count": 11
+  },
+  "cards": [
+    {
+      "note_id": "6aeed7fb0000000010013469",
+      "like_count": 10,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 0
+    },
+    {
+      "note_id": "6aeaa7620000000003009871",
+      "like_count": 21,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 1
+    },
+    {
+      "note_id": "6ae492000000000010010f1a",
+      "like_count": 19,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 2
+    },
+    {
+      "note_id": "6ae0cb54000000002a033234",
+      "like_count": 8,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 3
+    },
+    {
+      "note_id": "6adb1877000000002c026cb2",
+      "like_count": 13,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 4
+    },
+    {
+      "note_id": "6ad6ed190000000028038f4b",
+      "like_count": 12,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 5
+    },
+    {
+      "note_id": "6ad1d1b90000000014031457",
+      "like_count": 39,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 6
+    },
+    {
+      "note_id": "6acec26700000000180295e2",
+      "like_count": 14,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 7
+    },
+    {
+      "note_id": "6acad68f00000000120393a4",
+      "like_count": 18,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 8
+    },
+    {
+      "note_id": "6ac6db40000000001b02d54d",
+      "like_count": 45,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 9
+    },
+    {
+      "note_id": "6ac319c700000000150095ba",
+      "like_count": 23,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 10
+    },
+    {
+      "note_id": "6abf14c0000000001b02d6c2",
+      "like_count": 49,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 11
+    },
+    {
+      "note_id": "6abb50d3000000001802ef82",
+      "like_count": 39,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 12
+    },
+    {
+      "note_id": "6ab8cd2b000000001b02de0c",
+      "like_count": 14,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 13
+    },
+    {
+      "note_id": "6ab4d382000000001a0204ff",
+      "like_count": 28,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 14
+    },
+    {
+      "note_id": "6ab0be080000000036014149",
+      "like_count": 32,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 15
+    },
+    {
+      "note_id": "6aae0615000000002803ae89",
+      "like_count": 40,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 16
+    },
+    {
+      "note_id": "6aab8fbf0000000012003926",
+      "like_count": 24,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 17
+    },
+    {
+      "note_id": "6aa8f514000000002901339c",
+      "like_count": 35,
+      "is_pinned": false,
+      "note_type": "video",
+      "index": 18
+    }
+  ]
+}
