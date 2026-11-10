@@ -44,3 +44,16 @@ test('XHS resume tolerates page hydration but rechecks its lease before every po
  assert.deepEqual(await a.resume(),{authenticated:true});assert.equal(reads,2);
  reads=0;let guards=0;await assert.rejects(a.resume({guard(){if(++guards===3)throw Object.assign(Error('LEASE_LOST'),{code:'LEASE_LOST'});}}),{code:'LEASE_LOST'});assert.equal(reads,1);
 });
+
+// A caller budget error must settle this request, not take a shared browser down.
+test('INVALID_BUDGET is an item failure and leaves Web eligible for the next request',async t=>{
+ const {Readable}=require('node:stream'),{LocalWorker}=require('../service/worker');
+ const s=new Store(':memory:');t.after(()=>s.close());s.register({id:'web:xhs:default',kind:'web',capabilities:[{platform:'xiaohongshu',operation:'post.detail'}]});
+ const adapter=new XhsWebAdapter();adapter.ensure=async()=>({});adapter.close=async()=>{};
+ adapter.request=async()=>Readable.from([JSON.stringify({success:false,error:'INVALID_BUDGET'})+'\n']);
+ const input={schema_version:'crawler.request.v1',idempotency_key:'invalid-budget',platform:'xiaohongshu',operation:'post.detail',targets:[{post_id:'a'.repeat(24)}],routing:{kinds:['web']},params:{native_request:{comments:true,target:201,seconds:300,comment_mode:'limited_lazy_load_on_scroll',comment_lazy_load_limit:2}}};
+ const request=s.submit(input),worker=new LocalWorker(s,new Map([['web:xhs:default',adapter]]));worker.dispatch();await Promise.all(worker.active.values());
+ assert.equal(s.request(request.id).state,'failed');assert.equal(s.request(request.id).units[0].error.scope,'item');
+ assert.equal(s.devices()[0].health,'ready');assert.deepEqual(s.devices()[0].faults,{});assert.equal(s.devices()[0].owner,null);
+ s.submit({...input,idempotency_key:'next-valid',params:{native_request:{comments:false,target:50,seconds:45}}});assert.ok(s.claim());
+});

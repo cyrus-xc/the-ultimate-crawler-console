@@ -52,7 +52,7 @@ class XhsWebAdapter{
      const reply=await this.request(session,'/share-decision',{decision_id:event.decision_id,note_id:event.note_id,capture},ctx.signal);for await(const _ of reply){}
      continue;
     }
-    if(!event.success)throw error(/^[A-Z][A-Z0-9_]+$/.test(event.error)?event.error:'XHS_READ_FAILED',/LOGIN|CAPTCHA|VERIFICATION|ACCOUNT/.test(event.error)?'platform':'device');
+    if(!event.success)throw error(/^[A-Z][A-Z0-9_]+$/.test(event.error)?event.error:'XHS_READ_FAILED',event.error==='INVALID_BUDGET'?'item':/LOGIN|CAPTCHA|VERIFICATION|ACCOUNT/.test(event.error)?'platform':'device');
     final=true;ctx.commit({items:[{key:'result',value:{phase:'result',data:event.data,observed_at:new Date().toISOString()}}],checkpoint:checkpoint(ctx,this.version,seen)});await ctx.waitForDecision();
    }
    if(!final)throw error('XHS_RESULT_MISSING');

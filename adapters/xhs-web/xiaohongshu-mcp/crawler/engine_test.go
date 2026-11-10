@@ -2,8 +2,10 @@ package crawler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/xpzouying/xiaohongshu-mcp/xiaohongshu"
@@ -148,5 +150,35 @@ func TestGuestPageEmptySearchIsALoginWall(t *testing.T) {
 	got, err = guestOutcome("search", map[string]any{"stop_reason": "unconfirmed_empty"}, "")
 	if err != nil || got["guest_session"] != nil {
 		t.Fatalf("an unknown session state decides nothing: %v %v", got, err)
+	}
+}
+
+func TestR2BoundedCommentsBudgetAcrossAdapter(t *testing.T) {
+	script := `const {nativeRequest}=require('./adapter');process.stdout.write(JSON.stringify(nativeRequest({target:{post_id:'a'.repeat(24)},payload:{platform:'xiaohongshu',operation:'post.detail',params:{native_request:{kind:'detail',id:'a'.repeat(24),comments:true,target:200,seconds:300,comment_mode:'limited_lazy_load_on_scroll',comment_lazy_load_limit:2}},limits:{max_pages:1000,execution_timeout_seconds:600},cache:{mode:'refresh'}}})));`
+	command := exec.Command("node", "-e", script)
+	command.Dir = "../.."
+	data, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request Request
+	if err = json.Unmarshal(data, &request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Target != 200 || request.Seconds != 300 || !request.Comments || request.CommentMode != LimitedLazyLoadOnScroll {
+		t.Fatalf("R2 budget changed: %+v", request)
+	}
+	if err = request.Validate(); err != nil {
+		t.Fatalf("valid R2 comments rejected: %v", err)
+	}
+	request.Target = 201
+	if err = request.Validate(); err == nil {
+		t.Fatal("unbounded comment target accepted")
+	}
+	request.Target = 200
+	request.CommentMode = "sample"
+	request.Seconds = 45
+	if err = request.Validate(); err == nil {
+		t.Fatal("ordinary sample inherited the R2 target")
 	}
 }

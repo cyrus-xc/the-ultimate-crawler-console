@@ -35,7 +35,7 @@ type Request struct {
 	Keyword        string   `json:"keyword,omitempty" jsonschema:"Search keyword"`
 	Token          string   `json:"xsec_token,omitempty" jsonschema:"Private web access context"`
 	UserID         string   `json:"user_id,omitempty" jsonschema:"Known note author, used only for tab routing"`
-	Target         int      `json:"target,omitempty" jsonschema:"Card or parent comment target, 1 to 100"`
+	Target         int      `json:"target,omitempty" jsonschema:"Card or parent comment target, 1 to 100; bounded comments up to 200"`
 	Seconds        int      `json:"seconds,omitempty" jsonschema:"Comment time budget: sample 1..90, limited_lazy_load_on_scroll 1..1800 seconds"`
 	Comments       bool     `json:"comments,omitempty" jsonschema:"Load parent comments and replies"`
 	CommentMode    string   `json:"comment_mode,omitempty" jsonschema:"sample or limited_lazy_load_on_scroll (bounded scroll-triggered lazy loading)"`
@@ -115,6 +115,7 @@ func (r Request) Validate() error {
 			return errors.New("INVALID_COMMENTS")
 		}
 		maxSeconds = 1800
+		maxTarget = 200
 	}
 	if r.CommentLazyLoadLimit < 0 || r.CommentLazyLoadLimit > 20 {
 		return errors.New("INVALID_COMMENTS")
