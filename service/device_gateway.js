@@ -80,14 +80,21 @@ class DeviceGateway {
       token TEXT NOT NULL, generation INTEGER NOT NULL, gateway_id TEXT NOT NULL,
       gateway_pid INTEGER NOT NULL, pid INTEGER, state TEXT NOT NULL, started INTEGER NOT NULL
     )`);
-    // A previous process may have lost its ADB client without stopping Android's
-    // remote shell. Never infer remote completion from local child exit alone.
-    this.recoveryRequired=!!store.db.prepare('SELECT 1 FROM device_commands LIMIT 1').get() ||
-      !!store.db.prepare("SELECT 1 FROM devices WHERE kind='android' AND quarantined=1 LIMIT 1").get();
+    // Quarantine and commands are the durable recovery owner. A failure to
+    // persist either is separately retained until this device is explicitly
+    // recovered with stopped-input proof; an empty database cannot erase it.
+    this.recoveryFaults=new Set();this.closedRecovery=false;
   }
   requiresRecovery() {
-    return this.recoveryRequired || !!this.store.db.prepare('SELECT 1 FROM device_commands LIMIT 1').get() ||
+    return this.closedRecovery || this.active.size>0 || this.recoveryFaults.size>0 ||
+      !!this.store.db.prepare('SELECT 1 FROM device_commands LIMIT 1').get() ||
       !!this.store.db.prepare("SELECT 1 FROM devices WHERE kind='android' AND quarantined=1 LIMIT 1").get();
+  }
+  // Local supervisor only, after independently proving input has stopped.
+  recoverDevice(id,proof={}) {
+    if(this.active.size)throw problem('WORKER_STOP_REQUIRED',409);
+    this.store.recoverDevice(id,proof);
+    this.recoveryFaults.delete(id);
   }
   assert(lease, {cleanup=false}={}) {
     this.beforeCommand();
@@ -166,8 +173,9 @@ class DeviceGateway {
     const abort=reason=>{
       if(!failure)failure=reason;
       if(child && !stopping && !closed){
-        stopping=true;this.recoveryRequired=true;
+        stopping=true;this.recoveryFaults.add(device.id);
         quarantine();this.store.db.prepare("UPDATE device_commands SET state='stopping' WHERE command_id=?").run(commandId);
+        this.recoveryFaults.delete(device.id); // Both durable barriers landed.
         child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),this.killGraceMs);
       }
     };
@@ -223,6 +231,9 @@ class DeviceGateway {
     return this.store.tx(()=>{
       const current=this.status(deviceId);
       if(!current || current.command_id!==commandId)throw problem('DEVICE_COMMAND_NOT_FOUND',404);
+      // Confirming one orphan command stopped is not device recovery. Retain
+      // that uncertainty until the trusted device recovery succeeds too.
+      this.recoveryFaults.add(deviceId);
       this.store.db.prepare('DELETE FROM device_commands WHERE device_id=? AND command_id=?').run(deviceId,commandId);
       // Quarantine remains until the supervisor explicitly recovers the device.
     });
@@ -231,6 +242,8 @@ class DeviceGateway {
     this.closing=true;
     for(const active of this.active.values())active.abort(problem('GATEWAY_CLOSED',503));
     await Promise.allSettled([...this.tails.values()]);
+    // The owner closes SQLite after drain; retain an unsafe shutdown verdict.
+    this.closedRecovery=this.requiresRecovery();
   }
 }
 module.exports={DeviceGateway,validateCommand};
