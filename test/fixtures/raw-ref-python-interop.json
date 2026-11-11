@@ -1,0 +1,23 @@
+{
+  "body_base64": "eyJ6IjoxZS03LCLmlociOiLwn42cIiwiYSI6MS4wLCJuZXN0ZWQiOnsiYS9iIjpbMCxmYWxzZSxudWxsXX19",
+  "observation": {
+    "platform": "xiaohongshu",
+    "kind": "post.detail",
+    "subject": {
+      "note_id": "note"
+    },
+    "observed_at": "2026-10-01T00:00:00+00:00",
+    "source": {
+      "provider": "crawler_queue",
+      "request_id": "request"
+    },
+    "outcome": "success"
+  },
+  "raw_ref": {
+    "schema": "raw_ref.v1",
+    "sha256": "036fba49002b77fdcded8e720dd38588a64b97e601bc5b6083c154e8a1c98b9c",
+    "observation_id": "cc6e98836de81a076d81dc4555c374ea61879f7b30ae6d2931e558fff17bdbc5",
+    "pointer": ""
+  },
+  "selected": 0
+}

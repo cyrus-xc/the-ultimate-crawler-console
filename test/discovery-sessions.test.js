@@ -41,7 +41,7 @@ test('only returned IDs, at most ten; details share same fenced lease and reques
  const {sessions,store,calls}=setup(t);const r=await sessions.open(request);
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:[id(30)]}),{code:'INVALID_DISCOVERY_SELECTION'});
  await assert.rejects(sessions.complete(r.session_id,{selected_ids:Array.from({length:11},(_,i)=>id(i+1))}),{code:'INVALID_DISCOVERY_SELECTION'});
- const done=await sessions.complete(r.session_id,{selected_ids:[id(1)]});assert.equal(done.details[0].data.raw.note.desc,'real body');assert.equal(store.devices()[0].owner,null);assert.equal(calls.find(c=>c.operation==='post.detail').params.native_request.capture_share,true);
+ const done=await sessions.complete(r.session_id,{selected_ids:[id(1)]});assert.equal(store.rawEvidence.readJson(done.details[0].data.raw_ref).note.desc,'real body');assert.equal(store.devices()[0].owner,null);assert.equal(calls.find(c=>c.operation==='post.detail').params.native_request.capture_share,true);
 });
 test('date boundary probes use cached ordered indices and return only inclusive range',async t=>{
  const {sessions,calls}=setup(t,{missingDates:true});const r=await sessions.open({schema_version:request.schema_version,platform:request.platform,user_id:user,mode:'date',startdate:new Date(base-8*day).toISOString(),enddate:new Date(base-3*day).toISOString()});
@@ -157,5 +157,5 @@ test('unavailable phone comment capability leaves session available for empty co
 test('phone comments keep capped coverage incomplete and preserve page evidence',async t=>{
  const {sessions,store}=setup(t,{kind:'android'});store.register({id:'web:xhs:default',kind:'android',serial:'fixture',capabilities:['profile.posts','post.detail','post.comments'].map(operation=>({platform:'xiaohongshu',operation}))});
  const adapter=sessions.adapters.get('web:xhs:default'),execute=adapter.execute;adapter.execute=ctx=>ctx.claim.payload.operation==='post.comments'?ctx.commit({items:[{value:{phase:'result',data:{raw:{comments:{list:[{id:'one',content:'real'}]}},end_observed:false,stop_reason:'native_page_limit',native_evidence:[{operation:'comments'}]}}}]}):execute(ctx);
- const r=await sessions.open(request),done=await sessions.complete(r.session_id,{selected_ids:[id(1)],comments:true});assert.equal(done.details[0].data.raw.comments.list[0].content,'real');assert.equal(done.details[0].data.comments_complete,false);assert.equal(done.details[0].data.stop_reason,'native_page_limit');assert.equal(done.details[0].data.end_observed,false);assert.equal(done.details[0].data.comment_evidence.length,1);
+ const r=await sessions.open(request),done=await sessions.complete(r.session_id,{selected_ids:[id(1)],comments:true});assert.equal(store.rawEvidence.readJson(done.details[0].data.comment_evidence[0].raw_ref).comments.list[0].content,'real');assert.equal(done.details[0].data.comments_complete,false);assert.equal(done.details[0].data.stop_reason,'native_page_limit');assert.equal(done.details[0].data.end_observed,false);assert.equal(done.details[0].data.comment_evidence.length,1);
 });

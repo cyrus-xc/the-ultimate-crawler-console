@@ -3,10 +3,13 @@ const Database = require('better-sqlite3');
 const {randomUUID} = require('node:crypto');
 const {normalize,digest,canonical,problem,parallelism,identifier,OPERATIONS} = require('./contract');
 const TERMINAL = new Set(['succeeded','partial','failed','cancelled']);
+const {RawEvidenceStore}=require('./raw_evidence');
+const {persistResult}=require('./result_evidence');
 const parse = value => value == null ? null : JSON.parse(value);
 class Store {
-  constructor(filename=':memory:', {now=Date.now,leaseMs=30000}={}) {
-    this.now=now; this.leaseMs=leaseMs; this.db=new Database(filename);
+  constructor(filename=':memory:', {now=Date.now,leaseMs=30000,rawEvidence=new RawEvidenceStore()}={}) {
+    require('./raw_migration').assertReadable(filename,rawEvidence);
+    this.now=now; this.leaseMs=leaseMs; this.rawEvidence=rawEvidence; this.db=new Database(filename);
     if(this.db.pragma('user_version',{simple:true})>4){this.db.close();throw problem('DATABASE_VERSION_UNSUPPORTED',500);}
     this.db.pragma('journal_mode = WAL'); this.db.pragma('foreign_keys = ON'); this.db.pragma('busy_timeout = 5000');
     this.db.exec(`
@@ -217,8 +220,13 @@ class Store {
       if(this.db.prepare('SELECT state FROM units WHERE id=?').get(claim.unit_id).state==='waiting_decision')throw problem('BUSINESS_DECISION_REQUIRED',409);
       if(!Array.isArray(items) || items.some(i=>!identifier(i.key)||!i.value||typeof i.value!=='object'))throw problem('INVALID_RESULTS');
       // First committed evidence wins; later attempts cannot change observation clocks.
-      for(const item of items)this.db.prepare('INSERT OR IGNORE INTO results(request_id,unit_id,item_key,payload,attempt_id) VALUES (?,?,?,?,?)')
-        .run(claim.request_id,claim.unit_id,item.key,canonical(item.value),claim.attempt_id);
+      for(const item of items){
+        if(this.db.prepare('SELECT 1 FROM results WHERE unit_id=? AND item_key=?').get(claim.unit_id,item.key))continue;
+        const value=persistResult(this.rawEvidence,claim,item.value);
+        this.active(claim); // Archive I/O cannot extend a fenced execution lease.
+        this.db.prepare('INSERT INTO results(request_id,unit_id,item_key,payload,attempt_id) VALUES (?,?,?,?,?)')
+          .run(claim.request_id,claim.unit_id,item.key,canonical(value),claim.attempt_id);
+      }
       this.db.prepare('UPDATE units SET checkpoint=? WHERE id=?').run(canonical(checkpoint),claim.unit_id);
       this.event(claim.request_id,'unit.checkpoint',{unit_id:claim.unit_id,attempt_id:claim.attempt_id,count:items.length});
       if(done){this.db.prepare("UPDATE units SET state='succeeded',error=NULL WHERE id=?").run(claim.unit_id);this.finish(claim,'succeeded');}

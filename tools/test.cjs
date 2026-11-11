@@ -2,7 +2,9 @@
 const {spawnSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');
-const env={...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0'};
+const evidence=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'crawler-test-raw-'));
+process.on('exit',()=>fs.rmSync(evidence,{recursive:true,force:true}));
+const env={...process.env,ENABLE_TIKHUB_NETWORK:'0',ENABLE_LLM_NETWORK:'0',XHS_RAW_EVIDENCE_ROOT:evidence,XHS_RAW_EVIDENCE_MOUNT:''};
 const files=fs.readdirSync(path.join(root,'test')).filter(f=>f.endsWith('.test.js')).sort().map(f=>'test/'+f);
 const node=spawnSync(process.execPath,['--test',...files],{cwd:root,env,stdio:'inherit'});
 if(node.status!==0)process.exit(node.status||1);

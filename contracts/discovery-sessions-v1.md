@@ -70,7 +70,7 @@ abbreviated values are not guessed as zero. `eligible_count` is returned-card co
 `excluded_pinned_count` counts observed pins excluded from a count request.
 
 The response also includes `profile: null` or the observed envelope
-`{profile: raw.profile, profile_user_id, native_profile?}`. Only an actually
+`{profile_user_id, profile_ref, raw_ref?/response_ref?, native_profile_ref?, observed_at}`. The profile fragment and every card’s `raw_ref` address the same original response objects; `raw_refs` retains every first-round response observation. Consumers explicitly read only the fragments needed for normalization. Only an actually
 returned, identity-matched profile header is exposed. No extra header operation
 is added to phone discovery; its profile can be null.
 
@@ -115,12 +115,12 @@ Missing, zero, fractional or string totals, unsuccessful profiles, wrong scope,
 loading, truncated observations and count mismatches remain unverified. Neither
 few cards, no growth, viewport geometry nor another page's “THE END” proves end.
 
-The observation contains only the current-profile UID match, active tab index and
+The archived observation contains only the current-profile UID match, active tab index and
 allowlisted tab kind, identified/visible card counts, the last identified card's
 note ID and bounded CSS path, up to six visible tail text/path candidates, bounded
 semantic loading-node paths, and boolean loading-state fields. It emits no page
 URL, raw response, authentication data, or arbitrary application state. Text URLs
-and token assignments are redacted before return. DOM failure is represented by a
+and token assignments are redacted before archival. DOM failure is represented by a
 bounded `unavailable_reason`; it does not retry collection or assert completion.
 
 The same evaluation also retains `dom_snapshot` (`xhs_profile_dom_snapshot_v1`)
@@ -180,8 +180,8 @@ to callers (CampaignWatch continues selecting at most three).
 two, also independently available as queued `post.detail`.
 
 Response: `{session_id,state:"completed",details:[{note_id,data}],released:true}`.
-`data` is the existing adapter detail data envelope (raw note plus observation
-and share evidence). Android also returns `navigation`, containing only observed
+`data` retains adapter observation/share/coverage fields and the verified original
+body references described below; complete platform bodies are not embedded. Android also returns `navigation`, containing only observed
 action/index/identity-check metadata. `native_operation` distinguishes the actual
 image_detail or video_detail response format; the latter uses the observed
 rec.xiaohongshu.com videofeed contract and direct data array. It is not LLM content. A repeated identical successful
@@ -197,3 +197,17 @@ Sessions are service-process scoped, not durable resume jobs. A service crash
 leaves its persisted lease to expire and quarantine under the existing supervisor
 protocol. It never resumes input from stale in-memory session IDs. A cleanup or
 stop timeout quarantines instead of falsely declaring the device released.
+
+
+Original responses from both discovery rounds follow the shared [raw reference
+contract](README.md#durable-original-response-references). The session still uses
+the current in-memory evidence for dates and selection; archival does not open
+a nested queue request or repeat a platform read. Completed detail `data` uses
+the same thin Web/native references as queued results. Native comment pages
+retain their separate references and actual coverage metadata.
+
+The complete DOM observation is an independent immutable object of kind
+`profile.end.observation`. Its returned header retains `schema`, `policy`,
+`terminal_decision`, observed `terminal_evidence`, optional unavailable/truncated
+flags and `raw_ref`; the full DOM tree is read explicitly for audit. The sampling
+end/coverage fields keep their existing meaning.
