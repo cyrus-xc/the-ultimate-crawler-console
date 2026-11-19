@@ -226,7 +226,20 @@ test('discovery detail taps once and leaves the note open for its pending commen
  f.worker.dispatch();await Promise.all(f.worker.active.values());
  assert.equal(f.store.request(f.request.id).state,'succeeded');
  assert.equal(discovery.openNoteId,id(1));
+ assert.equal(f.captures[0].values.observe_initial_comments,true);
  assert.deepEqual(f.events,['card','drain','close','drain']);
+});
+
+test('discovery uses the comment page observed when the card opened',async t=>{
+ const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});
+ f.consumer.navFactory=()=>({comments:async()=>f.events.push('comments'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
+ const discovery={openNoteId:id(1),initialComments:{operation:'comments',captured_at_ms:2000,response:{data:{comments:[{id:'c1',content:'observed'}],has_more:false}}}};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.request(f.request.id).state,'succeeded');
+ assert.equal(f.store.results(f.request.id)[0].payload.data.raw.comments.list[0].id,'c1');
+ assert.equal(f.captures.length,0);assert.equal(discovery.initialComments,null);
+ assert.deepEqual(f.events,['back','profile-confirmed','drain','close','drain']);
 });
 
 test('discovery comment drawer permits one additional verified Back',async t=>{

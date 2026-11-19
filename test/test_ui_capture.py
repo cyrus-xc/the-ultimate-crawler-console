@@ -33,6 +33,32 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(result['response']['data'][0]['note_list'][0]['title'],'raw interface body')
         self.assertEqual(result['trigger'],'ui');self.assertEqual(result['transport_evidence']['classification'],'unknown')
         self.assertTrue(session.scripts[0].unloaded)
+    def test_detail_keeps_only_the_exact_first_comments_from_the_same_tap(self):
+        session=Session()
+        capture=UiResponseCapture(session,clock_ms=lambda:3)
+        comments={**CONTRACT,'path':'/api/sns/v5/note/comment/list'}
+
+        def page(*, request_id=N, body_id=N, cursor='', at=3):
+            return {'event':'response_json','at':at,'request':{'method':'GET','host':'example.test','path':comments['path'],
+                    'query':[{'name':'note_id','value':request_id},{'name':'start','value':cursor}]},
+                    'status':200,'body':{'code':0,'success':True,'data':{'comments':[{'id':'comment','note_id':body_id}],'has_more':False}},'transport':{}}
+
+        def tap():
+            observer=session.scripts[-1]
+            observer.emit(page(at=2))
+            observer.emit(page(request_id='b'*24))
+            observer.emit(page(body_id='b'*24))
+            observer.emit(page(cursor='later'))
+            observer.emit(wire(at=3))
+            observer.emit(page())
+
+        result=capture.read('image_detail',CONTRACT,{'note_id':N},tap,related_contracts={'comments':comments})
+        comment=result['related']['comments']
+        self.assertEqual(comment['response']['data']['comments'],[{'id':'comment','note_id':N}])
+        self.assertEqual(comment['request']['query'][1]['value'],'')
+        self.assertEqual(comment['captured_at_ms'],3)
+        self.assertEqual(len(session.scripts),1)
+
     def test_unrelated_response_is_not_accepted(self):
         session=Session();capture=UiResponseCapture(session,clock_ms=lambda:2)
         with self.assertRaisesRegex(CaptureError,'CAPTURE_TIMEOUT'):

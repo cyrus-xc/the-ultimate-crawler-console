@@ -83,6 +83,14 @@ class PhoneConsumer {
   const runtime=this.runtimeFactory(adb,cleanup),nav=this.navFactory(adb,()=>context.guard());
   let failureCaught;
   try{
+   const restoreDiscoveryProfile=async()=>{
+    await nav.back();
+    try{await nav.assertDiscoveryProfile(context.discovery);}catch(error){
+     if(error.code!=='PROFILE_RESTORE_UNCONFIRMED')throw error;
+     await nav.back();await nav.assertDiscoveryProfile(context.discovery);
+    }
+    context.discovery.openNoteId=null;context.discovery.initialComments=null;
+   };
    const heldNote=!!context.discovery&&['post.detail','post.comments'].includes(operation);
    let session=await runtime.ensure({foregroundOnly:heldNote});context.guard();
    let attachmentRestarted=false;
@@ -120,6 +128,8 @@ class PhoneConsumer {
    }
    // UI cannot inject saved opaque cursors. Each new attempt navigates to the
    // entry and replays, deduplicating already committed IDs on either device.
+   const initialCommentPage=operation==='post.comments'&&context.discovery?.openNoteId===claim.target.post_id
+    ?context.discovery.initialComments:null;
    for(let page=0;page<limits.max_pages;page++){
     context.guard();let trigger,values;
     if(operation==='search.posts'){
@@ -136,7 +146,7 @@ class PhoneConsumer {
       await nav.nextPage(control?.responseReady,{maxSwipes:restoring?Math.min(12*(pages+1),120):12,guard:control?.guard});
      };
     }
-    else if(operation==='post.detail'){values={note_id:claim.target.post_id};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
+    else if(operation==='post.detail'){values={note_id:claim.target.post_id,...(context.discovery?.readComments?{observe_initial_comments:true}:{})};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
     else if(operation==='post.comments'){
      values={note_id:claim.target.post_id,...(page===0?{start:''}:lastCursor?.cursor?{start:lastCursor.cursor}:{})};
      if(page===0){trigger=async()=>{
@@ -144,15 +154,25 @@ class PhoneConsumer {
        if(context.discovery.openNoteId!==claim.target.post_id)throw failure('DISCOVERY_NOTE_NOT_OPEN','item');
       }else{await nav.openNote(claim.target.post_id);await adb.wait(500);}
       await nav.comments();
-     };}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
+     };}else trigger=async control=>{
+      if(page===1&&initialCommentPage)await nav.comments();
+      await nav.nextPage(control?.responseReady,{guard:control?.guard});
+     };
     }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady,{guard:control?.guard});}
     let result;
-    try{result=page===0&&operation==='profile.posts'&&initialProfilePage?initialProfilePage:await capture(NATIVE[operation],values,trigger);}
+    try{
+     if(page===0&&operation==='profile.posts'&&initialProfilePage)result=initialProfilePage;
+     else if(page===0&&initialCommentPage)result=initialCommentPage;
+     else result=await capture(NATIVE[operation],values,trigger);
+    }
     catch(error){
      if(operation==='post.comments'&&error.code==='PHONE_PAGE_RESPONSE_UNOBSERVED'&&lastCommentPage&&seen.size>0){
       const partial={...lastCommentPage,data:{...lastCommentPage.data,raw:{comments:{list:[]}},end_observed:false,comments_complete:false,comment_error:error.code,stop_reason:'phone_page_response_unobserved'}};
       context.commit({items:[{key:'post.comments:partial:'+claim.target.post_id,value:partial}],checkpoint:lastCommentCheckpoint});
       await context.waitForDecision();break;
+     }
+     if(operation==='post.comments'&&context.discovery&&['CAPTURE_TIMEOUT','PHONE_PAGE_RESPONSE_UNOBSERVED'].includes(error.code)){
+      await restoreDiscoveryProfile();error.discoveryProfileRestored=true;throw error;
      }
      // A warm profile may satisfy navigation from App cache without exposing a
      // first-page response. One ordinary restart refreshes it; never use this
@@ -164,7 +184,10 @@ class PhoneConsumer {
     }
     if(operation==='search.posts'&&page===0)nav.confirmSortResponse(result.effective_sort);
     if(operation==='post.detail'&&context.discovery){
-     if(context.discovery.readComments)context.discovery.openNoteId=claim.target.post_id;
+     if(context.discovery.readComments){
+      context.discovery.openNoteId=claim.target.post_id;
+      context.discovery.initialComments=result.related?.comments??null;
+     }
      else{await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
     }
     const {value,captures}=combinedEnvelope(result,operation,claim.target);value.phase='result';lastCursor=observedCursor(captures.at(-1));
@@ -223,11 +246,7 @@ class PhoneConsumer {
     if(beforeSince)break;
     if(noGrowth>=2)throw failure('PHONE_PAGINATION_STALLED','device');
    }
-   if(operation==='post.comments'&&context.discovery){
-    await nav.back();
-    try{await nav.assertDiscoveryProfile(context.discovery);}catch(error){if(error.code!=='PROFILE_RESTORE_UNCONFIRMED')throw error;await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
-    context.discovery.openNoteId=null;
-   }
+   if(operation==='post.comments'&&context.discovery)await restoreDiscoveryProfile();
   }catch(error){failureCaught=error;if(['ACCOUNT_REQUIRED','LOGIN_OR_VERIFICATION_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','APP_VERSION_MISMATCH'].includes(error.code))error.scope='platform';throw error;}
   finally{
    try{await this.gateway.drain(claim.lease);await runtime.close();await this.gateway.drain(claim.lease);}

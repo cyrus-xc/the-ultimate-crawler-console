@@ -146,6 +146,7 @@ class DiscoverySessions {
     s.navigation.card=s.cards.get(noteId);
     s.navigation.readComments=readComments&&s.kind==='android';
     s.navigation.openNoteId=null;
+    s.navigation.initialComments=null;
     let value;
     try{
      const webComments=readComments&&s.kind==='web';
@@ -177,7 +178,9 @@ class DiscoverySessions {
      if(!returnPartial||s.controller.signal.aborted)throw error;
      if(value)details.push({note_id:noteId,data:value.archived_data,...(s.kind==='android'?{navigation:s.navigation.trace||[]}: {})});
      const code=/^[A-Z][A-Z0-9_]{0,100}$/.test(error.code||'')?error.code:'DISCOVERY_NOTE_READ_FAILED';
-     failures.push({note_id:noteId,code},...ids.slice(index+1).map(note_id=>({note_id,code:'DISCOVERY_STOPPED_AFTER_ERROR'})));
+     failures.push({note_id:noteId,code});
+     if(error.discoveryProfileRestored&&!error.cleanup_codes)continue;
+     failures.push(...ids.slice(index+1).map(note_id=>({note_id,code:'DISCOVERY_STOPPED_AFTER_ERROR'})));
      break;
     }
    }

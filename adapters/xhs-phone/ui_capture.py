@@ -366,6 +366,37 @@ class UiResponseCapture:
                                 if self.monotonic() >= related_deadline:
                                     break
                                 changed.wait(min(.1, related_deadline-self.monotonic()));changed.clear()
+                    if operation in {'image_detail','video_detail'} and (related_contracts or {}).get('comments'):
+                        # The first comment page can arrive while the note opens.
+                        # Match it to this exact card before the observer detaches.
+                        comment_contract = copy.deepcopy(related_contracts['comments'])
+                        comment_contract['parameters'] = [p for p in comment_contract['parameters'] if p['name'] == 'note_id']
+                        comment_values = {'note_id':values['note_id']}
+                        comment_deadline = min(deadline, self.monotonic()+2)
+                        while True:
+                            guard()
+                            seen_until = self.clock_ms()
+                            candidates = [r for r in responses if id(r) not in rejected_comments and isinstance(r.get('at'),(int,float))
+                                          and start <= r['at'] <= seen_until and request_matches(r,comment_contract,comment_values)
+                                          and not any(q.get('name')=='start' and q.get('value') for q in r['request'].get('query',[]))]
+                            for page in candidates:
+                                identity = {}
+                                try:
+                                    comment_body = verify_payload('comments',comment_values,page,comment_contract,verified_identity=identity)
+                                except CaptureError as error:
+                                    if str(error) == 'LOGIN_OR_VERIFICATION_REQUIRED':
+                                        raise
+                                    rejected_comments.add(id(page))
+                                    continue
+                                lower = [e for e in cronet if e.get('request') == page['request']]
+                                result['related'] = {'comments':{
+                                    'operation':'comments','input':comment_values,'response':comment_body,'request':page['request'],
+                                    'status':page['status'],'captured_at_ms':page['at'],'device_captured_at_ms':page.get('device_at_ms'),
+                                    'transport_evidence':classify_transport(page,start,seen_until,lower),'trigger':'ui','verified_identity':identity}}
+                                break
+                            if 'related' in result or self.monotonic() >= comment_deadline:
+                                break
+                            changed.wait(max(0,min(.1,comment_deadline-self.monotonic())));changed.clear()
                     if operation == 'comments':
                         result['ignored_comment_payloads'] = len(rejected_comments)
                     return result

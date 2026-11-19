@@ -64,6 +64,8 @@ def main():
                 raise RuntimeError('ACTION_NOT_CONFIRMED')
         stage='capture'
         related={'user_posted':contract['operations']['user_posted']} if args.operation=='user_info' else ({name:value for name,value in contract['operations'].items() if name in {'image_detail','video_detail'} and name!=args.operation} if args.operation in {'image_detail','video_detail'} else None)
+        if args.operation in {'image_detail','video_detail'} and values.get('observe_initial_comments') is True:
+            related['comments'] = contract['operations']['comments']
         result=UiResponseCapture(session).read(args.operation,operation,values,trigger,timeout=args.timeout,private_media_enabled=args.private_media,valid_note_url=valid_note_url,related_contracts=related,notify_response=lambda:emit({'event':'response_ready'}))
         emit({'event':'result','result':result})
         return 0
