@@ -122,7 +122,7 @@ class DeviceGateway {
       const safe=(words[0]==='forward'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
         (words[0]==='reverse'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
         (words[0]==='shell'&&words[1]==='pidof'&&/^xhs-lab-frida-[\w.-]+$/.test(words[2]||'')&&words.length===3)||
-        (words[0]==='shell'&&words[1]==='su'&&words[2]==='-c'&&/^(?:cat \/proc\/\d+\/stat|kill \d+)$/.test(words[3]||'')&&words.length===4);
+        (words[0]==='shell'&&words[1]==='su'&&words[2]==='-c'&&/^(?:cat \/proc\/(\d+)\/stat 2>\/dev\/null \|\| test ! -d \/proc\/\1|kill (?:-KILL )?\d+)$/.test(words[3]||'')&&words.length===4);
       if(!safe)return Promise.reject(problem('RUNTIME_CLEANUP_UNSUPPORTED',400));
     }
     return this.enqueue(lease,{args,serial},{signal,cleanup,trusted:true,timeoutMs});

@@ -20,8 +20,11 @@ function fixture(t,{running=true}={}){
   const cmd=args[3]||'';
   if(cmd.includes('sha256sum'))return sha+' file';
   if(cmd.includes(' -l ')){state.running=true;return '';}
-  if(cmd.includes('kill ')){state.running=false;return '';}
-  if(cmd.includes('/stat'))return stat();
+  if(cmd.includes('kill ')){
+   if(!state.ignoreTerm||cmd.includes('-KILL'))state.running=false;
+   return '';
+  }
+  if(cmd.includes('/stat'))return state.running?stat():'';
   return '';
  }};
  let clock=0;const runtime=new PhoneRuntime(adb,{now:()=>clock+=1000,binary,sha256:sha,contract:{package:'com.xingin.xhs',version:'9.51.0',apk_sha256:sha}});
@@ -35,6 +38,19 @@ test('passive runtime borrows existing server and owns only its explicit forward
 test('owned runtime cleanup is idempotent and checks process creation identity',async t=>{
  const {runtime,calls,stat}=fixture(t,{running:false});assert.equal(processStart(stat()),'12345');await runtime.ensure();await runtime.close();const count=calls.length;await runtime.close();
  assert.equal(calls.length,count);assert.ok(calls.some(a=>(a[3]||'').includes('kill 900')));
+});
+test('a stuck owned runtime gets one targeted force-stop after the normal grace period',async t=>{
+ const {runtime,state,calls}=fixture(t,{running:false});state.ignoreTerm=true;
+ await runtime.ensure();await runtime.close();
+ assert.equal(runtime.ownedServer,null);
+ assert.deepEqual(calls.map(a=>a[3]).filter(a=>a?.startsWith("'kill ")),["'kill 900'","'kill -KILL 900'"]);
+});
+test('an unidentified runtime is fenced without sending SIGTERM or SIGKILL',async t=>{
+ const {runtime,adb,calls}=fixture(t,{running:false});
+ await runtime.ensure();const command=adb.command;
+ adb.command=async args=>args[3]?.includes('/stat')?'unparseable':command(args);
+ await assert.rejects(runtime.close(),e=>e.code==='RUNTIME_CLEANUP_FAILED'&&e.cleanup_codes.includes('RUNTIME_PROCESS_IDENTITY_UNAVAILABLE'));
+ assert.equal(calls.some(a=>a[3]?.startsWith("'kill ")),false);
 });
 test('PID reuse does not authorize killing a replacement runtime',async t=>{
  const {runtime,calls,state}=fixture(t,{running:false});await runtime.ensure();state.start='99999';await runtime.close();assert.ok(!calls.some(a=>(a[3]||'').includes('kill ')));

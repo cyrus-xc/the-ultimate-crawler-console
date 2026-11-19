@@ -112,6 +112,20 @@ test('a missing foreground process during attachment retries only once',async t=
  f.worker.dispatch();await Promise.all(f.worker.active.values());
  assert.equal(restarts,1);assert.equal(f.store.devices()[0].health,'unavailable');assert.equal(f.store.devices()[0].owner,null);
 });
+test('attachment transport loss renews the runtime once before dispatching any UI action',async t=>{
+ const f=fixture(t);let attempts=0;
+ f.runtime.restartApp=async()=>{f.events.push('restart');return {pid:2,endpoint:'127.0.0.1:4001'};};
+ f.consumer.capture=async options=>{
+  if(++attempts===1)throw Object.assign(Error(),{code:'CAPTURE_FAILED',diagnostics:{stage:'attachment',exception_type:'TransportError'}});
+  assert.equal(options.endpoint,'127.0.0.1:4001');
+  await options.trigger();
+  return {captured_at_ms:1000,status:200,operation:options.operation,request:{query:[]},effective_sort:'general',
+   response:{data:{items:[{id:id(1),desc:'body'}],has_more:false}}};
+ };
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.request(f.request.id).state,'succeeded');
+ assert.equal(attempts,2);assert.deepEqual(f.events.filter(e=>['close','restart','submit'].includes(e)),['close','restart','submit','close']);
+});
 test('first-page retry is bounded and never restarts on login or verification',async t=>{
  for(const code of ['PHONE_FIRST_PAGE_UNOBSERVED','LOGIN_REQUIRED','VERIFICATION_REQUIRED']){
   const f=fixture(t,{...base,operation:'profile.posts',targets:[{user_id:id(2)}]});let restarts=0;

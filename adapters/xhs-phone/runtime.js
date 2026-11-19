@@ -106,17 +106,29 @@ class PhoneRuntime {
   if(this.forward){try{await this.cleanupAdb.command(['forward','--remove',`tcp:${this.forward}`]);this.forward=null;}catch(error){errors.push(error);}}
   if(this.ownedServer){
    try{
-    const {pid,start}=this.ownedServer,current=(await this.pidof(path.posix.basename(this.devicePath),this.cleanupAdb)).split(/\s+/);
-    if(current.includes(pid)&&processStart(await this.root(`cat /proc/${pid}/stat`,this.cleanupAdb))===start){
-     await this.root(`kill ${pid}`,this.cleanupAdb);
-     let stopped=false;
-     for(let n=0;n<20;n++){
-      const live=(await this.pidof(path.posix.basename(this.devicePath),this.cleanupAdb)).split(/\s+/);
-      if(!live.includes(pid)){stopped=true;break;}
-      if(processStart(await this.root(`cat /proc/${pid}/stat`,this.cleanupAdb))!==start){stopped=true;break;}
+    const {pid,start}=this.ownedServer;
+    const isOwned=async()=>{
+     const stat=await this.root(`cat /proc/${pid}/stat 2>/dev/null || test ! -d /proc/${pid}`,this.cleanupAdb);
+     if(!stat.trim())return false;
+     const current=processStart(stat);
+     if(!current)throw fail('RUNTIME_PROCESS_IDENTITY_UNAVAILABLE');
+     return current===start;
+    };
+    const waitForExit=async()=>{
+     for(let attempt=0;attempt<20;attempt++){
+      if(!await isOwned())return true;
       await this.cleanupAdb.wait(100);
      }
-     if(!stopped)throw fail('RUNTIME_STOP_UNCONFIRMED');
+     return !await isOwned();
+    };
+    if(await isOwned()){
+     try{await this.root(`kill ${pid}`,this.cleanupAdb);}
+     catch(error){if(await isOwned())throw error;}
+     if(!await waitForExit()){
+      // Escalate only for the process created by this runner, under its lease.
+      await this.root(`kill -KILL ${pid}`,this.cleanupAdb);
+      if(!await waitForExit())throw fail('RUNTIME_STOP_UNCONFIRMED');
+     }
     }
     this.ownedServer=null;
    }catch(error){errors.push(error);}

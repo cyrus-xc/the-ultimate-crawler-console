@@ -100,9 +100,12 @@ class PhoneConsumer {
     try{return await read();}catch(error){
      // Attachment failed before perform_action: no UI input or response could
      // have occurred. A single ordinary App restart gives Frida a fresh PID.
-     const attachmentFailure=['ProcessNotRespondingError','ProcessNotFoundError'].includes(error.diagnostics?.exception_type);
+     const exception=error.diagnostics?.exception_type;
+     const attachmentFailure=['ProcessNotRespondingError','ProcessNotFoundError','TransportError'].includes(exception);
      if(heldNote||attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||!attachmentFailure)throw error;
-     attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();return read();
+     attachmentRestarted=true;context.guard();
+     if(exception==='TransportError')await runtime.close();
+     session=await runtime.restartApp();context.guard();return read();
     }
    };
    let lastCommentPage,lastCommentCheckpoint;
