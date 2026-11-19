@@ -83,10 +83,11 @@ class PhoneConsumer {
   const runtime=this.runtimeFactory(adb,cleanup),nav=this.navFactory(adb,()=>context.guard());
   let failureCaught;
   try{
+   let commentControlTapped=false;
    const restoreDiscoveryProfile=async()=>{
     await nav.back();
     try{await nav.assertDiscoveryProfile(context.discovery);}catch(error){
-     if(error.code!=='PROFILE_RESTORE_UNCONFIRMED')throw error;
+     if(error.code!=='PROFILE_RESTORE_UNCONFIRMED'||!commentControlTapped||!await nav.isNoteScreen())throw error;
      await nav.back();await nav.assertDiscoveryProfile(context.discovery);
     }
     context.discovery.openNoteId=null;context.discovery.initialComments=null;
@@ -128,6 +129,7 @@ class PhoneConsumer {
    }
    // UI cannot inject saved opaque cursors. Each new attempt navigates to the
    // entry and replays, deduplicating already committed IDs on either device.
+   if(operation==='post.detail'&&context.discovery)await nav.positionDiscoveryCard(context.discovery);
    const initialCommentPage=operation==='post.comments'&&context.discovery?.openNoteId===claim.target.post_id
     ?context.discovery.initialComments:null;
    for(let page=0;page<limits.max_pages;page++){
@@ -146,16 +148,16 @@ class PhoneConsumer {
       await nav.nextPage(control?.responseReady,{maxSwipes:restoring?Math.min(12*(pages+1),120):12,guard:control?.guard});
      };
     }
-    else if(operation==='post.detail'){values={note_id:claim.target.post_id,...(context.discovery?.readComments?{observe_initial_comments:true}:{})};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
+    else if(operation==='post.detail'){values={note_id:claim.target.post_id,...(context.discovery?.readComments?{observe_initial_comments:true}:{})};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control,true):()=>nav.openNote(claim.target.post_id);}
     else if(operation==='post.comments'){
      values={note_id:claim.target.post_id,...(page===0?{start:''}:lastCursor?.cursor?{start:lastCursor.cursor}:{})};
      if(page===0){trigger=async()=>{
       if(context.discovery){
        if(context.discovery.openNoteId!==claim.target.post_id)throw failure('DISCOVERY_NOTE_NOT_OPEN','item');
       }else{await nav.openNote(claim.target.post_id);await adb.wait(500);}
-      await nav.comments();
+      commentControlTapped=await nav.comments();
      };}else trigger=async control=>{
-      if(page===1&&initialCommentPage)await nav.comments();
+      if(page===1&&initialCommentPage)commentControlTapped=await nav.comments();
       await nav.nextPage(control?.responseReady,{guard:control?.guard});
      };
     }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady,{guard:control?.guard});}
@@ -184,11 +186,16 @@ class PhoneConsumer {
     }
     if(operation==='search.posts'&&page===0)nav.confirmSortResponse(result.effective_sort);
     if(operation==='post.detail'&&context.discovery){
+     if(await nav.atDiscoveryProfile(context.discovery)){
+      const error=failure('DISCOVERY_CARD_DID_NOT_OPEN','item');
+      error.discoveryProfileRestored=true;
+      throw error;
+     }
      if(context.discovery.readComments){
       context.discovery.openNoteId=claim.target.post_id;
       context.discovery.initialComments=result.related?.comments??null;
      }
-     else{await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
+     else await restoreDiscoveryProfile();
     }
     const {value,captures}=combinedEnvelope(result,operation,claim.target);value.phase='result';lastCursor=observedCursor(captures.at(-1));
     const records=value.data.raw.feeds||value.data.raw.comments?.list||[];

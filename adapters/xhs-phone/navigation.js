@@ -107,22 +107,27 @@ class XhsNavigation {
     if(!this.pendingSort || this.pendingSort.value!==canonical)failed('SORT_RESPONSE_MISMATCH');
     const result=this.locator.confirm(this.pendingSort.candidate,'response_sort_verified');this.pendingSort=null;return result;
   }
-  async openDiscoveryCard(state,control={}){
+  hasProfileNotesTab(nodes){
+    return nodes.some(n=>/^(?:已选定\s*)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(label(n)));
+  }
+  discoveryCard(target,nodes){
+    const matches=nodes.filter(n=>n.center&&discoveryTitle(n)===target.title);
+    const unique=[...new Map(matches.map(n=>[n.center.join(','),n])).values()];
+    if(unique.length>1)failed('DISCOVERY_CARD_LOCATOR_AMBIGUOUS');
+    return unique[0];
+  }
+  async positionDiscoveryCard(state,control={}){
     const target=state.card;
     if(!target||!target.title)failed('DISCOVERY_CARD_LOCATOR_UNAVAILABLE');
-    // Reposition the current grid only. Never replace an unlocated card with a
-    // deep link; the passive capture subsequently verifies the selected note ID.
     const direction=target.index<state.index?-1:1;let waitingForGrid=0;state.trace=[];
     for(let attempt=0;attempt<60;attempt++){
       control.guard?.();const nodes=await this.ui();control.guard?.();
-      const profileTab=nodes.some(n=>/^(?:已选定)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(label(n)));
+      const profileTab=this.hasProfileNotesTab(nodes);
       if(!profileTab){state.trace.push({action:'wait_for_profile_grid',profile_tab:false});if(waitingForGrid++<12){await this.adb.wait(250);attempt--;continue;}failed('DISCOVERY_GRID_POSITION_UNOBSERVED');}
-      const matches=nodes.filter(n=>n.center&&discoveryTitle(n)===target.title);
-      const unique=[...new Map(matches.map(n=>[n.center.join(','),n])).values()];
-      if(unique.length>1)failed('DISCOVERY_CARD_LOCATOR_AMBIGUOUS');
-      if(unique.length===1){state.trace.push({action:'tap',index:target.index,profile_tab:true,title_match:'exact_observed_title'});await this.action(()=>{control.guard?.();return this.adb.tap(unique[0]);});state.index=target.index;return;}
-      // Use visible known titles to choose the nearest direction, rather than
-      // replaying the profile from its first page for every date probe.
+      const card=this.discoveryCard(target,nodes);
+      if(card)return card;
+      // Position the current grid before observing the selected note. Scroll
+      // prefetch must never satisfy the detail observer for the actual tap.
       const visible=state.cards.filter(c=>c.title&&nodes.some(n=>discoveryTitle(n)===c.title));
       if(!visible.length){state.trace.push({action:'wait_for_profile_grid',profile_tab:true,known_indices:[]});if(waitingForGrid++<12){await this.adb.wait(250);attempt--;continue;}failed('DISCOVERY_GRID_POSITION_UNOBSERVED');}waitingForGrid=0;
       const low=Math.min(...visible.map(c=>c.index)),high=Math.max(...visible.map(c=>c.index));
@@ -131,11 +136,34 @@ class XhsNavigation {
     }
     failed('DISCOVERY_CARD_NOT_FOUND');
   }
+  async openDiscoveryCard(state,control={},positioned=false){
+    let node;
+    if(positioned){
+      const nodes=await this.ui();
+      if(!this.hasProfileNotesTab(nodes))failed('DISCOVERY_GRID_POSITION_UNOBSERVED');
+      node=this.discoveryCard(state.card,nodes);
+      if(!node)failed('DISCOVERY_CARD_LOCATOR_UNAVAILABLE');
+    }else node=await this.positionDiscoveryCard(state,control);
+    state.trace.push({action:'tap',index:state.card.index,profile_tab:true,title_match:'exact_observed_title'});
+    await this.action(()=>{control.guard?.();return this.adb.tap(node);});state.index=state.card.index;
+  }
+  async atDiscoveryProfile(state){
+    const nodes=await this.ui();
+    return this.hasProfileNotesTab(nodes)&&nodes.some(n=>state.cards.some(c=>c.title&&discoveryTitle(n)===c.title));
+  }
   async assertDiscoveryProfile(state){
-    const nodes=await this.ui(),labels=nodes.map(label);
-    const notesTab=labels.some(t=>/^(?:已选定)?笔记$|^(?:Selected )?Notes$|^노트$/i.test(t));
-    const knownCard=nodes.some(n=>state.cards.some(c=>c.title&&discoveryTitle(n)===c.title));
-    if(!notesTab||!knownCard)failed('PROFILE_RESTORE_UNCONFIRMED');state.trace?.push({action:'profile_restored',profile_tab:true,known_card:true});
+    for(let attempt=0;attempt<3;attempt++){
+      if(await this.atDiscoveryProfile(state)){
+        state.trace?.push({action:'profile_restored',profile_tab:true,known_card:true});
+        return;
+      }
+      if(attempt<2)await this.adb.wait(350);
+    }
+    failed('PROFILE_RESTORE_UNCONFIRMED');
+  }
+  async isNoteScreen(){
+    const nodes=await this.ui();
+    return nodes.some(n=>n['resource-id']==='com.xingin.xhs:id/moreOperateIV');
   }
   async openNote(noteId){
     if(!/^[a-f0-9]{24}$/.test(noteId))failed('INVALID_NOTE_ID');
@@ -170,8 +198,8 @@ class XhsNavigation {
   async comments(){
     const nodes=await this.ui();
     const controls=nodes.filter(n=>n.center&&/^(?:共\s*)?\d+\s*条评论$|^评论(?:\s*\d+)?$|^Comments?(?:\s*\d+)?$/i.test(label(n)));
-    if(controls.length===1){await this.tap(controls[0]);await this.adb.wait(350);}
-    else await this.swipe();
+    if(controls.length===1){await this.tap(controls[0]);await this.adb.wait(350);return true;}
+    await this.swipe();return false;
   }
   async back(){await this.shell('input','keyevent','4');await this.adb.wait(350);}
   async refresh(control={}){

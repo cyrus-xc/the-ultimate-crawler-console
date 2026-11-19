@@ -188,7 +188,7 @@ test('header timeout recovery requires complete zero-response diagnostics and sh
 });
 test('discovery video cards use one detail capture action and preserve the selected identity',async t=>{
  const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});
- f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
+ f.consumer.navFactory=()=>({positionDiscoveryCard:async()=>{},atDiscoveryProfile:async()=>false,openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
  f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'video body',type:'video',user:{userid:id(2)}}]}]}};
  f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{_raw:{noteCard:{type:'video'}}}}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(f.captures[0].operation,'image_detail');assert.equal(f.captures[0].values.note_id,id(1));assert.deepEqual(f.events.slice(0,3),['card','back','profile-confirmed']);
@@ -220,7 +220,7 @@ test('discovery comments read the already-open note and restore the grid without
 test('discovery detail taps once and leaves the note open for its pending comments',async t=>{
  const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});
  const discovery={card:{note_id:id(1)},readComments:true,openNoteId:null};
- f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back')});
+ f.consumer.navFactory=()=>({positionDiscoveryCard:async()=>{},atDiscoveryProfile:async()=>false,openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back')});
  f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'observed',user:{userid:id(2)}}]}]}};
  f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());
@@ -228,6 +228,17 @@ test('discovery detail taps once and leaves the note open for its pending commen
  assert.equal(discovery.openNoteId,id(1));
  assert.equal(f.captures[0].values.observe_initial_comments,true);
  assert.deepEqual(f.events,['card','drain','close','drain']);
+});
+
+test('an exact prefetched packet cannot send Back from the still-open author grid',async t=>{
+ const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});
+ f.consumer.navFactory=()=>({positionDiscoveryCard:async()=>f.events.push('position'),openDiscoveryCard:async()=>f.events.push('card'),atDiscoveryProfile:async()=>true,back:async()=>f.events.push('back')});
+ f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'prefetch',user:{userid:id(2)}}]}]}};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.request(f.request.id).units[0].error.code,'DISCOVERY_CARD_DID_NOT_OPEN');
+ assert.deepEqual(f.events.slice(0,2),['position','card']);
+ assert.equal(f.events.includes('back'),false);
 });
 
 test('discovery uses the comment page observed when the card opened',async t=>{
@@ -244,7 +255,7 @@ test('discovery uses the comment page observed when the card opened',async t=>{
 
 test('discovery comment drawer permits one additional verified Back',async t=>{
  const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});let checks=0;
- f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>{},back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>{if(++checks===1)throw Object.assign(Error(),{code:'PROFILE_RESTORE_UNCONFIRMED'});}});
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>true,isNoteScreen:async()=>true,back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>{if(++checks===1)throw Object.assign(Error(),{code:'PROFILE_RESTORE_UNCONFIRMED'});}});
  f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)},openNoteId:id(1)}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(checks,2);assert.equal(f.events.filter(e=>e==='back').length,2);
 });

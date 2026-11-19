@@ -118,7 +118,7 @@ test('observed combined accessibility card description identifies full title wit
  await nav.openDiscoveryCard({card:{title,index:2},cards:[{title,index:2}],index:20});assert.equal(tapped,card);
 });
 test('scrolled discovery profile restore is proven by profile tab and known grid without requiring offscreen header',async()=>{
- const nav=new XhsNavigation({ui:async()=>[node('已选定笔记'),{'content-desc':'视频,known title,来自测试作者,10赞，'}]},{guard:()=>{}});
+ const nav=new XhsNavigation({ui:async()=>[node('已选定笔记'),{'content-desc':'视频,known title,来自测试作者,10赞，'}],wait:async()=>{}},{guard:()=>{}});
  await nav.assertDiscoveryProfile({cards:[{title:'known title'}]});
  await assert.rejects(nav.assertDiscoveryProfile({cards:[{title:'different'}]}),{code:'PROFILE_RESTORE_UNCONFIRMED'});
 });
@@ -130,4 +130,17 @@ test('discovery waits for observed grid readiness without an input while cards r
  let reads=0,taps=0,swipes=0;const card={'content-desc':'视频,title,来自测试作者,1赞，',center:[200,500]};
  const nav=new XhsNavigation({ui:async()=>++reads<3?[node('已选定笔记')]:[node('已选定笔记'),card],wait:async()=>{},tap:async()=>taps++,shell:async()=>swipes++},{guard:()=>{}});
  const state={card:{title:'title',index:2},cards:[{title:'title',index:2}],index:20};await nav.openDiscoveryCard(state);assert.equal(reads,3);assert.equal(taps,1);assert.equal(swipes,0);assert.equal(state.trace.filter(x=>x.action==='wait_for_profile_grid').length,2);
+});
+
+test('a positioned discovery card can only be revalidated and tapped under the observer',async()=>{
+ const target={title:'expected',index:2},other={title:'another',index:10};let scrolls=0,taps=0;
+ const adb={ui:async()=>[node('已选定笔记'),node(scrolls===0?other.title:target.title)],shell:async()=>scrolls++,tap:async()=>taps++,wait:async()=>{}};
+ const nav=new XhsNavigation(adb,{guard:()=>{}}),state={card:target,cards:[target,other],index:10};
+ await nav.positionDiscoveryCard(state);
+ assert.equal(scrolls,1);assert.equal(taps,0);
+ await nav.openDiscoveryCard(state,{},true);
+ assert.equal(scrolls,1);assert.equal(taps,1);
+ adb.ui=async()=>[node('已选定笔记'),node(other.title)];
+ await assert.rejects(nav.openDiscoveryCard(state,{},true),{code:'DISCOVERY_CARD_LOCATOR_UNAVAILABLE'});
+ assert.equal(scrolls,1);assert.equal(taps,1);
 });
