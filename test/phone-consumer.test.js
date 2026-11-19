@@ -105,10 +105,10 @@ test('nonresponsive Frida attachment restarts once before any page action',async
  assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(restarts,1);
  assert.deepEqual(f.captures.map(c=>c.pid),[1,2]);assert.equal(f.events.filter(x=>x==='submit').length,1);
 });
-test('nonresponsive attachment retries only once',async t=>{
+test('a missing foreground process during attachment retries only once',async t=>{
  const f=fixture(t);let restarts=0;
  f.runtime.restartApp=async()=>{restarts++;return {pid:2,endpoint:'127.0.0.1:4000'};};
- f.consumer.capture=async()=>{throw Object.assign(Error('CAPTURE_FAILED'),{code:'CAPTURE_FAILED',scope:'device',diagnostics:{stage:'attachment',exception_type:'ProcessNotRespondingError'}});};
+ f.consumer.capture=async()=>{throw Object.assign(Error('CAPTURE_FAILED'),{code:'CAPTURE_FAILED',scope:'device',diagnostics:{stage:'attachment',exception_type:'ProcessNotFoundError'}});};
  f.worker.dispatch();await Promise.all(f.worker.active.values());
  assert.equal(restarts,1);assert.equal(f.store.devices()[0].health,'unavailable');assert.equal(f.store.devices()[0].owner,null);
 });
@@ -207,18 +207,32 @@ test('discovery media restores only detached normalized image fields',()=>{
  assert.equal(out.private_media,undefined);
 });
 
-test('discovery comments relocate the selected card and restore profile before next selection',async t=>{
+test('discovery comments read the already-open note and restore the grid without a second tap',async t=>{
  const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});
  f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),comments:async()=>f.events.push('comments'),back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
  f.replies[0]={response:{data:{comments:[{id:'c1',content:'observed'}],has_more:false}}};
- f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
- f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.deepEqual(f.events,['card','comments','back','profile-confirmed','drain','close','drain']);
+ const discovery={card:{note_id:id(1)},openNoteId:id(1)};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.deepEqual(f.events,['comments','back','profile-confirmed','drain','close','drain']);
+ assert.equal(discovery.openNoteId,null);
+});
+
+test('discovery detail taps once and leaves the note open for its pending comments',async t=>{
+ const f=fixture(t,{...base,operation:'post.detail',targets:[{post_id:id(1)}],params:{}});
+ const discovery={card:{note_id:id(1)},readComments:true,openNoteId:null};
+ f.consumer.navFactory=()=>({openDiscoveryCard:async()=>f.events.push('card'),back:async()=>f.events.push('back')});
+ f.replies[0]={response:{data:[{note_list:[{id:id(1),desc:'observed',user:{userid:id(2)}}]}]}};
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery})});
+ f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.equal(f.store.request(f.request.id).state,'succeeded');
+ assert.equal(discovery.openNoteId,id(1));
+ assert.deepEqual(f.events,['card','drain','close','drain']);
 });
 
 test('discovery comment drawer permits one additional verified Back',async t=>{
  const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}]});let checks=0;
  f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>{},back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>{if(++checks===1)throw Object.assign(Error(),{code:'PROFILE_RESTORE_UNCONFIRMED'});}});
- f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.replies[0]={response:{data:{comments:[],has_more:false}}};f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)},openNoteId:id(1)}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(checks,2);assert.equal(f.events.filter(e=>e==='back').length,2);
 });
 
@@ -226,7 +240,7 @@ test('partial comment pagination retains observed rows and restores the profile 
  const f=fixture(t,{...base,operation:'post.comments',targets:[{post_id:id(1)}],params:{max_items:20}});
  f.consumer.navFactory=()=>({openDiscoveryCard:async()=>{},comments:async()=>{},nextPage:async()=>{},back:async()=>f.events.push('back'),assertDiscoveryProfile:async()=>f.events.push('profile-confirmed')});
  f.replies.splice(0,1,{response:{data:{comments:[{id:'c1',content:'observed'}],cursor:'next',has_more:true}}},Object.assign(Error(),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'}));
- f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)}}})});
+ f.worker.adapters.set('p',{version:f.consumer.version,execute:ctx=>f.consumer.execute({...ctx,discovery:{card:{note_id:id(1)},openNoteId:id(1)}})});
  f.worker.dispatch();await Promise.all(f.worker.active.values());const rows=f.store.results(f.request.id).map(r=>r.payload);
  assert.equal(f.store.request(f.request.id).state,'succeeded');assert.equal(rows[0].data.raw.comments.list.length,1);
  assert.equal(rows.at(-1).data.stop_reason,'phone_page_response_unobserved');assert.equal(rows.at(-1).data.comments_complete,false);assert.equal(rows.at(-1).data.end_observed,false);

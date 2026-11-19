@@ -10,6 +10,9 @@ class DisplaySessions {
   this.store=store;this.adbPath=adbPath;this.execute=execute;this.now=now;this.ttlMs=ttlMs;this.sessions=new Map();this.frames=new Map();this.pending=new Set();this.closed=false;
   this.timer=setInterval(()=>this.expire(),1000);this.timer.unref();
  }
+ usesDevice(id){
+  return Boolean(this.frames.get(id)?.pending)||[...this.sessions.values()].some(session=>session.device.id===id&&session.expires>this.now());
+ }
  open(deviceId,scope){
   if(this.closed)throw problem('DISPLAY_CLOSED',503);
   const device=this.store.devices().find(d=>d.id===deviceId&&d.kind==='android');

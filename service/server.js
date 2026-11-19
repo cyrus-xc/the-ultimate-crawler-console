@@ -20,7 +20,7 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
-function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
+function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
   const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway});
   const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
@@ -46,6 +46,12 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(url.pathname==='/v1/capabilities'&&req.method==='GET')return send(200,{operations:OPERATIONS,devices:store.devices().map(d=>({device_id:d.id,capabilities:d.capabilities}))});
       if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>({...d,...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT json_extract(payload,'$.code') code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? ORDER BY seq DESC LIMIT 1").get(d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null}))});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
+      if(url.pathname==='/v1/devices/repair-connection'&&req.method==='POST'){
+        if(!connectionRecovery)throw problem('CONNECTION_REPAIR_UNAVAILABLE',503);
+        const input=await body(req);
+        if(!input||typeof input.device_id!=='string'||!/^android:[-\w.:]+$/.test(input.device_id)||Object.keys(input).length!==1)throw problem('INVALID_DEVICE_ID',400);
+        return send(200,await connectionRecovery.repair(input.device_id));
+      }
       if(url.pathname==='/v1/discovery-sessions'&&req.method==='POST'){const input=await body(req),controller=new AbortController();const disconnect=()=>{if(!res.writableEnded)controller.abort();};res.once('close',disconnect);try{return send(201,await discovery.open(input,scope,controller.signal));}finally{res.removeListener('close',disconnect);}}
       const discoveryRoute=url.pathname.match(/^\/v1\/discovery-sessions\/([0-9a-f-]+)\/(complete|cancel)$/);
       if(discoveryRoute&&req.method==='POST'){const input=await body(req);return send(200,await (discoveryRoute[2]==='complete'?discovery.complete(discoveryRoute[1],input,scope):discovery.cancel(discoveryRoute[1],scope)));}
@@ -98,7 +104,11 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(displayRoute){
         if(!displays)throw problem('DISPLAY_DISABLED',503);
         const [,id,action]=displayRoute;
-        if(!id&&req.method==='POST'){const input=await body(req);return send(201,displays.open(input.device_id,scope));}
+        if(!id&&req.method==='POST'){
+          const input=await body(req);
+          if(connectionRecovery?.isRepairing(input.device_id))throw problem('DEVICE_BUSY',409);
+          return send(201,displays.open(input.device_id,scope));
+        }
         if(id&&action==='stop'&&req.method==='POST')return send(200,displays.stop(id,scope));
         if(id&&action==='frame'&&req.method==='GET'){const bytes=await displays.frame(id,scope);res.setHeader('Content-Type','image/png');res.writeHead(200);res.end(bytes);return;}
         throw problem('METHOD_NOT_ALLOWED',405);

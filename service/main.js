@@ -9,13 +9,14 @@ async function start({env=process.env,listen=true}={}){
  const token=fs.readFileSync(env.CRAWLER_SERVICE_TOKEN_FILE,'utf8').trim();
  if(token.length<32)throw Object.assign(Error('SERVICE_TOKEN_REQUIRED'),{code:'SERVICE_TOKEN_REQUIRED'});
  const store=new Store(path.join(root,'queue.db'));
- let barrier,gateway,inventory,scheduler,server,closing,displays,desktop,registrationTimer,provisioner;
+ let barrier,gateway,inventory,scheduler,server,closing,displays,desktop,registrationTimer,provisioner,connectionRecovery;
  const close=()=>{
   if(closing)return closing;
   closing=(async()=>{
    clearInterval(registrationTimer);const errors=[];const attempt=async fn=>{try{await fn();}catch(e){errors.push(e);}};
    // Stop accepting work immediately, drain input before freeing legacy barrier.
    const stopped=server?.listening?new Promise(resolve=>server.close(resolve)):Promise.resolve();
+   await attempt(()=>connectionRecovery?.close());
    await Promise.all([attempt(()=>desktop?.close()),attempt(()=>displays?.close()),attempt(()=>inventory?.close())]);
    await attempt(()=>server?.drainDesktop?.());
    await attempt(()=>scheduler?.close());
@@ -60,8 +61,12 @@ async function start({env=process.env,listen=true}={}){
    }
   };
   registerPhones();if(phoneSettings){registrationTimer=setInterval(()=>{try{registerPhones();}catch{}},5000);registrationTimer.unref();}
+  if(gateway){
+   const {ConnectionRecovery}=require('./connection_recovery');
+   connectionRecovery=new ConnectionRecovery(store,gateway,inventory,{hasDisplay:id=>displays.usesDevice(id)}).start();
+  }
   scheduler=new Scheduler(store,adapters);scheduler.start();
-  server=createServer({store,token,gateway,inventory,scheduler,barrier,displays,provisioner});
+  server=createServer({store,token,gateway,inventory,scheduler,barrier,displays,provisioner,connectionRecovery});
   const {DesktopControl}=require('./desktop_control');desktop=new DesktopControl(store,{token,port:Number(env.CRAWLER_VNC_PORT||15910)});desktop.attach(server);
   const port=Number(env.CRAWLER_PORT||18323);if(!Number.isInteger(port)||port<1||port>65535)throw Object.assign(Error('INVALID_PORT'),{code:'INVALID_PORT'});
   if(listen)await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});

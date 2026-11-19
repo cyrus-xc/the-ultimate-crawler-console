@@ -83,14 +83,16 @@ class PhoneConsumer {
   const runtime=this.runtimeFactory(adb,cleanup),nav=this.navFactory(adb,()=>context.guard());
   let failureCaught;
   try{
-   let session=await runtime.ensure();context.guard();
+   const heldNote=!!context.discovery&&['post.detail','post.comments'].includes(operation);
+   let session=await runtime.ensure({foregroundOnly:heldNote});context.guard();
    let attachmentRestarted=false;
    const capture=async(native,values,trigger)=>{
     const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
     try{return await read();}catch(error){
      // Attachment failed before perform_action: no UI input or response could
      // have occurred. A single ordinary App restart gives Frida a fresh PID.
-     if(attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||error.diagnostics?.exception_type!=='ProcessNotRespondingError')throw error;
+     const attachmentFailure=['ProcessNotRespondingError','ProcessNotFoundError'].includes(error.diagnostics?.exception_type);
+     if(heldNote||attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||!attachmentFailure)throw error;
      attachmentRestarted=true;context.guard();session=await runtime.restartApp();context.guard();return read();
     }
    };
@@ -137,7 +139,12 @@ class PhoneConsumer {
     else if(operation==='post.detail'){values={note_id:claim.target.post_id};trigger=context.discovery?control=>nav.openDiscoveryCard(context.discovery,control):()=>nav.openNote(claim.target.post_id);}
     else if(operation==='post.comments'){
      values={note_id:claim.target.post_id,...(page===0?{start:''}:lastCursor?.cursor?{start:lastCursor.cursor}:{})};
-     if(page===0){trigger=async control=>{if(context.discovery)await nav.openDiscoveryCard(context.discovery,control);else await nav.openNote(claim.target.post_id);await adb.wait(500);await nav.comments();};}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
+     if(page===0){trigger=async()=>{
+      if(context.discovery){
+       if(context.discovery.openNoteId!==claim.target.post_id)throw failure('DISCOVERY_NOTE_NOT_OPEN','item');
+      }else{await nav.openNote(claim.target.post_id);await adb.wait(500);}
+      await nav.comments();
+     };}else trigger=control=>nav.nextPage(control?.responseReady,{guard:control?.guard});
     }else {values={page_id:claim.target.place_id};trigger=page===0?()=>nav.openPlace(claim.target.observed_url):control=>nav.nextPage(control?.responseReady,{guard:control?.guard});}
     let result;
     try{result=page===0&&operation==='profile.posts'&&initialProfilePage?initialProfilePage:await capture(NATIVE[operation],values,trigger);}
@@ -156,7 +163,10 @@ class PhoneConsumer {
      result=await capture(NATIVE[operation],values,trigger);
     }
     if(operation==='search.posts'&&page===0)nav.confirmSortResponse(result.effective_sort);
-    if(operation==='post.detail'&&context.discovery){await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
+    if(operation==='post.detail'&&context.discovery){
+     if(context.discovery.readComments)context.discovery.openNoteId=claim.target.post_id;
+     else{await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
+    }
     const {value,captures}=combinedEnvelope(result,operation,claim.target);value.phase='result';lastCursor=observedCursor(captures.at(-1));
     const records=value.data.raw.feeds||value.data.raw.comments?.list||[];
     // Disconnected observations are preserved above, but cannot prove that
@@ -216,6 +226,7 @@ class PhoneConsumer {
    if(operation==='post.comments'&&context.discovery){
     await nav.back();
     try{await nav.assertDiscoveryProfile(context.discovery);}catch(error){if(error.code!=='PROFILE_RESTORE_UNCONFIRMED')throw error;await nav.back();await nav.assertDiscoveryProfile(context.discovery);}
+    context.discovery.openNoteId=null;
    }
   }catch(error){failureCaught=error;if(['ACCOUNT_REQUIRED','LOGIN_OR_VERIFICATION_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','APP_VERSION_MISMATCH'].includes(error.code))error.scope='platform';throw error;}
   finally{

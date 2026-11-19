@@ -37,7 +37,7 @@ class PhoneRuntime {
   this.app={version:this.contract.version,apk_sha256:hash,known_build:hash===this.contract.apk_sha256||Object.hasOwn(this.contract.known_apk_sha256||{},hash)};
   return this.app;
  }
- async ensure(){
+ async ensure({foregroundOnly=false,recoverLaunch=true}={}){
   if(!(await this.adb.devices()).some(d=>d.serial===this.adb.serial&&d.state==='device'))throw fail('DEVICE_UNAVAILABLE');
   await this.verifyApp();
   if(crypto.createHash('sha256').update(fs.readFileSync(this.binary)).digest('hex')!==this.sha256)throw fail('RUNTIME_DIGEST_MISMATCH');
@@ -60,19 +60,36 @@ class PhoneRuntime {
    this.forward=Number((await this.adb.command(['forward','tcp:0',`tcp:${this.devicePort}`])).trim());
    if(!Number.isInteger(this.forward)||this.forward<1||this.forward>65535){this.forward=null;throw fail('FORWARD_FAILED');}
   }
-  await this.adb.shell('monkey','-p',this.contract.package,'-c','android.intent.category.LAUNCHER','1');
-  const deadline=this.now()+10000;
+  const appPid=foregroundOnly ? await this.waitForForeground() : await this.startApp(recoverLaunch);
+  if(!appPid)throw fail('APP_NOT_READY');
+  return {pid:Number(appPid),endpoint:`127.0.0.1:${this.forward}`,app:this.app};
+ }
+ async waitForForeground(){
+  const deadline=this.now()+4000;
   while(this.now()<deadline){
    const candidates=(await this.pidof(this.contract.package)).split(/\s+/);
    const appPid=foregroundMainPid(await this.adb.shell('dumpsys','activity','activities'),candidates);
    if(appPid){
     const cmdline=await this.adb.shell('cat',`/proc/${appPid}/cmdline`);
     if(cmdline.split('\0',1)[0]!==this.contract.package)throw fail('APP_MAIN_PROCESS_MISMATCH');
-    return {pid:Number(appPid),endpoint:`127.0.0.1:${this.forward}`,app:this.app};
+    return appPid;
    }
    await this.adb.wait(250);
   }
-  throw fail('APP_NOT_READY');
+  return null;
+ }
+ async launchApp(){
+  try{await this.adb.shell('monkey','-p',this.contract.package,'-c','android.intent.category.LAUNCHER','1');}
+  catch(error){if(error.code!=='ADB_COMMAND_FAILED')throw error;}
+  return this.waitForForeground();
+ }
+ async startApp(recoverLaunch){
+  for(let attempt=0;attempt<(recoverLaunch?3:1);attempt++){
+   const pid=await this.launchApp();if(pid)return pid;
+  }
+  if(!recoverLaunch)return null;
+  await this.adb.shell('am','force-stop',this.contract.package);
+  return this.launchApp();
  }
  async restartApp(){
   // A bounded caller-selected recovery for a warm cached profile. This is an
@@ -80,7 +97,7 @@ class PhoneRuntime {
   // Keep the same guarded transport, runtime ownership and explicit forward.
   await this.verifyApp();
   await this.adb.shell('am','force-stop','com.xingin.xhs');
-  return this.ensure();
+  return this.ensure({recoverLaunch:false});
  }
  async close(){
   // The caller keeps its device lease through cleanup. A supervisor may provide

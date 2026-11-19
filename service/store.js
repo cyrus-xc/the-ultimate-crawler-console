@@ -111,9 +111,9 @@ class Store {
         (!p.params.filters || Object.keys(p.params.filters).every(k=>(c.filters||[]).includes(k))));
   }
   healthy(d,p) {const fault=d.faults[p.platform];const anonymous=p.platform==='xiaohongshu'&&d.kind==='web'&&(p.operation==='link.resolve'||['share_page','mobile_metadata','mobile_detail'].includes(p.params.native_request?.representation));return d.health==='ready'&&!d.quarantined&&(!fault||(anonymous&&fault==='LOGIN_REQUIRED'));}
-  acquire(deviceId,owner,attemptId=null,{control=false}={}) {
+  acquire(deviceId,owner,attemptId=null,{control=false,connectionRepair=false}={}) {
     const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
-    if(!d || d.quarantined || (d.health!=='ready'&&!(control&&d.kind==='web')))throw problem('DEVICE_UNAVAILABLE',409);
+    if(!d || d.quarantined || (d.health!=='ready'&&!(control&&d.kind==='web')&&!(connectionRepair&&d.kind==='android'&&!attemptId)))throw problem('DEVICE_UNAVAILABLE',409);
     if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(deviceId))throw problem('DEVICE_BUSY',409);
     this.assertNoCommand(deviceId);
     const generation=d.generation+1,token=randomUUID(),expires=this.now()+this.leaseMs;

@@ -129,24 +129,61 @@ class DiscoverySessions {
  get(id,scope){const s=this.sessions.get(id);if(!s||s.scope!==scope)throw fail('DISCOVERY_SESSION_NOT_FOUND',404);return s;}
  async complete(id,input,scope='pipeline'){
   const s=this.get(id,scope),ids=input?.selected_ids;
-  if(!input||Object.keys(input).some(k=>!['selected_ids','comments','comment_target','comment_seconds','comment_mode','comment_lazy_load_limit'].includes(k))||!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length||ids.some(v=>!s.returned?.some(c=>c.note_id===v)))throw fail('INVALID_DISCOVERY_SELECTION',400);
+  if(!input||Object.keys(input).some(k=>!['selected_ids','comments','comment_target','comment_seconds','comment_mode','comment_lazy_load_limit','comment_ids','return_partial'].includes(k))||!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length||ids.some(v=>!s.returned?.some(c=>c.note_id===v)))throw fail('INVALID_DISCOVERY_SELECTION',400);
   const comments=input.comments??false,commentPages=input.comment_lazy_load_limit??2,commentTarget=input.comment_target??20,commentSeconds=input.comment_seconds??300,commentMode=input.comment_mode??'limited_lazy_load_on_scroll';
   if(typeof comments!=='boolean'||!Number.isInteger(commentPages)||commentPages<1||commentPages>20||!Number.isInteger(commentTarget)||commentTarget<1||commentTarget>100||!Number.isInteger(commentSeconds)||commentSeconds<1||commentSeconds>3600||!['sample','limited_lazy_load_on_scroll'].includes(commentMode))throw fail('INVALID_DISCOVERY_SELECTION',400);
-  const selection={ids,comments,commentPages,commentTarget,commentSeconds,commentMode};
+  const commentIds=input.comment_ids??(comments?ids:[]),returnPartial=input.return_partial??false;
+  if(!Array.isArray(commentIds)||new Set(commentIds).size!==commentIds.length||commentIds.some(id=>!comments||!ids.includes(id))||typeof returnPartial!=='boolean')throw fail('INVALID_DISCOVERY_SELECTION',400);
+  const selection={ids,commentIds,returnPartial,commentPages,commentTarget,commentSeconds,commentMode};
   if(s.state==='completed'){if(JSON.stringify(selection)!==JSON.stringify(s.selection))throw fail('DISCOVERY_SELECTION_CONFLICT');return s.result;}
   if(s.failure)throw s.failure;
   if(s.state!=='awaiting_selection')throw fail('DISCOVERY_SESSION_BUSY');this.guard(s);s.state='reading_details';s.selection=selection;
-  if(comments&&ids.length&&s.kind==='android'&&!this.store.compatible(this.store.devices().find(d=>d.id===s.device_id),{platform:'xiaohongshu',operation:'post.comments',params:{},routing:s.query.routing})){s.state='awaiting_selection';throw fail('UNSUPPORTED_OPERATION');}
-  s.work=(async()=>{const details=[];for(const id of ids){s.navigation.card=s.cards.get(id);const values=await this.run(s,'post.detail',{post_id:id},{native_request:{kind:'detail',id,user_id:s.query.user_id,target:comments?commentTarget:1,seconds:comments?commentSeconds:45,comments:comments&&s.kind==='web',capture_share:true,...(comments&&s.kind==='web'?{comment_mode:commentMode,comment_lazy_load_limit:commentPages}:{})}},commentPages);const value=[...values].reverse().find(v=>v.data?.raw);if(!value)throw fail('DISCOVERY_DETAIL_UNOBSERVED');
-   if(comments&&s.kind==='android'){
-    const pages=await this.run(s,'post.comments',{post_id:id},{max_items:commentTarget},commentPages,commentSeconds),rows=[],seen=new Set();
-    for(const page of pages)for(const row of page.data?.raw?.comments?.list||[]){if(row.id&&seen.has(row.id))continue;if(row.id)seen.add(row.id);rows.push(row);}
-    const last=pages.at(-1)?.data;value.data.detail_stop_reason=value.data.stop_reason;value.data.detail_end_observed=value.data.end_observed;value.data.end_observed=last?.end_observed===true;value.data.stop_reason=last?.stop_reason||'not_observed';value.data.raw.comments={list:rows};value.data.comments_requested=true;value.data.comments_complete=last?.end_observed===true;value.data.comment_target=commentTarget;value.data.comment_mode=commentMode;value.data.comment_lazy_load_limit=commentPages;value.data.comment_evidence=pages.map(p=>p.data);value.archived_data.comment_evidence=pages.map(p=>p.archived_data);value.data.comments_stop_reason=last?.stop_reason||'not_observed';
-    for(const key of ['detail_stop_reason','detail_end_observed','end_observed','stop_reason','comments_requested','comments_complete','comment_target','comment_mode','comment_lazy_load_limit','comments_stop_reason'])value.archived_data[key]=value.data[key];
-    if(value.archived_data.raw){const normalized=[],ids=new Set();for(const page of pages)for(const row of page.archived_data.raw?.comments?.list||[]){const id=String(row.id||row.comment_id||'');if(id&&!ids.has(id)){ids.add(id);normalized.push(row);}}value.archived_data.raw={...value.archived_data.raw,comments:{list:normalized}};}
+  if(commentIds.length&&s.kind==='android'&&!this.store.compatible(this.store.devices().find(d=>d.id===s.device_id),{platform:'xiaohongshu',operation:'post.comments',params:{},routing:s.query.routing})){s.state='awaiting_selection';throw fail('UNSUPPORTED_OPERATION');}
+  s.work=(async()=>{
+   const details=[],failures=[];
+   for(const [index,noteId] of ids.entries()){
+    const readComments=commentIds.includes(noteId);
+    s.navigation.card=s.cards.get(noteId);
+    s.navigation.readComments=readComments&&s.kind==='android';
+    s.navigation.openNoteId=null;
+    let value;
+    try{
+     const webComments=readComments&&s.kind==='web';
+     const values=await this.run(s,'post.detail',{post_id:noteId},{native_request:{
+      kind:'detail',id:noteId,user_id:s.query.user_id,target:readComments?commentTarget:1,
+      seconds:readComments?commentSeconds:45,comments:webComments,capture_share:true,
+      ...(webComments?{comment_mode:commentMode,comment_lazy_load_limit:commentPages}:{})}},commentPages);
+     value=[...values].reverse().find(v=>v.data?.raw);
+     if(!value)throw fail('DISCOVERY_DETAIL_UNOBSERVED');
+     if(s.navigation.readComments){
+      const pages=await this.run(s,'post.comments',{post_id:noteId},{max_items:commentTarget},commentPages,commentSeconds);
+      const last=pages.at(-1)?.data;
+      const data=value.archived_data;
+      Object.assign(data,{detail_stop_reason:data.stop_reason,detail_end_observed:data.end_observed,
+       end_observed:last?.end_observed===true,stop_reason:last?.stop_reason||'not_observed',
+       comments_requested:true,comments_complete:last?.end_observed===true,comment_target:commentTarget,
+       comment_mode:commentMode,comment_lazy_load_limit:commentPages,comment_evidence:pages.map(p=>p.archived_data),
+       comments_stop_reason:last?.stop_reason||'not_observed'});
+      if(data.raw){
+       const normalized=[],seen=new Set();
+       for(const page of pages)for(const row of page.archived_data.raw?.comments?.list||[]){
+        const key=String(row.id||row.comment_id||'');if(key&&!seen.has(key)){seen.add(key);normalized.push(row);}
+       }
+       data.raw={...data.raw,comments:{list:normalized}};
+      }
+     }
+     details.push({note_id:noteId,data:value.archived_data,...(s.kind==='android'?{navigation:s.navigation.trace||[]}: {})});
+    }catch(error){
+     if(!returnPartial||s.controller.signal.aborted)throw error;
+     if(value)details.push({note_id:noteId,data:value.archived_data,...(s.kind==='android'?{navigation:s.navigation.trace||[]}: {})});
+     const code=/^[A-Z][A-Z0-9_]{0,100}$/.test(error.code||'')?error.code:'DISCOVERY_NOTE_READ_FAILED';
+     failures.push({note_id:noteId,code},...ids.slice(index+1).map(note_id=>({note_id,code:'DISCOVERY_STOPPED_AFTER_ERROR'})));
+     break;
+    }
    }
-   details.push({note_id:id,data:value.archived_data,...(s.kind==='android'?{navigation:s.navigation.trace||[]}: {})});}return details;})();
-  try{const details=await s.work;await this.release(s);s.state='completed';return s.result={session_id:id,state:'completed',details,released:true};}
+   return {details,failures};
+  })();
+  try{const result=await s.work;await this.release(s);s.state='completed';return s.result={session_id:id,state:'completed',details:result.details,...(returnPartial?{failures:result.failures}:{}),released:true};}
   catch(error){s.failure=error;await this.release(s).catch(()=>{});throw error;}
  }
  async release(s){

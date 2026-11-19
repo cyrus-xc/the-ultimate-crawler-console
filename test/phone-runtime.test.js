@@ -62,3 +62,25 @@ test('warm App recovery refuses an unknown version before stopping the App',asyn
  await assert.rejects(runtime.restartApp(),{code:'APP_VERSION_MISMATCH'});
  assert.ok(!calls.some(a=>a[0]==='am'));await runtime.close();
 });
+test('a stalled XHS launch gets three attempts then one package restart',async t=>{
+ const {runtime,adb,state,calls}=fixture(t);
+ state.appPid='';
+ await runtime.ensure();
+ assert.deepEqual(calls.filter(a=>a[0]==='monkey'||a[0]==='am').map(a=>a[0]),['monkey','monkey','monkey','am','monkey']);
+ await runtime.close();
+ state.appPid='';
+ const shell=adb.shell;
+ adb.shell=async(...args)=>{const out=await shell(...args);if(args[0]==='am')state.appPid='';return out;};
+ const before=calls.length;
+ await assert.rejects(runtime.ensure(),{code:'APP_NOT_READY'});
+ assert.deepEqual(calls.slice(before).filter(a=>a[0]==='monkey'||a[0]==='am').map(a=>a[0]),['monkey','monkey','monkey','am','monkey']);
+ await runtime.close();
+});
+test('held discovery foreground checks cannot start or restart the App',async t=>{
+ const {runtime,state,calls}=fixture(t);
+ assert.equal((await runtime.ensure({foregroundOnly:true})).pid,123);
+ state.appPid='';
+ await assert.rejects(runtime.ensure({foregroundOnly:true}),{code:'APP_NOT_READY'});
+ assert.equal(calls.some(a=>a[0]==='monkey'||a[0]==='am'),false);
+ await runtime.close();
+});
