@@ -20,9 +20,9 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
-function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
+function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
-  const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway});
+  const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway,yieldWarmup:warmup?id=>warmup.yieldDevice(id):null});
   const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
   const drainPhone=async lease=>{const action=phoneActions.get(lease.token);if(action){action.controller.abort(problem('STOP_REQUESTED',409));await action.promise.catch(()=>{});}};
   const drainDesktop=async lease=>{const active=desktopActions.get(lease.token);if(active){await active.adapter.close();await active.promise.catch(()=>{});}};
@@ -44,12 +44,20 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(req.headers.origin)throw problem('DIRECT_BROWSER_ACCESS_DENIED',403);
       if(!authenticated(req,token))throw problem('UNAUTHORIZED',401);
       if(url.pathname==='/v1/capabilities'&&req.method==='GET')return send(200,{operations:OPERATIONS,devices:store.devices().map(d=>({device_id:d.id,capabilities:d.capabilities}))});
-      if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>({...d,...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT json_extract(payload,'$.code') code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? ORDER BY seq DESC LIMIT 1").get(d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null}))});
+      if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>({...d,...(warmup?{warmup:warmup.view(d)}:{}),...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT json_extract(payload,'$.code') code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? ORDER BY seq DESC LIMIT 1").get(d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null}))});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
+      if(url.pathname==='/v1/devices/warmup'&&req.method==='POST'){
+        if(!warmup)throw problem('WARMUP_UNAVAILABLE',503);
+        const input=await body(req);
+        if(!input||typeof input.device_id!=='string'||!/^android:[-\w.:]+$/.test(input.device_id)||
+          !['start','stop'].includes(input.action)||Object.keys(input).length!==2)throw problem('INVALID_WARMUP_REQUEST',400);
+        return send(200,warmup.change(input.device_id,input.action==='start'));
+      }
       if(url.pathname==='/v1/devices/repair-connection'&&req.method==='POST'){
         if(!connectionRecovery)throw problem('CONNECTION_REPAIR_UNAVAILABLE',503);
         const input=await body(req);
         if(!input||typeof input.device_id!=='string'||!/^android:[-\w.:]+$/.test(input.device_id)||Object.keys(input).length!==1)throw problem('INVALID_DEVICE_ID',400);
+        await warmup?.yieldDevice(input.device_id);
         return send(200,await connectionRecovery.repair(input.device_id));
       }
       if(url.pathname==='/v1/discovery-sessions'&&req.method==='POST'){const input=await body(req),controller=new AbortController();const disconnect=()=>{if(!res.writableEnded)controller.abort();};res.once('close',disconnect);try{return send(201,await discovery.open(input,scope,controller.signal));}finally{res.removeListener('close',disconnect);}}
@@ -142,6 +150,7 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
           let device=store.devices().find(d=>input.device_id?d.id===input.device_id:d.kind==='android'&&d.serial===input.serial);
           if(!device&&inventory){await inventory.refresh();device=store.devices().find(d=>d.kind==='android'&&d.serial===input.serial);}
           if(!device)throw problem('DEVICE_NOT_FOUND',404);
+          if(warmup&&device.kind==='android')await warmup.yieldDevice(device.id);
           const lease=store.externalLease(device.id,'external:'+scope+':'+input.owner,{control:device.kind==='web'});
           return send(201,{lease,device:{id:device.id,serial:device.serial,clipboard_port:device.clipboard_port},heartbeat_ms:Math.max(1,Math.floor(store.leaseMs/3))});
         }

@@ -4,6 +4,7 @@
 const {randomUUID}=require('node:crypto');
 const {problem}=require('./contract');
 const {persistResult}=require('./result_evidence');
+const {OWNER:WARMUP_OWNER}=require('./phone_warmup');
 const ID=/^[a-f0-9]{24}$/i;
 const fail=(code,status=409)=>problem(code,status);
 function timestamp(value){
@@ -45,7 +46,7 @@ function card(raw,index){
 }
 function detailNote(data,id){const raw=data?.raw||{},map=raw.noteDetailMap||{};return raw.note||raw[id]?.note||map[id]?.note||raw[id]||raw;}
 class DiscoverySessions {
- constructor({store,adapters,gateway=null,now=()=>Date.now(),heartbeatMs}={}){this.store=store;this.adapters=adapters;this.gateway=gateway;this.now=now;this.sessions=new Map();this.heartbeatMs=heartbeatMs||Math.max(10,Math.floor(store.leaseMs/3));}
+ constructor({store,adapters,gateway=null,yieldWarmup=null,now=()=>Date.now(),heartbeatMs}={}){this.store=store;this.adapters=adapters;this.gateway=gateway;this.yieldWarmup=yieldWarmup;this.now=now;this.sessions=new Map();this.heartbeatMs=heartbeatMs||Math.max(10,Math.floor(store.leaseMs/3));}
  guard(s){if(s.controller.signal.aborted)throw s.controller.signal.reason;if(this.now()>=s.deadline)throw fail('DISCOVERY_SESSION_EXPIRED');this.store.assertLease(s.lease,{externalOnly:true});if(this.store.devices().find(d=>d.id===s.device_id)?.quarantined)throw fail('DEVICE_QUARANTINED');}
  async run(s,operation,target,params={},maxPages=100,seconds=null){
   this.guard(s);const operationDeadline=seconds===null?s.deadline:Math.min(s.deadline,this.now()+seconds*1000),operationSignal=seconds===null?s.controller.signal:AbortSignal.any([s.controller.signal,AbortSignal.timeout(seconds*1000)]),guard=()=>{this.guard(s);if(this.now()>=operationDeadline||operationSignal.aborted)throw fail('DISCOVERY_OPERATION_EXPIRED');};const values=[],claim={session_id:s.id,device_id:s.device_id,lease:s.lease,target,payload:{platform:'xiaohongshu',operation,params,limits:{max_pages:maxPages,execution_timeout_seconds:Math.max(1,Math.ceil((operationDeadline-this.now())/1000))},cache:{mode:'refresh'},continuation:{mode:'automatic'}}};
@@ -116,9 +117,12 @@ class DiscoverySessions {
  }
  async open(input,scope='pipeline',signal){
   const query=normalize(input,this.now()),payload={platform:'xiaohongshu',operation:'profile.posts',params:{},routing:query.routing};
-  const devices=this.store.devices().filter(d=>!d.owner&&this.store.compatible(d,payload)&&this.store.healthy(d,payload)&&this.store.compatible(d,{...payload,operation:'post.detail'})&&this.adapters.get(d.id));
+  const devices=this.store.devices().filter(d=>(!d.owner||this.yieldWarmup&&d.owner===WARMUP_OWNER)&&this.store.compatible(d,payload)&&this.store.healthy(d,payload)&&this.store.compatible(d,{...payload,operation:'post.detail'})&&this.adapters.get(d.id));
   if(!devices.length)throw fail('NO_AVAILABLE_DISCOVERY_DEVICE');
-  const id=randomUUID(),device=this.store.preferredDevices(devices)[0],lease=this.store.externalLease(device.id,'discovery:'+scope+':'+id);
+  const id=randomUUID(),device=this.store.preferredDevices(devices)[0];
+  if(device.owner)await this.yieldWarmup(device.id);
+  if(signal?.aborted)throw fail('CLIENT_DISCONNECTED');
+  const lease=this.store.externalLease(device.id,'discovery:'+scope+':'+id);
   const s={id,scope,device_id:device.id,kind:device.kind,adapter:this.adapters.get(device.id),query,lease,deadline:this.now()+query.timeout_seconds*1000,controller:new AbortController(),cards:new Map(),dates:new Map(),probes:new Map(),navigation:{cards:[],index:0},state:'collecting',raw_refs:[]};this.sessions.set(id,s);
   s.timer=setInterval(()=>{try{this.guard(s);this.store.heartbeat(s.lease);}catch(e){this.cancel(id,scope,e).catch(()=>{});}},this.heartbeatMs);s.timer.unref();
   const disconnect=()=>this.cancel(id,scope,fail('CLIENT_DISCONNECTED')).catch(()=>{});signal?.addEventListener('abort',disconnect,{once:true});
