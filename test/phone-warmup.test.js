@@ -110,11 +110,19 @@ test('photo browse swipes image, reads observed comments, then can double tap an
 });
 
 test('video browse uses the visible like button and advances upward',async()=>{
- const video=[n('暂停'),n('点赞',{clickable:'true'})];
- const f=browser([home('视频'),home('视频'),video,video],[0,.5,.01]);
+ const video=['matrixAvatarView','matrixNickNameView','noteContentText']
+  .map(id=>n('',{'resource-id':XHS+':id/'+id})).concat(
+   n('',{clickable:'true',center:[100,630],width:90,height:40,class:'android.widget.LinearLayout'}),
+   n('Collect12',{clickable:'true',center:[200,630],width:100,height:40,class:'android.widget.Button'}),
+   n('Comment 5',{clickable:'true',center:[300,630],width:100,height:40,class:'android.widget.Button'}),
+  );
+ const feed=[n('首页'),n('发现'),n('视频 样本，来自作者，12赞',{clickable:'false',class:'android.widget.FrameLayout'}),
+  n('卡片容器',{clickable:'true',class:'android.widget.FrameLayout'})];
+ const f=browser([feed,feed,video,video],[0,.5,.01]);
  await assert.rejects(f.browse(),error=>error===f.stopped);
+ assert.ok(f.actions.some(a=>a[0]==='tap'&&a[1]==='卡片容器'));
  assert.ok(f.actions.some(a=>a[0]==='dwell'&&a[1]===9000));
- assert.ok(f.actions.some(a=>a[0]==='tap'&&a[1]==='点赞'));
+ assert.ok(f.actions.some(a=>a[0]==='tap'&&a[1]===''));
  assert.ok(f.actions.some(a=>a[1]==='swipe'&&a[3]>a[5]));
 });
 

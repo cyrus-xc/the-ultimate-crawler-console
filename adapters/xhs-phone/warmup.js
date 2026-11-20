@@ -7,9 +7,10 @@ const XHS='com.xingin.xhs';
 const denied=/访问已被限制|检测到异常访问|安全验证|验证码|请先登录|账号已退出登录/;
 const feedTabs=/^(?:已选定\s*)?(首页|Home|홈)$/i;
 const discoverTabs=/^(?:已选定\s*)?(发现|Discover|Explore|발견)$/i;
-const cardKind=/^(视频|图文|图片|笔记)[,，]/;
+const cardKind=/^(视频|图文|图片|笔记)(?:[,，]|\s+)/;
 const commentEntry=/^(?:共\s*)?\d+\s*条评论$|^查看全部\s*\d*\s*条?评论$|^Comments?$/i;
-const commentPanel=/^(全部评论|评论区|共\s*\d+\s*条评论|All comments)$/i;
+const commentPanel=/^(全部评论|评论区|共\s*[\d.,万亿]+\s*条评论|All comments|[\d.,]+\s*comments?(?:\(s\))?)$/i;
+const liked=/^(?:已点赞|取消点赞|Liked|Unlike)(?:\s|$)/i;
 const videoControl=/^(?:播放|暂停|播放进度|Play|Pause)$/i;
 const fail=code=>{throw problem(code,409);};
 
@@ -28,7 +29,41 @@ function image(nodes){
  return nodes.filter(n=>n.center&&(/ImageView$/.test(n.class||'')||/^第\s*\d+\s*张图片/.test(label(n)))&&
   n.width>=width*.65&&n.height>=height*.2&&n.center[1]<height*.68).sort((a,b)=>b.width*b.height-a.width*a.height)[0];
 }
-const video=nodes=>nodes.some(n=>videoControl.test(label(n))||/:id\/(?:videoPlayerView|videoSeekBar)$/.test(n['resource-id']||''));
+const video=nodes=>nodes.some(n=>videoControl.test(label(n))||/:id\/(?:videoPlayerView|videoSeekBar)$/.test(n['resource-id']||''))||
+ ['matrixAvatarView','matrixNickNameView','noteContentText'].every(id=>nodes.some(n=>n['resource-id']===XHS+':id/'+id));
+function feedCards(nodes){
+ const targets=new Map();
+ for(const [index,node] of nodes.entries()){
+  const kind=label(node).match(cardKind)?.[1];
+  if(!node.center||!kind)continue;
+  // The home feed exposes a labelled FrameLayout with a separate clickable
+  // child. The latter must be the full card, with its centre inside the label.
+  const target=node.clickable==='true'?node:nodes[index+1];
+  if(!target?.center||target.clickable!=='true')continue;
+  if(target!==node&&(!/FrameLayout$/.test(target.class||'')||!/来自|作者/.test(label(node))||!label(node).includes('赞')||
+    target.width<node.width*.8||target.height<node.height*.65||
+    Math.abs(target.center[0]-node.center[0])>node.width*.1||Math.abs(target.center[1]-node.center[1])>node.height*.25))continue;
+  targets.set(target.center.join(','),{target,kind});
+ }
+ return [...targets.values()];
+}
+
+function videoLike(nodes){
+ const explicit=unique(nodes.filter(n=>n.center&&n.clickable==='true'&&/^(?:点赞|Like)(?:\s*[\d,.万亿K]+)?$/i.test(label(n))));
+ if(explicit)return explicit.selected!=='true'&&explicit.checked!=='true'?explicit:null;
+ if(nodes.some(n=>liked.test(label(n))))return null;
+ // On the verified video action bar the heart has no description. The two
+ // labelled buttons to its right establish its row, width and exact position.
+ const buttons=nodes.filter(n=>n.center&&n.clickable==='true'&&/Button$/.test(n.class||''));
+ const collect=unique(buttons.filter(n=>/^(?:收藏|Collect)\s*[\d,.万亿K]*$/i.test(label(n))));
+ const comment=unique(buttons.filter(n=>/^(?:评论|Comment)\s*[\d,.万亿K]*$/i.test(label(n))));
+ if(!collect||!comment||Math.abs(collect.center[1]-comment.center[1])>5)return null;
+ const spacing=comment.center[0]-collect.center[0];
+ if(spacing<40||Math.abs(spacing-collect.width)>collect.width*.15)return null;
+ return unique(nodes.filter(n=>n.center&&n.clickable==='true'&&!label(n)&&n.selected!=='true'&&n.checked!=='true'&&
+  /LinearLayout$/.test(n.class||'')&&Math.abs(n.center[1]-collect.center[1])<=5&&Math.abs(n.width-collect.width)<=collect.width*.15&&
+  Math.abs(n.center[0]-(collect.center[0]-spacing))<=spacing*.12));
+}
 
 async function browseFeed(adb,{guard,dwell,random}){
  const nav=new XhsNavigation(adb,{guard});
@@ -64,25 +99,24 @@ async function browseFeed(adb,{guard,dwell,random}){
  for(;;){
   nodes=await ui();
   if(!feed(nodes))fail('WARMUP_HOME_UNCONFIRMED');
-  const cards=[...new Map(nodes.filter(n=>n.center&&n.clickable==='true'&&cardKind.test(label(n)))
-   .map(n=>[n.center.join(','),n])).values()];
+  const cards=feedCards(nodes);
   if(!cards.length){
    if(++empty>3)fail('WARMUP_FEED_CARDS_UNAVAILABLE');
    await swipe(nodes);continue;
   }
   empty=0;
   const card=cards[Math.floor(random()*cards.length)];
-  await tap(card);
+  await tap(card.target);
   nodes=await ui();
   if(feed(nodes)||!detail(nodes)&&!video(nodes))fail('WARMUP_POST_UNCONFIRMED');
-  if(video(nodes)||/^视频[,，]/.test(label(card))){
+  if(video(nodes)||card.kind==='视频'){
    for(;;){
     if(feed(nodes)||!video(nodes)&&!detail(nodes))fail('WARMUP_VIDEO_UNCONFIRMED');
     await dwell(duration(3,15));
     nodes=await ui();
     if(!video(nodes)&&!detail(nodes)||feed(nodes))fail('WARMUP_VIDEO_UNCONFIRMED');
     if(random()<.05){
-     const like=unique(nodes.filter(n=>n.center&&n.clickable==='true'&&n.selected!=='true'&&/^(点赞|Like)$/i.test(label(n))));
+     const like=videoLike(nodes);
      if(like)await tap(like);
     }
     await swipe(nodes);
@@ -96,11 +130,15 @@ async function browseFeed(adb,{guard,dwell,random}){
   await dwell(photoMs);
   if(random()<.10){
    nodes=await ui();
-   if(!detail(nodes)||feed(nodes))fail('WARMUP_POST_UNCONFIRMED');
-   await swipe(nodes);
-   nodes=await ui();
-   const entry=unique(nodes.filter(n=>n.center&&n.clickable==='true'&&commentEntry.test(label(n))));
-   if(entry){await tap(entry);nodes=await ui();}
+   let entry;
+   for(let attempt=0;attempt<3;attempt++){
+    if(!detail(nodes)||feed(nodes))fail('WARMUP_POST_UNCONFIRMED');
+    await swipe(nodes);
+    nodes=await ui();
+    entry=unique(nodes.filter(n=>n.center&&n.clickable==='true'&&commentEntry.test(label(n))));
+    if(entry){await tap(entry);nodes=await ui();break;}
+    if(nodes.some(n=>commentPanel.test(label(n))))break;
+   }
    if(nodes.some(n=>commentPanel.test(label(n)))){
     const commentsMs=duration(15,20);
     await dwell(commentsMs);
@@ -113,8 +151,7 @@ async function browseFeed(adb,{guard,dwell,random}){
       if(!detail(nodes)||feed(nodes))fail('WARMUP_POST_UNCONFIRMED');
       visibleImage=image(nodes);
      }
-     const unliked=nodes.some(n=>n.selected!=='true'&&/^(点赞|Like)$/i.test(label(n)));
-     if(visibleImage&&unliked){
+     if(visibleImage&&!nodes.some(n=>liked.test(label(n)))){
       guard();await adb.tap(visibleImage);
       guard();await adb.tap(visibleImage);
      }
