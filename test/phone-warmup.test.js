@@ -127,6 +127,15 @@ test('video browse uses the visible like button and advances upward',async()=>{
  assert.ok(f.actions.some(a=>a[1]==='swipe'&&a[3]>a[5]));
 });
 
+test('an unfamiliar video page returns to the feed and opens another post',async()=>{
+ const video=[n('暂停')],unfamiliar=[n('Video interstitial')],next=home('图文');
+ const f=browser([home('视频'),home('视频'),video,video,unfamiliar,next,next,post()],[0,.5,.7,0,.5]);
+ await assert.rejects(f.browse(),error=>error===f.stopped);
+ assert.ok(f.actions.some(a=>a[0]==='input'&&a[1]==='keyevent'&&a[2]==='4'));
+ assert.ok(f.actions.some(a=>a[0]==='tap'&&a[1].startsWith('图文')));
+ assert.deepEqual(f.actions.filter(a=>a[0]==='dwell'),[['dwell',9000],['dwell',4000]]);
+});
+
 test('a platform restriction stops browsing before any tap or swipe',async()=>{
  const f=browser([[n('检测到异常访问，本次访问已被限制')]],[]);
  await assert.rejects(f.browse(),{code:'XHS_ACCESS_RESTRICTED'});

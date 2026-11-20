@@ -85,19 +85,22 @@ async function browseFeed(adb,{guard,dwell,random}){
   await adb.shell('input','swipe',...[...from,...to].map(Math.round),'380');
   await adb.wait(400);
  };
- let nodes;
+ const returnToFeed=async nodes=>{
+  for(let depth=0;depth<4&&!feed(nodes);depth++){
+   const home=unique(nodes.filter(n=>n.center&&feedTabs.test(label(n))));
+   if(home)await tap(home);
+   else await nav.back();
+   nodes=await ui();
+  }
+  if(!feed(nodes))fail('WARMUP_HOME_UNCONFIRMED');
+  return nodes;
+ };
  await nav.shell('monkey','-p',XHS,'-c','android.intent.category.LAUNCHER','1');
  await adb.wait(500);
- for(let depth=0;depth<4;depth++){
-  nodes=await ui();
-  if(feed(nodes))break;
-  const home=unique(nodes.filter(n=>n.center&&feedTabs.test(label(n))));
-  if(home)await tap(home);
-  else await nav.back();
- }
+ await returnToFeed(await ui());
  let empty=0;
  for(;;){
-  nodes=await ui();
+  let nodes=await ui();
   if(!feed(nodes))fail('WARMUP_HOME_UNCONFIRMED');
   const cards=feedCards(nodes);
   if(!cards.length){
@@ -108,13 +111,12 @@ async function browseFeed(adb,{guard,dwell,random}){
   const card=cards[Math.floor(random()*cards.length)];
   await tap(card.target);
   nodes=await ui();
-  if(feed(nodes)||!detail(nodes)&&!video(nodes))fail('WARMUP_POST_UNCONFIRMED');
   if(video(nodes)||card.kind==='视频'){
-   for(;;){
-    if(feed(nodes)||!video(nodes)&&!detail(nodes))fail('WARMUP_VIDEO_UNCONFIRMED');
+   const onVideo=()=>!feed(nodes)&&(video(nodes)||detail(nodes));
+   while(onVideo()){
     await dwell(duration(3,15));
     nodes=await ui();
-    if(!video(nodes)&&!detail(nodes)||feed(nodes))fail('WARMUP_VIDEO_UNCONFIRMED');
+    if(!onVideo())break;
     if(random()<.05){
      const like=videoLike(nodes);
      if(like)await tap(like);
@@ -122,7 +124,10 @@ async function browseFeed(adb,{guard,dwell,random}){
     await swipe(nodes);
     nodes=await ui();
    }
+   await swipe(await returnToFeed(nodes));
+   continue;
   }
+  if(feed(nodes)||!detail(nodes))fail('WARMUP_POST_UNCONFIRMED');
   const media=image(nodes);
   if(!media)fail('WARMUP_IMAGE_UNCONFIRMED');
   await swipe(nodes,{across:media});
