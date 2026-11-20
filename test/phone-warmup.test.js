@@ -4,6 +4,7 @@ const assert=require('node:assert/strict');
 const {Store}=require('../service/store');
 const {PhoneWarmup,localDay,OWNER}=require('../service/phone_warmup');
 const {browseFeed}=require('../adapters/xhs-phone/warmup');
+const {makeTransport}=require('../adapters/xhs-phone/consumer');
 
 const HOUR=3600000;
 const phone='android:test-phone';
@@ -161,4 +162,25 @@ test('an external discovery handoff drains before a new lease and manual stop pr
  advance(2000);warmup.tick();
  assert.equal(warmup.latest(phone).state,'stopped');
  assert.equal(warmup.active.has(phone),false);
+});
+
+test('warm-up hands off after the active phone command closes without sending further input',async t=>{
+ const {store}=fixture(t);
+ const lease=store.externalLease(phone,OWNER),controller=new AbortController(), stopped=Error('preempted');
+ let finish;
+ const calls=[];
+ const gateway={execute:(_lease,_command,options)=>{
+  calls.push(options);
+  return new Promise(resolve=>{finish=resolve;});
+ }};
+ const adb=makeTransport({gateway,store,claim:{device_id:phone,lease},drainOnStop:true,
+  context:{signal:controller.signal,guard:()=>controller.signal.throwIfAborted()}});
+ const active=adb.shell('input','swipe','100','500','100','100','380');
+ assert.equal(calls[0].signal,undefined);
+ controller.abort(stopped);
+ finish({stdout:''});
+ await active;
+ await assert.rejects(adb.shell('input','tap','100','100'),error=>error===stopped);
+ assert.equal(calls.length,1);
+ store.releaseExternal(lease);
 });

@@ -29,7 +29,7 @@ function combinedEnvelope(result,operation,target){
  return {value,captures};
 }
 function epoch(v){if(typeof v==='number')return v<1e12?v*1000:v;if(typeof v==='string'&&/^\d+$/.test(v))return epoch(Number(v));const n=Date.parse(v);return Number.isFinite(n)?n:null;}
-function makeTransport({gateway,store,claim,context,cleanup=false}){
+function makeTransport({gateway,store,claim,context,cleanup=false,drainOnStop=false}){
  const device=store.devices().find(d=>d.id===claim.device_id);if(!device?.serial)throw failure('DEVICE_REQUIRED');
  const execute=async(_,argv)=>{
   const args=argv[0]==='-s'?argv.slice(2):argv;
@@ -39,7 +39,10 @@ function makeTransport({gateway,store,claim,context,cleanup=false}){
   // These commands are constructed by PhoneRuntime, never from request params.
   const restartApp=args.length===4&&args[0]==='shell'&&args[1]==="'am'"&&args[2]==="'force-stop'"&&args[3]==="'com.xingin.xhs'";
   const trusted=restartApp||cleanup||release||['forward','push'].includes(args[0])||args[0]==='shell'&&['su',"'su'",'pidof',"'pidof'"].includes(args[1])||args[0]==='shell'&&args[1]==="'cat'"&&/^'\/proc\/\d+\/cmdline'$/.test(args[2]||'');
-  return trusted?gateway.executeTrusted(claim.lease,{args,serial:device.serial},{signal:cleanup||release?undefined:context.signal,cleanup:cleanup||release}):gateway.execute(claim.lease,{args,serial:device.serial},{signal:context.signal});
+  // Warm-up yields at command boundaries. The active bounded ADB call drains
+  // under its lease, while the next call still checks the aborted context.
+  const signal=drainOnStop?undefined:context.signal;
+  return trusted?gateway.executeTrusted(claim.lease,{args,serial:device.serial},{signal:cleanup||release?undefined:signal,cleanup:cleanup||release}):gateway.execute(claim.lease,{args,serial:device.serial},{signal});
  };
  const adb=new AndroidAdb(device.serial,{execute,signal:cleanup?undefined:context.signal});
  // Discovery and forward listing are host reads, but still bound to this lease.

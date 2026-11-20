@@ -166,7 +166,7 @@ async function browseFeed(adb,{guard,dwell,random}){
 }
 function warmupBrowser(store,gateway){
  return context=>{
-  const adb=makeTransport({gateway,store,claim:{device_id:context.device.id,lease:context.lease},context});
+  const adb=makeTransport({gateway,store,claim:{device_id:context.device.id,lease:context.lease},context,drainOnStop:true});
   return browseFeed(adb,context);
  };
 }
