@@ -17,12 +17,15 @@ class PhoneWarmup {
     device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     day INTEGER NOT NULL, starts_at INTEGER NOT NULL, stops_at INTEGER NOT NULL,
     target_ms INTEGER NOT NULL, elapsed_ms INTEGER NOT NULL DEFAULT 0,
-    state TEXT NOT NULL, error TEXT, PRIMARY KEY(device_id,day)
+    state TEXT NOT NULL, error TEXT, manual INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(device_id,day)
   )`);
+  if(!store.db.pragma('table_info(phone_warmup)').some(column=>column.name==='manual')){
+   store.db.exec('ALTER TABLE phone_warmup ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
+  }
   store.db.prepare("UPDATE phone_warmup SET state='paused' WHERE state='running'").run();
  }
  eligible(device){return device?.kind==='android'&&device.capabilities.some(c=>c.platform==='xiaohongshu');}
- healthy(device){return this.eligible(device)&&device.health==='ready'&&!device.quarantined&&!device.faults.xiaohongshu;}
+ available(device,row){return device.health==='ready'&&!device.quarantined&&(row.manual||!device.faults.xiaohongshu);}
  plan(deviceId,day){
   if(this.store.db.prepare("SELECT 1 FROM phone_warmup WHERE device_id=? AND day=?").get(deviceId,day))return;
   this.store.db.prepare(`INSERT OR IGNORE INTO phone_warmup(device_id,day,starts_at,stops_at,target_ms,state)
@@ -31,7 +34,7 @@ class PhoneWarmup {
  }
  latest(deviceId){
   const now=this.now();
-  return this.store.db.prepare(`SELECT starts_at,stops_at,target_ms,elapsed_ms,state,error,day FROM phone_warmup
+  return this.store.db.prepare(`SELECT starts_at,stops_at,target_ms,elapsed_ms,state,error,day,manual FROM phone_warmup
     WHERE device_id=? ORDER BY CASE WHEN state IN ('queued','running','paused') AND stops_at>? THEN 0
       WHEN day=? THEN 1 ELSE 2 END, day DESC LIMIT 1`).get(deviceId,now,localDay(now))||null;
  }
@@ -39,14 +42,15 @@ class PhoneWarmup {
  change(id,enable){
   const device=this.store.devices().find(d=>d.id===id);
   if(!this.eligible(device))throw problem('WARMUP_PHONE_REQUIRED',404);
-  if(enable&&!this.healthy(device))throw warmupFault('WARMUP_PHONE_UNAVAILABLE');
   if(enable&&this.active.get(id)?.controller.signal.aborted)throw warmupFault('WARMUP_STOPPING');
   const now=this.now(), day=localDay(now);
   this.store.tx(()=>{
    this.plan(id,day);
    const row=this.latest(id);
-   if(enable&&!(readyStates.has(row.state)&&now<row.stops_at)){
-    this.store.db.prepare(`UPDATE phone_warmup SET state='queued',starts_at=?,target_ms=?,elapsed_ms=0,error=NULL
+   if(enable&&readyStates.has(row.state)&&now<row.stops_at){
+    this.store.db.prepare('UPDATE phone_warmup SET manual=1 WHERE device_id=? AND day=?').run(id,row.day);
+   }else if(enable){
+    this.store.db.prepare(`UPDATE phone_warmup SET state='queued',starts_at=?,target_ms=?,elapsed_ms=0,error=NULL,manual=1
       WHERE device_id=? AND day=?`).run(now,3*HOUR+Math.floor(this.random()*HOUR),id,day);
    }
    if(!enable)this.store.db.prepare(`UPDATE phone_warmup SET state='stopped',error=NULL
@@ -84,14 +88,14 @@ class PhoneWarmup {
    const task=this.active.get(id),row=this.latest(id);
    if(task){
     const reason=task.day!==row.day||!readyStates.has(row.state)?'WARMUP_STOPPED':
-     !this.healthy(device)?'WARMUP_PHONE_UNAVAILABLE':
+     !this.available(device,row)?'WARMUP_PHONE_UNAVAILABLE':
      this.waiting(device)?'WARMUP_PREEMPTED':null;
     if(reason)task.controller.abort(warmupFault(reason));
     else try{task.guard();}catch(error){task.controller.abort(error);}
     continue;
    }
    if((this.handoff.get(id)||0)<=now)this.handoff.delete(id);
-   if(!readyStates.has(row.state)||device.owner||this.handoff.has(id)||!this.healthy(device)||this.waiting(device))continue;
+   if(!readyStates.has(row.state)||device.owner||this.handoff.has(id)||!this.available(device,row)||this.waiting(device))continue;
    this.run(device,row);
   }
  }

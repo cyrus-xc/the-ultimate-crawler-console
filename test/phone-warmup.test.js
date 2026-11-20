@@ -184,3 +184,19 @@ test('warm-up hands off after the active phone command closes without sending fu
  assert.equal(calls.length,1);
  store.releaseExternal(lease);
 });
+
+test('manual start runs an already queued phone despite its prior XHS fault',async t=>{
+ const {store,warmup,advance}=fixture(t,{browse:async()=>{throw Object.assign(Error('live restriction'),{code:'XHS_ACCESS_RESTRICTED'});}});
+ store.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(JSON.stringify({xiaohongshu:'XHS_ACCESS_RESTRICTED'}),phone);
+ advance(4*HOUR);
+ warmup.tick();
+ assert.equal(warmup.latest(phone).state,'queued');
+ assert.equal(warmup.active.has(phone),false);
+ assert.equal(warmup.change(phone,true).manual,1);
+ warmup.tick();
+ const task=warmup.active.get(phone);
+ assert.ok(task);
+ await task.done;
+ assert.equal(warmup.latest(phone).state,'failed');
+ assert.equal(warmup.latest(phone).error,'XHS_ACCESS_RESTRICTED');
+});
