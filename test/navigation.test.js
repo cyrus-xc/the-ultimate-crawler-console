@@ -48,8 +48,22 @@ test('search returns from a previous detail by normal Back navigation',async()=>
  const nav=new XhsNavigation({ui:async()=>views.shift(),shell:async(...a)=>commands.push(a),tap:async()=>{},wait:async()=>{}},{guard:()=>{},writeClipboard:async()=>{}});
  await nav.search('咖啡');assert.ok(commands.some(a=>a.join(' ')==='input keyevent 4'));
 });
+test('profile entry waits for the first response without sending any gesture',async()=>{
+ let waits=0;
+ const nav=new XhsNavigation({
+  wait:async()=>{waits++;},
+  shell:async()=>assert.fail('waiting for the profile must never send input'),
+  ui:async()=>assert.fail('waiting for the profile must never inspect the grid'),
+ },{guard:()=>{}});
+ await nav.waitForProfileFirstPage(()=>waits===2);
+ assert.equal(waits,2);
+ waits=0;
+ await assert.rejects(nav.waitForProfileFirstPage(()=>false),{code:'PHONE_FIRST_PAGE_UNOBSERVED'});
+ assert.equal(waits,8);
+});
+
 test('page navigation stops at the first observed response instead of blind multi-swipes',async()=>{
- const nav=new XhsNavigation({}, {guard:()=>{}});let swipes=0;nav.swipe=async()=>{swipes++;};await nav.nextPage(()=>swipes===3);assert.equal(swipes,3);
+ const nav=new XhsNavigation({}, {guard:()=>{}});let swipes=0;nav.swipe=async direction=>{assert.equal(direction,1);swipes++;};await nav.nextPage(()=>swipes===3);assert.equal(swipes,3);
  swipes=0;await assert.rejects(nav.nextPage(()=>false),{code:'PHONE_PAGE_RESPONSE_UNOBSERVED'});assert.equal(swipes,12);
 });
 
@@ -124,7 +138,7 @@ test('scrolled discovery profile restore is proven by profile tab and known grid
 });
 test('profile pagination obeys capture-local cancellation before another gesture',async()=>{
  let inputs=0;const nav=new XhsNavigation({ui:async()=>[],shell:async()=>inputs++},{guard:()=>{}});const guard=()=>{throw Object.assign(Error('capture stopped'),{code:'CAPTURE_TIMEOUT'});};
- await assert.rejects(nav.firstPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});await assert.rejects(nav.nextPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});assert.equal(inputs,0);
+ await assert.rejects(nav.waitForProfileFirstPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});await assert.rejects(nav.nextPage(()=>false,{guard}),{code:'CAPTURE_TIMEOUT'});assert.equal(inputs,0);
 });
 test('discovery waits for observed grid readiness without an input while cards render',async()=>{
  let reads=0,taps=0,swipes=0;const card={'content-desc':'视频,title,来自测试作者,1赞，',center:[200,500]};

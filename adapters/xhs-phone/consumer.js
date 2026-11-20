@@ -143,7 +143,10 @@ class PhoneConsumer {
     }else if(operation==='profile.get'){values={query:{user_id:claim.target.user_id}};trigger=()=>nav.openProfile(claim.target.user_id);}
     else if(operation==='profile.posts'){
      values={user_id:claim.target.user_id,...(page===0?{cursor:''}:lastCursor?.cursor?{cursor:lastCursor.cursor}:{})};
-     trigger=page===0?async control=>{if(!profileOpened){await nav.openProfile(claim.target.user_id);await adb.wait(500);}await nav.firstPage(control?.responseReady,control);}:async control=>{
+     trigger=page===0?async control=>{
+      if(!profileOpened)await nav.openProfile(claim.target.user_id);
+      await nav.waitForProfileFirstPage(control?.responseReady,control);
+     }:async control=>{
       // Detail deep links may return to Home, not the previous profile. Restore
       // under this page's observer so replay/prefetch responses remain visible.
       const restoring=profileNeedsRestore;

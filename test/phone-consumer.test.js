@@ -9,7 +9,7 @@ const base={schema_version:'crawler.request.v1',idempotency_key:'test',platform:
 function fixture(t,input=base){
  const store=new Store();store.register({id:'p',kind:'android',serial:'S',capabilities:[{platform:'xiaohongshu',operation:input.operation}]});
  const events=[],captures=[],gateway={drain:async()=>events.push('drain')},runtime={ensure:async()=>({pid:1,endpoint:'127.0.0.1:4000'}),close:async()=>events.push('close')};
- const nav={search:async()=>events.push('search'),submitSearch:async()=>events.push('submit'),sort:async()=>events.push('sort'),confirmSortResponse:()=>{},swipe:async()=>events.push('swipe'),openProfile:async()=>events.push('profile'),refresh:async()=>events.push('refresh'),firstPage:async()=>events.push('refresh'),nextPage:async()=>events.push('swipe'),openNote:async()=>events.push('detail'),comments:async()=>{},back:async()=>events.push('back'),restoreProfile:async()=>events.push('restore-profile'),assertProfile:async()=>events.push('assert-profile')};
+ const nav={search:async()=>events.push('search'),submitSearch:async()=>events.push('submit'),sort:async()=>events.push('sort'),confirmSortResponse:()=>{},swipe:async()=>events.push('swipe'),openProfile:async()=>events.push('profile'),waitForProfileFirstPage:async()=>events.push('wait-first-page'),nextPage:async()=>events.push('swipe'),openNote:async()=>events.push('detail'),comments:async()=>{},back:async()=>events.push('back'),restoreProfile:async()=>events.push('restore-profile'),assertProfile:async()=>events.push('assert-profile')};
  const replies=[{response:{data:{items:[{id:id(1),desc:'body',user:{userid:id(2)}}],has_more:false}}}];
  const consumer=new PhoneConsumer({store,gateway,deviceId:'p',contractPath:path.resolve(__dirname,'../contracts/xhs-app-9.51.0.json'),verifiedOperations:[input.operation],transportFactory:()=>({wait:async()=>{}}),runtimeFactory:()=>runtime,navFactory:()=>nav,capture:async options=>{captures.push(options);await options.guard();await options.trigger();const r=replies.shift();if(r instanceof Error)throw r;return {captured_at_ms:1000,status:200,operation:options.operation,request:{query:[]},effective_sort:'general',...r};}});
  const worker=new LocalWorker(store,new Map([['p',consumer]]),{heartbeatMs:5});t.after(async()=>{await worker.close();store.close();});const request=store.submit(input);return {store,worker,request,events,captures,replies,runtime,consumer};
@@ -81,7 +81,7 @@ test('manual profile details restore the target profile inside the next page obs
  f.replies.push(detail(1),{response:{data:{notes:[{id:id(3),cursor:'page-two',user:{userid:id(2)}}],has_more:false}}},detail(3));
  f.worker.dispatch();for(let n=0;n<100;n++){for(const d of f.store.request(f.request.id).decisions.filter(d=>d.action===null))f.store.decide(f.request.id,d.id,'continue');if(!f.worker.active.size)break;await new Promise(r=>setTimeout(r,5));}
  await Promise.all(f.worker.active.values());assert.equal(f.store.request(f.request.id).state,'succeeded');
- assert.deepEqual(f.events.slice(0,6),['profile','refresh','detail','restore-profile','swipe','detail']);
+ assert.deepEqual(f.events.slice(0,6),['profile','wait-first-page','detail','restore-profile','swipe','detail']);
  assert.equal(f.events.includes('back'),false);assert.equal(f.captures[2].operation,'user_posted');assert.equal(f.captures[2].values.cursor,'page-one');
 });
 test('cached profile first page is retried once after ordinary App restart with fresh PID',async t=>{

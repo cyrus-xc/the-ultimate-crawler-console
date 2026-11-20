@@ -202,13 +202,15 @@ class XhsNavigation {
     await this.swipe();return false;
   }
   async back(){await this.shell('input','keyevent','4');await this.adb.wait(350);}
-  async refresh(control={}){
-    const nodes=await this.ui(),width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0)),height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
-    if(width<200||height<400)failed('VIEWPORT_UNAVAILABLE');
-    await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(width*.5),Math.round(height*.35),Math.round(width*.5),Math.round(height*.8),'450');});await this.adb.wait(500);
-  }
-  async firstPage(responseReady=()=>false,control={}){
-    for(let attempt=0;attempt<8;attempt++){control.guard?.();if(responseReady())return;await this.refresh(control);}
+  async waitForProfileFirstPage(responseReady=()=>false,control={}){
+    // Opening the profile triggers its initial request. Keep the grid in place
+    // until that response is observed so pagination begins at the first cursor.
+    for(let attempt=0;attempt<8;attempt++){
+      control.guard?.();
+      if(responseReady())return;
+      await this.adb.wait(500);
+    }
+    control.guard?.();
     if(!responseReady())failed('PHONE_FIRST_PAGE_UNOBSERVED');
   }
   async nextPage(responseReady=()=>false,{maxSwipes=12,guard=()=>{}}={}){
