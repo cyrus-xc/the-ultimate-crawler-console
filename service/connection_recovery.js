@@ -2,6 +2,11 @@
 const {setTimeout: delay}=require('node:timers/promises');
 const {problem}=require('./contract');
 
+function requireOnline(transport){
+ if(transport?.state==='unauthorized')throw problem('ADB_AUTHORIZATION_REQUIRED',409);
+ if(transport?.state!=='device')throw problem('PHONE_RECONNECT_FAILED',409);
+}
+
 const {verifyPhoneIdle}=require('./phone_idle');
 const {PhoneRecoveryLog}=require('./phone_recovery_log');
 
@@ -70,12 +75,27 @@ class ConnectionRecovery {
      if(transport?.state==='device'||transport?.state==='unauthorized')break;
     }
    }
-   if(transport?.state==='unauthorized')throw problem('ADB_AUTHORIZATION_REQUIRED',409);
-   if(transport?.state!=='device')throw problem('PHONE_RECONNECT_FAILED',409);
+   requireOnline(transport);
    this.store.heartbeat(lease);
    if(schedule){
     try{await this.verifyIdle(device.serial);}
     catch(error){throw problem(/^PHONE_[A-Z_]+$/.test(error.code)?error.code:'PHONE_IDLE_CHECK_FAILED',409);}
+   }
+   // A phone left unavailable by a UI-observation failure (first page, next
+   // page, blocking overlay) returns to service only after its recorded
+   // incident is confirmed and the phone is proven idle.
+   if(manual&&!schedule&&device.health==='unavailable'){
+    const failure=this.store.profileFailureForRepair(id);
+    if(failure){
+     let idle=false;
+     try{await this.verifyIdle(device.serial);idle=true;}catch{/* An incomplete probe cannot restore health. */}
+     if(idle&&!this.closed){
+      requireOnline(await this.readTransport(device.serial));
+      this.store.heartbeat(lease);
+      this.gateway.beforeCommand();
+      if(!this.hasDisplay(id)&&!this.gateway.recoveryFaults.has(id))this.store.restoreProfileFailure(lease,failure.seq);
+     }
+    }
    }
    await this.gateway.drain(lease);
    this.store.tx(()=>{

@@ -6,11 +6,22 @@ const TERMINAL = new Set(['succeeded','partial','failed','cancelled']);
 const {RawEvidenceStore}=require('./raw_evidence');
 const {persistResult}=require('./result_evidence');
 const parse = value => value == null ? null : JSON.parse(value);
+const SCHEMA_VERSION=5;
+// UI-observation failures that leave a phone unavailable without a platform or
+// transport fault. Manual repair may restore them after an idle check.
+const REPAIRABLE_UI_CODES=new Set(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED','UI_BLOCKED_BY_OVERLAY']);
+function repairableUiMiss(error,platform,kind){
+  return REPAIRABLE_UI_CODES.has(error?.code) && error.scope==='device' && platform==='xiaohongshu' && kind==='android';
+}
+function profilePageMiss(error,platform,operation,kind){
+  return error?.code==='PHONE_FIRST_PAGE_UNOBSERVED' && error.scope==='device' &&
+    platform==='xiaohongshu' && operation==='profile.posts' && kind==='android';
+}
 class Store {
   constructor(filename=':memory:', {now=Date.now,leaseMs=30000,rawEvidence=new RawEvidenceStore()}={}) {
     require('./raw_migration').assertReadable(filename,rawEvidence);
     this.now=now; this.leaseMs=leaseMs; this.rawEvidence=rawEvidence; this.db=new Database(filename);
-    if(this.db.pragma('user_version',{simple:true})>4){this.db.close();throw problem('DATABASE_VERSION_UNSUPPORTED',500);}
+    if(this.db.pragma('user_version',{simple:true})>SCHEMA_VERSION){this.db.close();throw problem('DATABASE_VERSION_UNSUPPORTED',500);}
     this.db.pragma('journal_mode = WAL'); this.db.pragma('foreign_keys = ON'); this.db.pragma('busy_timeout = 5000');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,scope TEXT NOT NULL,key TEXT NOT NULL,hash TEXT NOT NULL,payload TEXT NOT NULL,
@@ -24,6 +35,8 @@ class Store {
         generation INTEGER NOT NULL,expires INTEGER NOT NULL,attempt_id TEXT);
       CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,unit_id TEXT NOT NULL REFERENCES units(id),device_id TEXT NOT NULL REFERENCES devices(id),
         state TEXT NOT NULL,started INTEGER NOT NULL,finished INTEGER,error TEXT);
+      CREATE TABLE IF NOT EXISTS unit_device_exclusions(unit_id TEXT NOT NULL REFERENCES units(id),device_id TEXT NOT NULL REFERENCES devices(id),
+        PRIMARY KEY(unit_id,device_id));
       CREATE TABLE IF NOT EXISTS decisions(id TEXT PRIMARY KEY,unit_id TEXT NOT NULL REFERENCES units(id),checkpoint_hash TEXT NOT NULL,
         action TEXT,created INTEGER NOT NULL,deadline INTEGER NOT NULL, UNIQUE(unit_id,checkpoint_hash));
       CREATE TABLE IF NOT EXISTS results(seq INTEGER PRIMARY KEY AUTOINCREMENT,request_id TEXT NOT NULL REFERENCES requests(id),
@@ -46,7 +59,8 @@ class Store {
         if(next>65535)throw problem('CLIPBOARD_PORT_CAPACITY',500);
         this.db.prepare('UPDATE devices SET clipboard_port=? WHERE id=?').run(next,d.id);
       }
-      this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS device_clipboard_port ON devices(clipboard_port); PRAGMA user_version = 4');
+      this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS device_clipboard_port ON devices(clipboard_port)');
+      this.db.pragma('user_version = '+SCHEMA_VERSION);
     });
   }
   close(){this.db.close();}
@@ -188,7 +202,8 @@ class Store {
       const rows=this.db.prepare("SELECT * FROM requests WHERE state IN ('queued','running','waiting_resources') ORDER BY last_dispatch,created,rowid").all();
       for(const row of rows) {
         const r=this.request(row.id),p=r.payload;
-        const units=this.db.prepare("SELECT * FROM units WHERE request_id=? AND state='queued' ORDER BY rowid").all(r.id);
+        const units=this.db.prepare(`SELECT u.*,(SELECT json_group_array(device_id) FROM unit_device_exclusions WHERE unit_id=u.id) excluded
+          FROM units u WHERE u.request_id=? AND u.state='queued' ORDER BY u.rowid`).all(r.id);
         if(!units.length)continue;
         const running=r.units.filter(u=>['running','waiting_decision'].includes(u.state)).length;
         if(this.now()-row.queued_at>=p.limits.queue_timeout_seconds*1000 && !running) {
@@ -204,11 +219,25 @@ class Store {
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE request_id=? AND state='queued'").run(canonical({code:'NO_AVAILABLE_DEVICE'}),r.id);this.settle(r.id);continue;
         }
         const free=this.preferredDevices(healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id))));
+        let unit,device,waitingReason;
+        for(const queued of units){
+          const excluded=parse(queued.excluded);
+          device=free.find(d=>!excluded.includes(d.id));
+          if(device){unit=queued;break;}
+          if(healthy.some(d=>!excluded.includes(d.id)))waitingReason='DEVICES_BUSY';
+          else if(candidates.some(d=>d.quarantined&&!excluded.includes(d.id)))waitingReason??='DEVICE_QUARANTINED';
+          else this.db.prepare("UPDATE units SET state='failed' WHERE id=?").run(queued.id);
+        }
+        if(!unit){
+          if(!waitingReason)this.settle(r.id);
+          else if(!running)this.state(r.id,'waiting_resources',waitingReason);
+          continue;
+        }
         const competing=rows.some(other=>other.id!==r.id && free.some(d=>this.compatible(d,parse(other.payload))) &&
           this.db.prepare("SELECT 1 FROM units WHERE request_id=? AND state='queued'").get(other.id));
         const target=parallelism(p.effort,free.length+running,competing);
-        if(!free.length || running>=target){if(!running)this.state(r.id,'waiting_resources','DEVICES_BUSY');continue;}
-        const unit=units[0],device=free[0],attemptId=randomUUID(),at=this.now();
+        if(running>=target)continue;
+        const attemptId=randomUUID(),at=this.now();
         if(unit.started!==null && at-unit.started>=p.limits.execution_timeout_seconds*1000){
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE id=?").run(canonical({code:'EXECUTION_DEADLINE'}),unit.id);this.settle(r.id);continue;
         }
@@ -260,7 +289,13 @@ class Store {
     if(!error || !identifier(error.code)||!['item','platform','device'].includes(error.scope))throw problem('INVALID_ERROR');
     return this.tx(()=>{
       this.active(claim);
-      if(error.scope==='device')this.db.prepare("UPDATE devices SET health='unavailable' WHERE id=?").run(claim.device_id);
+      if(error.scope==='device'){
+        const device=this.db.prepare('SELECT kind,quarantined FROM devices WHERE id=?').get(claim.device_id);
+        if(!device.quarantined&&profilePageMiss(error,claim.payload.platform,claim.payload.operation,device.kind)){
+          this.db.prepare('INSERT OR IGNORE INTO unit_device_exclusions VALUES (?,?)').run(claim.unit_id,claim.device_id);
+          error={...error,scope:'operation'};
+        }else this.db.prepare("UPDATE devices SET health='unavailable' WHERE id=?").run(claim.device_id);
+      }
       if(error.scope==='platform'){
         const d=this.db.prepare('SELECT faults FROM devices WHERE id=?').get(claim.device_id);
         this.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(canonical({...parse(d.faults),[claim.payload.platform]:error.code}),claim.device_id);
@@ -276,6 +311,7 @@ class Store {
       else if(action==='pause' && !TERMINAL.has(r.state) && r.state!=='cancelling')this.state(id,'pausing');
       else if(action==='resume' && r.state==='paused')this.state(id,'queued');
       else if(action==='retry' && ['partial','failed'].includes(r.state)){
+        this.db.prepare("DELETE FROM unit_device_exclusions WHERE unit_id IN (SELECT id FROM units WHERE request_id=? AND state='failed')").run(id);
         this.db.prepare("UPDATE units SET state='queued',started=NULL WHERE request_id=? AND state='failed'").run(id);
         this.state(id,'queued');
       } else if(!['pause','resume','cancel','retry'].includes(action))throw problem('INVALID_ACTION');
@@ -354,6 +390,35 @@ class Store {
     }
   }
   expire(){return this.tx(()=>this.expireInside());}
+  // Only the device-scoped incident that actually set this phone unavailable qualifies.
+  profileFailureForRepair(id){
+    const row=this.db.prepare(`WITH incident AS (
+      SELECT seq,type,request_id,json_extract(payload,'$.unit_id') unit_id,json_extract(payload,'$.code') code FROM events
+      WHERE type IN ('unit.failed','device.quarantined','device.recovered','lease.expired') AND json_extract(payload,'$.device_id')=?
+      ORDER BY seq DESC LIMIT 1
+    ) SELECT i.seq,i.unit_id,i.code,a.error,a.state,a.finished,d.kind,json_extract(r.payload,'$.platform') platform,json_extract(r.payload,'$.operation') operation
+      FROM incident i JOIN requests r ON r.id=i.request_id JOIN units u ON u.id=i.unit_id AND u.request_id=r.id
+      JOIN attempts a ON a.unit_id=u.id JOIN devices d ON d.id=a.device_id
+      WHERE i.type='unit.failed' AND d.id=? AND d.health='unavailable' AND d.quarantined=0 AND NOT EXISTS (SELECT 1 FROM json_each(d.faults))
+      AND NOT EXISTS (SELECT 1 FROM attempts WHERE device_id=d.id AND finished IS NULL)
+      ORDER BY a.rowid DESC LIMIT 1`).get(id,id);
+    const error=parse(row?.error);
+    if(row?.state!=='failed' || row.finished===null || row.code!==error?.code || !repairableUiMiss(error,row.platform,row.kind))return null;
+    return {seq:row.seq,unit_id:row.unit_id,code:row.code};
+  }
+  restoreProfileFailure(lease,seq){
+    return this.tx(()=>{
+      this.assertLease(lease,{owner:'local:connection-repair',externalOnly:true});
+      this.assertNoCommand(lease.device_id);
+      const failure=this.profileFailureForRepair(lease.device_id);
+      if(!failure || failure.seq!==seq)return false;
+      this.db.prepare(`INSERT OR IGNORE INTO unit_device_exclusions(unit_id,device_id)
+        SELECT id,? FROM units WHERE id=? AND state IN ('queued','running','waiting_decision') AND started IS NOT NULL`).run(lease.device_id,failure.unit_id);
+      this.db.prepare("UPDATE devices SET health='ready' WHERE id=?").run(lease.device_id);
+      this.event(null,'device.recovered',{device_id:lease.device_id,reason:failure.code,failure_seq:seq});
+      return true;
+    });
+  }
   // Only the local supervisor may call after confirming old process death / device isolation.
   recoverDevice(id,{stopped=false,platform=null}={}) {
     if(!stopped)throw problem('WORKER_STOP_REQUIRED',409);

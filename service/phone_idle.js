@@ -15,4 +15,6 @@ async function verifyPhoneIdle(serial,{adbPath='adb',run=execute}={}){
  const forwards=await read(['forward','--list']);
  if(forwards.split(/\r?\n/).some(line=>line.trim().split(/\s+/)[0]===serial))throw problem('PHONE_FORWARD_ACTIVE',409);
 }
-module.exports={verifyPhoneIdle};
+// Boolean form for callers that only need the proof, never the reason.
+async function phoneStopped(serial,options){try{await verifyPhoneIdle(serial,options);return true;}catch{return false;}}
+module.exports={verifyPhoneIdle,phoneStopped};

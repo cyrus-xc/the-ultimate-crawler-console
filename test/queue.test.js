@@ -109,7 +109,7 @@ test('v1 database gains stable phone ports without deleting device state',t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crawler-upgrade-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'queue.db');
  const Database=require('better-sqlite3'),old=new Database(file);old.exec(`CREATE TABLE devices(id TEXT PRIMARY KEY,kind TEXT NOT NULL,serial TEXT,capabilities TEXT NOT NULL,health TEXT NOT NULL,faults TEXT NOT NULL DEFAULT '{}',generation INTEGER NOT NULL DEFAULT 0,quarantined INTEGER NOT NULL DEFAULT 0);
  INSERT INTO devices(id,kind,serial,capabilities,health,quarantined) VALUES ('phone','android','serial','[]','unavailable',1); PRAGMA user_version=1;`);old.close();
- const s=new Store(file);t.after(()=>s.close());assert.equal(s.devices()[0].health,'unavailable');assert.equal(s.devices()[0].quarantined,1);assert.equal(s.devices()[0].clipboard_port,38617);assert.equal(s.db.pragma('user_version',{simple:true}),4);
+ const s=new Store(file);t.after(()=>s.close());assert.equal(s.devices()[0].health,'unavailable');assert.equal(s.devices()[0].quarantined,1);assert.equal(s.devices()[0].clipboard_port,38617);assert.equal(s.db.pragma('user_version',{simple:true}),5);
 });
 
 test('business decisions are checkpoint-bound, idempotent and preserve paused unit state',t=>{
