@@ -97,7 +97,15 @@ class AndroidAdb {
   }
   async tap(node) {
     if (!node?.center) throw new DevicePause('UI_CHANGED', 'The expected phone control was not found');
-    await this.shell('input', 'tap', ...node.center);
+    await this.shell('input', 'tap', ...this.touchPoint(node));
+  }
+  // With humanize (a random source) set, touch inside the control's inner 60%
+  // instead of its exact centre; otherwise keep the exact centre.
+  touchPoint(node) {
+    const r = this.humanize;
+    if (!r || !(node.width > 8) || !(node.height > 8)) return node.center;
+    const offset = (size) => { let g = 0; for (let i = 0; i < 3; i++) g += r(); return Math.round((g / 3 - .5) * 2 * size * .3); };
+    return [node.center[0] + offset(node.width), node.center[1] + offset(node.height)];
   }
   async tapLabel(labels, { optional = false } = {}) {
     const nodes = await this.ui();
@@ -106,6 +114,7 @@ class AndroidAdb {
     await this.tap(node); return true;
   }
   async wait(ms = 700) {
+    if (this.humanize) ms = Math.round(ms * (.6 + .8 * this.humanize()));
     await new Promise((resolve, reject) => {
       const onAbort = () => { clearTimeout(timer); reject(this.signal.reason || new Error('Stopped')); };
       const timer = setTimeout(() => { this.signal?.removeEventListener('abort', onAbort); resolve(); }, ms);

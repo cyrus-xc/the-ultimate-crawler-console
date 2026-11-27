@@ -18,24 +18,53 @@ function knownOplusWarning(nodes){
  const own=nodes.filter(n=>n.package==='com.oplus.battery');
  return own.some(n=>label(n)==='“小红书”异常')&&own.some(n=>label(n)==='“小红书”运行异常，建议前往软件商店更新至最新版本。');
 }
+// Dialogs with one known, harmless dismissal. Never accept an update/install.
+const LATER=/^(?:稍后再说|以后再说|暂不更新|暂不升级)$/;
+const KNOWN_DIALOGS=[
+ {id:'oplus_battery_warning',match:knownOplusWarning,
+  dismiss:n=>n.package==='com.oplus.battery'&&label(n)==='取消'&&n.class==='android.widget.Button'},
+ {id:'xhs_update_prompt',
+  match:nodes=>{const own=nodes.filter(n=>n.package==='com.xingin.xhs');
+   return own.some(n=>/^(?:免流量升级|发现新版本|版本更新|立即升级|立即更新|立即安装)$/.test(label(n)))&&own.some(n=>LATER.test(label(n)));},
+  dismiss:n=>n.package==='com.xingin.xhs'&&LATER.test(label(n))},
+];
+// Something other than the feed/grid is in front: a foreign window or an
+// actionable prompt inside XHS. Used only after scrolling stopped changing UI.
+function overlayIn(nodes){
+ const foreign=nodes.find(n=>n.package&&!['com.xingin.xhs','com.android.systemui'].includes(n.package));
+ if(foreign)return 'package:'+foreign.package;
+ const prompt=nodes.find(n=>n.package==='com.xingin.xhs'&&/^(?:立即安装|立即升级|立即更新|去开启|允许|同意|我知道了|知道了|去设置|开启通知|去评分)$/.test(label(n)));
+ return prompt?'prompt:'+label(prompt):null;
+}
+const fingerprint=nodes=>nodes.map(n=>label(n)).filter(Boolean).join('|');
+const between=(random,min,max)=>min+random()*(max-min);
+
 class XhsNavigation {
-  constructor(adb,{guard,writeClipboard=writeAndroidClipboard,locator,clipboardPort}={}) {
+  constructor(adb,{guard,writeClipboard=writeAndroidClipboard,locator,clipboardPort,random=Math.random}={}) {
     if(typeof guard!=='function')throw new Error('Device lease guard required');
-    this.adb=adb;this.guard=guard;this.writeClipboard=writeClipboard;
+    this.adb=adb;this.guard=guard;this.writeClipboard=writeClipboard;this.random=random;
     this.clipboardPort=clipboardPort;this.locator=locator||new UiLocator({serial:adb.serial||'offline',appVersion:'unverified'});this.pendingSort=null;
   }
   async action(fn){await this.guard();return await fn();}
   async ui(){
     await this.guard();let nodes=await this.adb.ui();
-    if(!knownOplusWarning(nodes))return nodes;
-    // OnePlus can show this exact battery-manager warning after an ordinary
-    // XHS restart. Dismiss only its unique Cancel; never update the App or
-    // generalize this into handling unknown authentication/system dialogs.
-    const cancel=choose(nodes,n=>n.package==='com.oplus.battery'&&label(n)==='取消'
-      &&n.class==='android.widget.Button'&&n.clickable==='true'&&n.enabled==='true'&&n.center,'APP_WARNING_CANCEL_UNAVAILABLE');
-    await this.tap(cancel);await this.adb.wait(350);await this.guard();nodes=await this.adb.ui();
-    if(knownOplusWarning(nodes))failed('APP_WARNING_DISMISS_FAILED');
+    // Dismiss only listed dialogs through their unique harmless control (the
+    // OnePlus battery warning's Cancel, XHS update's "later"). Never install or
+    // update the App; unknown authentication/system dialogs are not handled here.
+    for(let round=0;round<2;round++){
+      const dialog=KNOWN_DIALOGS.find(d=>d.match(nodes));
+      if(!dialog)return nodes;
+      const control=choose(nodes,n=>dialog.dismiss(n)&&n.clickable==='true'&&n.enabled!=='false'&&n.center,'APP_WARNING_CANCEL_UNAVAILABLE');
+      await this.tap(control);this.adb.logIncident?.({kind:'dialog_dismissed',dialog:dialog.id});
+      await this.adb.wait(600);await this.guard();nodes=await this.adb.ui();
+      if(dialog.match(nodes))failed('APP_WARNING_DISMISS_FAILED');
+    }
     return nodes;
+  }
+  blocked(nodes){
+    const overlay=overlayIn(nodes);
+    this.adb.logIncident?.({kind:'ui_blocked',overlay,labels:nodes.map(label).filter(Boolean).slice(0,20)});
+    failed(overlay?'UI_BLOCKED_BY_OVERLAY':'PHONE_PAGE_RESPONSE_UNOBSERVED');
   }
   async shell(...args){return this.action(()=>this.adb.shell(...args));}
   async tap(node){return this.action(()=>this.adb.tap(node));}
@@ -215,14 +244,36 @@ class XhsNavigation {
   }
   async nextPage(responseReady=()=>false,{maxSwipes=12,guard=()=>{}}={}){
     if(!Number.isInteger(maxSwipes)||maxSwipes<1||maxSwipes>120)failed('INVALID_PAGE_SWIPE_LIMIT');
-    for(let attempt=0;attempt<maxSwipes;attempt++){guard();if(responseReady())return;await this.swipe(1,{guard});}
+    // Two swipes that leave the screen unchanged mean scrolling is not reaching
+    // the list (overlay, end of grid). Stop instead of swiping blind.
+    let last=null,unchanged=0;
+    for(let attempt=0;attempt<maxSwipes;attempt++){
+      guard();if(responseReady())return;
+      const before=(await this.swipe(1,{guard}))?.nodes;
+      if(!before)continue;
+      if(last!==null&&fingerprint(before)===last){if(++unchanged>=2)this.blocked(before);}else unchanged=0;
+      last=fingerprint(before);
+    }
     if(!responseReady())failed('PHONE_PAGE_RESPONSE_UNOBSERVED');
   }
+  // A thumb scroll: varied column, length, slight drift and speed, then a
+  // variable look at the result (occasionally a longer read or a small
+  // correction back). Returns the screen observed before the swipe.
   async swipe(direction=1,control={}){
     const nodes=await this.ui();const width=Math.max(...nodes.map(n=>n.center?n.center[0]+n.width/2:0));const height=Math.max(...nodes.map(n=>n.center?n.center[1]+n.height/2:0));
     if(width<200||height<400)failed('VIEWPORT_UNAVAILABLE');
-    await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(width*.5),Math.round(height*(direction<0?.3:.78)),Math.round(width*.5),Math.round(height*(direction<0?.78:.3)),'450');});
-    await this.adb.wait(500);
+    const r=this.random,x=width*between(r,.35,.65),drift=between(r,-40,40);
+    const low=height*between(r,.70,.85),high=height*between(r,.22,.40);
+    const [y0,y1]=direction<0?[high,low]:[low,high];
+    await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(x),Math.round(y0),Math.round(x+drift),Math.round(y1),String(Math.round(between(r,280,650))));});
+    if(direction>0&&r()<.07){
+      // Small correction back, as when a thumb overshoots.
+      const back=height*between(r,.08,.16),y=height*between(r,.35,.55);
+      await this.adb.wait(Math.round(between(r,300,700)));
+      await this.action(()=>{control.guard?.();return this.adb.shell('input','swipe',Math.round(x),Math.round(y),Math.round(x+between(r,-20,20)),Math.round(y+back),String(Math.round(between(r,250,420))));});
+    }
+    await this.adb.wait(Math.round(r()<.08?between(r,4000,8000):between(r,900,3500)));
+    return {nodes};
   }
 }
 module.exports={XhsNavigation,SORT_LABELS,label,choose,discoveryTitle};

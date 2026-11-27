@@ -45,6 +45,9 @@ function makeTransport({gateway,store,claim,context,cleanup=false,drainOnStop=fa
   return trusted?gateway.executeTrusted(claim.lease,{args,serial:device.serial},{signal:cleanup||release?undefined:signal,cleanup:cleanup||release}):gateway.execute(claim.lease,{args,serial:device.serial},{signal});
  };
  const adb=new AndroidAdb(device.serial,{execute,signal:cleanup?undefined:context.signal});
+ // Humanized touch/waits and incident evidence only for XHS phone work.
+ adb.humanize=context.random||Math.random;
+ adb.logIncident=event=>gateway.inputLog?.(device.id,event);
  // Discovery and forward listing are host reads, but still bound to this lease.
  adb.devices=async()=>{store.assertLease(claim.lease);return [{serial:device.serial,state:device.health==='disconnected'?'offline':'device'}];};
  adb.command=async(args,options)=>{

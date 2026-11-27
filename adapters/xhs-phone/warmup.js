@@ -65,12 +65,14 @@ function videoLike(nodes){
   Math.abs(n.center[0]-(collect.center[0]-spacing))<=spacing*.12));
 }
 
-async function browseFeed(adb,{guard,dwell,random}){
- const nav=new XhsNavigation(adb,{guard});
+async function browseFeed(adb,{guard,dwell,random,motion=Math.random}){
+ // `random` makes browsing decisions; `motion` only shapes gestures.
+ const nav=new XhsNavigation(adb,{guard,random:motion});
  const duration=(min,max)=>Math.round((min+random()*(max-min))*1000);
  const ui=async()=>{
   guard();
-  const nodes=await adb.ui();
+  // Navigation's reader dismisses only listed harmless dialogs (update prompt).
+  const nodes=await nav.ui();
   if(nodes.some(n=>denied.test(label(n))))fail('XHS_ACCESS_RESTRICTED');
   const app=own(nodes);
   if(!app.length)fail('APP_NOT_READY');
@@ -79,11 +81,15 @@ async function browseFeed(adb,{guard,dwell,random}){
  const tap=async n=>{guard();await adb.tap(n);await adb.wait(350);};
  const swipe=async(nodes,{across,down=false}={})=>{
   const {width,height}=viewport(nodes);
-  const from=across?[across.center[0]+across.width*.28,across.center[1]]:[width*.5,height*(down?.28:.76)];
-  const to=across?[across.center[0]-across.width*.28,across.center[1]]:[width*.5,height*(down?.76:.28)];
+  // Varied thumb: column, length, drift and speed differ on every swipe.
+  const v=(min,max)=>min+motion()*(max-min);
+  const x=width*v(.35,.65),low=height*v(.70,.84),high=height*v(.22,.36);
+  const row=across?across.center[1]+v(-30,30):0;
+  const from=across?[across.center[0]+across.width*v(.22,.34),row]:[x,down?high:low];
+  const to=across?[across.center[0]-across.width*v(.22,.34),row]:[x+v(-40,40),down?low:high];
   guard();
-  await adb.shell('input','swipe',...[...from,...to].map(Math.round),'380');
-  await adb.wait(400);
+  await adb.shell('input','swipe',...[...from,...to].map(Math.round),String(Math.round(v(260,600))));
+  await adb.wait(Math.round(v(500,1400)));
  };
  const returnToFeed=async nodes=>{
   for(let depth=0;depth<4&&!feed(nodes);depth++){
