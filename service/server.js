@@ -20,7 +20,7 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
-function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
+function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,pacer=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
   const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway,yieldWarmup:warmup?id=>warmup.yieldDevice(id):null});
   const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
@@ -46,6 +46,7 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(url.pathname==='/v1/capabilities'&&req.method==='GET')return send(200,{operations:OPERATIONS,devices:store.devices().map(d=>({device_id:d.id,capabilities:d.capabilities}))});
       if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>{const device={...d,...(warmup?{warmup:warmup.view(d)}:{}),...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT coalesce(json_extract(payload,'$.code'),json_extract(payload,'$.reason')) code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? AND seq>coalesce((SELECT max(seq) FROM events WHERE (type='device.recovered' OR (type='device.connection_verified' AND json_extract(payload,'$.healthy')=1)) AND json_extract(payload,'$.device_id')=?),0) ORDER BY seq DESC LIMIT 1").get(d.id,d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null};
         if(device.kind==='android'&&connectionRecovery)device.recovery=connectionRecovery.describe(device);
+        if(pacer)device.pacing=pacer.view(d.id);
         return device;})});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
       if(url.pathname==='/v1/devices/warmup'&&req.method==='POST'){

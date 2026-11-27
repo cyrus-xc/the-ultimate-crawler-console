@@ -1,0 +1,33 @@
+{
+  "human_v1": {
+    "android": {
+      "gap_s": {"median": 8, "sigma": 0.6, "min": 3, "max": 30},
+      "burst": [20, 35],
+      "break_s": [90, 240],
+      "daily_cap": 400,
+      "start_stagger_s": [5, 45],
+      "sleep": {
+        "android:7e9c701e": ["00:00", "06:00"],
+        "android:c7dee0b3": ["06:30", "12:30"]
+      },
+      "sleep_jitter_min": 15
+    },
+    "web": {
+      "gap_s": {"median": 20, "sigma": 0.5, "min": 8, "max": 60},
+      "burst": [15, 25],
+      "break_s": [180, 360],
+      "daily_cap": 100,
+      "start_stagger_s": [5, 30],
+      "sleep": {},
+      "sleep_jitter_min": 0
+    },
+    "brake": {
+      "codes": ["VERIFICATION_REQUIRED", "CRAWLER_VERIFICATION_REQUIRED", "LOGIN_OR_VERIFICATION_REQUIRED",
+                "XHS_ACCESS_RESTRICTED", "CRAWLER_ACCESS_RESTRICTED", "ACCESS_RESTRICTED", "UI_BLOCKED_BY_OVERLAY"],
+      "pause_min": [45, 90],
+      "slow_factor": 1.5,
+      "slow_hours": 2,
+      "repeat_window_h": 24
+    }
+  }
+}

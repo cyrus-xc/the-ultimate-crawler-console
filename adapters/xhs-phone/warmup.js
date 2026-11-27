@@ -65,7 +65,7 @@ function videoLike(nodes){
   Math.abs(n.center[0]-(collect.center[0]-spacing))<=spacing*.12));
 }
 
-async function browseFeed(adb,{guard,dwell,random,motion=Math.random}){
+async function browseFeed(adb,{guard,dwell,random,motion=Math.random,likeOk=()=>true}){
  // `random` makes browsing decisions; `motion` only shapes gestures.
  const nav=new XhsNavigation(adb,{guard,random:motion});
  const duration=(min,max)=>Math.round((min+random()*(max-min))*1000);
@@ -125,7 +125,7 @@ async function browseFeed(adb,{guard,dwell,random,motion=Math.random}){
     if(!onVideo())break;
     if(random()<.05){
      const like=videoLike(nodes);
-     if(like)await tap(like);
+     if(like&&likeOk())await tap(like);
     }
     await swipe(nodes);
     nodes=await ui();
@@ -162,16 +162,17 @@ async function browseFeed(adb,{guard,dwell,random,motion=Math.random}){
       if(!detail(nodes)||feed(nodes))fail('WARMUP_POST_UNCONFIRMED');
       visibleImage=image(nodes);
      }
-     if(visibleImage&&!nodes.some(n=>liked.test(label(n)))){
+     if(visibleImage&&!nodes.some(n=>liked.test(label(n)))&&likeOk()){
       guard();await adb.tap(visibleImage);
       guard();await adb.tap(visibleImage);
      }
     }
    }
   }
+  // A comments sheet or nested page can need more than one Back (GM1910
+  // failed WARMUP_HOME_UNCONFIRMED after a single Back from note detail).
   nodes=await ui();
-  if(!feed(nodes)){await nav.back();nodes=await ui();}
-  if(!feed(nodes))fail('WARMUP_HOME_UNCONFIRMED');
+  if(!feed(nodes))nodes=await returnToFeed(nodes);
   await swipe(nodes);
  }
 }

@@ -133,3 +133,11 @@ test('installer failure exposes only its stable code',async t=>{
  const rejected=assert.rejects(result,error=>error.code==='INSTALL_FAILED_USER_RESTRICTED'&&!error.message.includes('fixture-secret'));
  await tick();children[0].finish(1,'Failure [INSTALL_FAILED_USER_RESTRICTED: fixture-secret]');await rejected;
 });
+test('after one INJECT_EVENTS denial a rooted phone sends later input straight to root and logs it',async t=>{
+ const logged=[];
+ const {store,gateway,children}=fixture(t,{gatewayOptions:{rootInputSerials:['SERIAL1'],inputLog:(id,event)=>logged.push([id,event.kind])}}),lease=store.externalLease('p1','console');
+ const first=gateway.execute(lease,{args:tap});await tick();children[0].finish(1,'','SecurityException: injecting requires INJECT_EVENTS permission');await tick();children[1].finish();await first;
+ const second=gateway.execute(lease,{args:tap});await tick();
+ assert.equal(children.length,3);assert.deepEqual(children[2].args,['-s','SERIAL1','shell','su','-c',"'input tap 10 20'"]);children[2].finish();await second;
+ assert.deepEqual(logged,[['p1','tap'],['p1','tap']]);
+});

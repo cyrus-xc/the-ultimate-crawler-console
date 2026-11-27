@@ -2,7 +2,7 @@
 const {setTimeout: sleep}=require('node:timers/promises');
 const {problem}=require('./contract');
 
-const HOUR=3600000, DAY=24*HOUR, OFFSET=8*HOUR;
+const MIN=60000, HOUR=60*MIN, DAY=24*HOUR, OFFSET=8*HOUR;
 const localDay=now=>Math.floor((now+OFFSET)/DAY)*DAY-OFFSET;
 const OWNER='local:phone-warmup';
 const accountFaults=new Set(['ACCOUNT_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','XHS_ACCESS_RESTRICTED']);
@@ -10,8 +10,9 @@ const readyStates=new Set(['queued','running','paused']);
 const warmupFault=code=>problem(code,409);
 
 class PhoneWarmup {
- constructor(store,gateway,{browse,random=Math.random,wait=sleep,now=store.now,activeNow=()=>performance.now(),onError=()=>{}}={}){
-  Object.assign(this,{store,gateway,browse,random,wait,now,activeNow,onError});
+ constructor(store,gateway,{browse,random=Math.random,wait=sleep,now=store.now,activeNow=()=>performance.now(),onError=()=>{},pacer=null,likesPerDay=8,sessions=false}={}){
+  Object.assign(this,{store,gateway,browse,random,wait,now,activeNow,onError,pacer,likesPerDay,sessions});
+  this.likes=new Map();
   this.active=new Map();this.handoff=new Map();this.closing=false;
   store.db.exec(`CREATE TABLE IF NOT EXISTS phone_warmup (
     device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
@@ -22,19 +23,47 @@ class PhoneWarmup {
   if(!store.db.pragma('table_info(phone_warmup)').some(column=>column.name==='manual')){
    store.db.exec('ALTER TABLE phone_warmup ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
   }
+  if(!store.db.pragma('table_info(phone_warmup)').some(column=>column.name==='windows')){
+   store.db.exec('ALTER TABLE phone_warmup ADD COLUMN windows TEXT');
+  }
   store.db.prepare("UPDATE phone_warmup SET state='paused' WHERE state='running'").run();
  }
  eligible(device){return device?.kind==='android'&&device.capabilities.some(c=>c.platform==='xiaohongshu');}
  available(device,row){return device.health==='ready'&&!device.quarantined&&(row.manual||!device.faults.xiaohongshu);}
  plan(deviceId,day){
   if(this.store.db.prepare("SELECT 1 FROM phone_warmup WHERE device_id=? AND day=?").get(deviceId,day))return;
-  this.store.db.prepare(`INSERT OR IGNORE INTO phone_warmup(device_id,day,starts_at,stops_at,target_ms,state)
-    VALUES(?,?,?,?,?,'scheduled')`).run(deviceId,day,day+13*HOUR+Math.floor(this.random()*7*HOUR),
-     day+DAY+Math.floor(this.random()*HOUR),3*HOUR+Math.floor(this.random()*HOUR));
+  if(!this.sessions){
+   this.store.db.prepare(`INSERT OR IGNORE INTO phone_warmup(device_id,day,starts_at,stops_at,target_ms,state)
+     VALUES(?,?,?,?,?,'scheduled')`).run(deviceId,day,day+13*HOUR+Math.floor(this.random()*7*HOUR),
+      day+DAY+Math.floor(this.random()*HOUR),3*HOUR+Math.floor(this.random()*HOUR));
+   return;
+  }
+  // Several 20-40 min sessions between ~10:00 and ~23:00 with 25-90 min gaps,
+  // 2.5-3.5 h in total, instead of one multi-hour run into the night.
+  const starts=day+10*HOUR+Math.floor(this.random()*HOUR),stops=day+23*HOUR-Math.floor(this.random()*30*MIN);
+  const target=Math.floor(2.5*HOUR+this.random()*HOUR),windows=[];
+  for(let at=starts,total=0;total<target&&at<stops;){
+   const length=Math.floor((20+this.random()*20)*MIN),end=Math.min(stops,at+length);
+   windows.push([at,end]);total+=end-at;at=end+Math.floor((25+this.random()*65)*MIN);
+  }
+  this.store.db.prepare(`INSERT OR IGNORE INTO phone_warmup(device_id,day,starts_at,stops_at,target_ms,state,windows)
+    VALUES(?,?,?,?,?,'scheduled',?)`).run(deviceId,day,starts,stops,target,JSON.stringify(windows));
+ }
+ // Manual runs and rows without windows browse continuously; otherwise only
+ // inside a planned session or while the pacer has this phone on a break.
+ inSession(id,row,now){
+  if(row.manual||!row.windows)return true;
+  if(this.pacer?.inBreak(id,now))return true;
+  return JSON.parse(row.windows).some(([from,to])=>now>=from&&now<to);
+ }
+ likeOk(id,day){
+  const key=id+':'+day,used=this.likes.get(key)||0;
+  if(used>=this.likesPerDay)return false;
+  this.likes.set(key,used+1);return true;
  }
  latest(deviceId){
   const now=this.now();
-  return this.store.db.prepare(`SELECT starts_at,stops_at,target_ms,elapsed_ms,state,error,day,manual FROM phone_warmup
+  return this.store.db.prepare(`SELECT starts_at,stops_at,target_ms,elapsed_ms,state,error,day,manual,windows FROM phone_warmup
     WHERE device_id=? ORDER BY CASE WHEN state IN ('queued','running','paused') AND stops_at>? THEN 0
       WHEN day=? THEN 1 ELSE 2 END, day DESC LIMIT 1`).get(deviceId,now,localDay(now))||null;
  }
@@ -60,6 +89,8 @@ class PhoneWarmup {
   return this.view(device);
  }
  waiting(device){
+  // A pacing break leaves queued work waiting on purpose; browse meanwhile.
+  if(this.pacer?.inBreak(device.id))return false;
   return this.store.db.prepare(`SELECT r.payload FROM requests r
     WHERE r.state IN ('queued','running','waiting_resources')
       AND EXISTS (SELECT 1 FROM units u WHERE u.request_id=r.id AND u.state='queued')`).all().some(row=>{
@@ -84,18 +115,19 @@ class PhoneWarmup {
     WHERE device_id=? AND stops_at<=? AND state IN ('scheduled','queued','running','paused')`).run(id,now);
    this.store.db.prepare(`UPDATE phone_warmup SET state=?
      WHERE device_id=? AND day=? AND state='scheduled' AND starts_at<=?`)
-    .run(now<day+20*HOUR?'queued':'expired',id,day,now);
+    .run(now<day+(this.sessions?23:20)*HOUR?'queued':'expired',id,day,now);
    const task=this.active.get(id),row=this.latest(id);
    if(task){
     const reason=task.day!==row.day||!readyStates.has(row.state)?'WARMUP_STOPPED':
      !this.available(device,row)?'WARMUP_PHONE_UNAVAILABLE':
-     this.waiting(device)?'WARMUP_PREEMPTED':null;
+     this.waiting(device)?'WARMUP_PREEMPTED':
+     !this.inSession(id,row,now)?'WARMUP_PREEMPTED':null;
     if(reason)task.controller.abort(warmupFault(reason));
     else try{task.guard();}catch(error){task.controller.abort(error);}
     continue;
    }
    if((this.handoff.get(id)||0)<=now)this.handoff.delete(id);
-   if(!readyStates.has(row.state)||device.owner||this.handoff.has(id)||!this.available(device,row)||this.waiting(device))continue;
+   if(!readyStates.has(row.state)||device.owner||this.handoff.has(id)||!this.available(device,row)||this.waiting(device)||!this.inSession(id,row,now))continue;
    this.run(device,row);
   }
  }
@@ -137,7 +169,7 @@ class PhoneWarmup {
   this.active.set(id,task);
   task.done=(async()=>{
    try{
-    await this.browse({device,lease,guard,signal,dwell,random:this.random});
+    await this.browse({device,lease,guard,signal,dwell,random:this.random,likeOk:()=>this.likeOk(id,row.day)});
     throw warmupFault('WARMUP_BROWSE_ENDED');
    }catch(error){
     checkpoint(abortedAt);

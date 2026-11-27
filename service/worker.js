@@ -3,13 +3,16 @@ const {resumePlan}=require('./resume');
 // Adapters must resolve/reject only after their child processes and input writers
 // have stopped. An unresolved adapter remains quarantined, never silently freed.
 class LocalWorker {
-  constructor(store,adapters,{heartbeatMs=5000,stopTimeoutMs=10000}={}) {
-    this.store=store;this.adapters=adapters;this.heartbeatMs=heartbeatMs;this.stopTimeoutMs=stopTimeoutMs;this.active=new Map();this.stoppers=new Map();this.closing=false;
+  constructor(store,adapters,{heartbeatMs=5000,stopTimeoutMs=10000,pacer=null}={}) {
+    this.store=store;this.adapters=adapters;this.pacer=pacer;this.heartbeatMs=heartbeatMs;this.stopTimeoutMs=stopTimeoutMs;this.active=new Map();this.stoppers=new Map();this.closing=false;
   }
   dispatch() {
     if(this.closing)return 0;
     let count=0,claim;
-    while((claim=this.store.claim({deviceIds:[...this.adapters.keys()]}))) {
+    // A paced device receives no new item until its gap/break/sleep ends.
+    const deviceIds=[...this.adapters.keys()].filter(id=>!this.pacer||this.pacer.ready(id));
+    while((claim=this.store.claim({deviceIds}))) {
+      this.pacer?.started(claim.device_id);
       const adapter=this.adapters.get(claim.device_id);
       if(!adapter){this.store.fail(claim,{code:'ADAPTER_UNAVAILABLE',scope:'device'});continue;}
       const attemptId=claim.attempt_id;
@@ -86,7 +89,9 @@ class LocalWorker {
           this.store.fail(claim,{code:e.code||'ADAPTER_FAILED',scope:['item','device','platform'].includes(e.scope)?e.scope:'device',
             ...(e.code==='CAPTURE_FAILED'&&['configuration','attachment','capture'].includes(stage)&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(exceptionType||'')?{diagnostics:{stage,exception_type:exceptionType}}:{})});}
       }catch(lost){if(lost.code==='DEVICE_COMMAND_ACTIVE'){this.store.quarantine(claim.device_id,'DEVICE_COMMAND_ACTIVE');return;}if(!['LEASE_LOST','ATTEMPT_LOST'].includes(lost.code))throw lost;}
-    } finally {clearInterval(interval);clearTimeout(timeout);this.stoppers.delete(claim.attempt_id);}
+    } finally {clearInterval(interval);clearTimeout(timeout);this.stoppers.delete(claim.attempt_id);
+      if(this.pacer){try{const row=this.store.db.prepare('SELECT error FROM attempts WHERE id=?').get(claim.attempt_id);
+        this.pacer.finished(claim.device_id,row?.error?JSON.parse(row.error).code:null);}catch{/* pacing never blocks cleanup */}}}
   }
   async close(){this.closing=true;for(const stop of this.stoppers.values())stop(Object.assign(Error('STOP_REQUESTED'),{code:'STOP_REQUESTED'}));await Promise.all(this.active.values());}
 }
