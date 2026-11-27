@@ -32,6 +32,7 @@ class Store {
         payload TEXT NOT NULL,created INTEGER NOT NULL);
 
     `);
+    this.db.exec("CREATE INDEX IF NOT EXISTS events_device_seq ON events(json_extract(payload,'$.device_id'),seq) WHERE json_extract(payload,'$.device_id') IS NOT NULL");
     this.tx(()=>{
       for(const [name,type] of [['phase',"TEXT NOT NULL DEFAULT 'page'"],['subject_id','TEXT'],['capture_share','INTEGER']]){
         if(!this.db.prepare('PRAGMA table_info(decisions)').all().some(c=>c.name===name))this.db.exec(`ALTER TABLE decisions ADD COLUMN ${name} ${type}`);
@@ -49,6 +50,22 @@ class Store {
     });
   }
   close(){this.db.close();}
+  resetAllocations() {
+    return this.tx(()=>{
+      // A recorded Android command may still be running on that phone after a
+      // host crash. Its isolation is independent of the queue's temporary leases.
+      if(this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='device_commands'").get()){
+        const uncertain=this.db.prepare("SELECT d.id FROM device_commands c JOIN devices d ON d.id=c.device_id WHERE d.quarantined=0").all();
+        for(const {id} of uncertain)this.quarantine(id,'DEVICE_COMMAND_INTERRUPTED');
+        this.db.exec('DELETE FROM device_commands');
+      }
+      const affected=this.db.prepare("SELECT DISTINCT request_id FROM units WHERE state IN ('running','waiting_decision')").all();
+      this.db.prepare("UPDATE attempts SET state='stopped',finished=? WHERE finished IS NULL").run(this.now());
+      this.db.exec(`DELETE FROM leases;
+        UPDATE units SET state='queued',started=NULL WHERE state IN ('running','waiting_decision')`);
+      for(const {request_id} of affected)this.settle(request_id);
+    });
+  }
   tx(fn){return this.db.transaction(fn).immediate();}
   event(id,type,payload={}) { this.db.prepare('INSERT INTO events(request_id,type,payload,created) VALUES (?,?,?,?)').run(id,type,canonical(payload),this.now()); }
   request(id,scope) {
@@ -113,7 +130,8 @@ class Store {
   healthy(d,p) {const fault=d.faults[p.platform];const anonymous=p.platform==='xiaohongshu'&&d.kind==='web'&&(p.operation==='link.resolve'||['share_page','mobile_metadata','mobile_detail'].includes(p.params.native_request?.representation));return d.health==='ready'&&!d.quarantined&&(!fault||(anonymous&&fault==='LOGIN_REQUIRED'));}
   acquire(deviceId,owner,attemptId=null,{control=false,connectionRepair=false}={}) {
     const d=this.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
-    if(!d || d.quarantined || (d.health!=='ready'&&!(control&&d.kind==='web')&&!(connectionRepair&&d.kind==='android'&&!attemptId)))throw problem('DEVICE_UNAVAILABLE',409);
+    const repair=connectionRepair && d?.kind==='android' && !attemptId && owner==='local:connection-repair';
+    if(!d || (d.quarantined&&!repair) || (d.health!=='ready'&&!(control&&d.kind==='web')&&!repair))throw problem('DEVICE_UNAVAILABLE',409);
     if(this.db.prepare('SELECT 1 FROM leases WHERE device_id=?').get(deviceId))throw problem('DEVICE_BUSY',409);
     this.assertNoCommand(deviceId);
     const generation=d.generation+1,token=randomUUID(),expires=this.now()+this.leaseMs;
@@ -318,9 +336,9 @@ class Store {
   }
   quarantine(deviceId,reason='WORKER_STOP_TIMEOUT') {
     if(!identifier(reason))throw problem('INVALID_ERROR');
-    return this.tx(()=>{if(!this.db.prepare('SELECT 1 FROM devices WHERE id=?').get(deviceId))throw problem('DEVICE_NOT_FOUND',404);
+    return this.tx(()=>{const device=this.db.prepare('SELECT generation FROM devices WHERE id=?').get(deviceId);if(!device)throw problem('DEVICE_NOT_FOUND',404);
       this.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run(deviceId);
-      this.event(null,'device.quarantined',{device_id:deviceId,reason});});
+      this.event(null,'device.quarantined',{device_id:deviceId,reason,generation:device.generation});});
   }
   expireInside() {
     for(const l of this.db.prepare('SELECT * FROM leases WHERE expires<=?').all(this.now())) {

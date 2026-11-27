@@ -1,42 +1,76 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
-const {execFile}=require('node:child_process');
-const {promisify}=require('node:util');
 const {problem}=require('./contract');
-// Explicit, short-lived PNG screen streams. They observe only; control uses the
-// independent exclusive device lease. No OCR or collection data originates here.
+const {startVideo}=require('./scrcpy_video');
+const MAX_PACKET=12*1024*1024;
 class DisplaySessions {
- constructor(store,{adbPath='adb',execute=promisify(execFile),now=Date.now,ttlMs=20000}={}){
-  this.store=store;this.adbPath=adbPath;this.execute=execute;this.now=now;this.ttlMs=ttlMs;this.sessions=new Map();this.frames=new Map();this.pending=new Set();this.closed=false;
+ constructor(store,{adbPath='adb',start=startVideo,now=Date.now,ttlMs=20000}={}){
+  Object.assign(this,{store,adbPath,start,now,ttlMs});this.sessions=new Map();this.encoders=new Map();this.pending=new Set();this.draining=new Map();this.closed=false;
   this.timer=setInterval(()=>this.expire(),1000);this.timer.unref();
  }
  usesDevice(id){
-  return Boolean(this.frames.get(id)?.pending)||[...this.sessions.values()].some(session=>session.device.id===id&&session.expires>this.now());
+  return this.encoders.has(id)||this.draining.has(id)||[...this.sessions.values()].some(s=>s.device.id===id&&s.expires>this.now());
  }
  open(deviceId,scope){
   if(this.closed)throw problem('DISPLAY_CLOSED',503);
   const device=this.store.devices().find(d=>d.id===deviceId&&d.kind==='android');
   if(!device||!/^[-\w.:]+$/.test(device.serial||''))throw problem('ANDROID_DEVICE_REQUIRED',409);
   if(this.sessions.size>=32)throw problem('DISPLAY_CAPACITY',429);
-  const id=randomUUID();this.sessions.set(id,{device,scope,expires:this.now()+this.ttlMs});return {id,expires_in_ms:this.ttlMs,format:'png',max_fps:2};
+  const id=randomUUID();this.sessions.set(id,{device,scope,expires:this.now()+this.ttlMs});return {id,expires_in_ms:this.ttlMs,format:'scrcpy-h264',max_fps:30};
  }
  get(id,scope){const s=this.sessions.get(id);if(!s||s.scope!==scope||s.expires<=this.now())throw problem('DISPLAY_EXPIRED',410);return s;}
- async frame(id,scope){
-  const s=this.get(id,scope);s.expires=this.now()+this.ttlMs;
-  let frame=this.frames.get(s.device.id);
-  if(!frame||(!frame.pending&&this.now()-frame.at>=500)){
-   frame={at:this.now(),controller:new AbortController()};this.frames.set(s.device.id,frame);
-   frame.pending=this.execute(this.adbPath,['-s',s.device.serial,'exec-out','screencap','-p'],{encoding:'buffer',timeout:10000,maxBuffer:12*1024*1024,signal:frame.controller.signal}).then(({stdout})=>{
-    const bytes=Buffer.from(stdout);if(!bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))throw problem('DISPLAY_INVALID_FRAME',502);
-    frame.bytes=bytes;return bytes;
-   }).catch(()=>{if(this.frames.get(s.device.id)===frame)this.frames.delete(s.device.id);throw problem('DISPLAY_UNAVAILABLE',503);}).finally(()=>{this.pending.delete(frame.pending);frame.pending=null;});
-   this.pending.add(frame.pending);
+ async stream(id,scope,res){
+  const s=this.get(id,scope);if(s.response)throw problem('DISPLAY_ALREADY_CONNECTED',409);
+  s.response=res;s.waitKey=true;s.expires=this.now()+this.ttlMs;
+  res.once('close',()=>this.remove(id));
+  let encoder=this.encoders.get(s.device.id);
+  if(!encoder){
+   encoder={controller:new AbortController(),buffer:Buffer.alloc(0)};this.encoders.set(s.device.id,encoder);
+   encoder.ready=Promise.resolve(this.draining.get(s.device.id)).then(()=>this.start(s.device.serial,{adbPath:this.adbPath,signal:encoder.controller.signal})).then(transport=>{
+    encoder.transport=transport;
+    if(encoder.controller.signal.aborted){this.track(transport.close());return;}
+    transport.stream.on('data',chunk=>{try{this.consume(s.device.id,encoder,chunk);}catch{this.fail(s.device.id,encoder);}});
+    transport.stream.on('error',()=>this.fail(s.device.id,encoder));transport.stream.on('end',()=>this.fail(s.device.id,encoder));transport.stream.on('close',()=>this.fail(s.device.id,encoder));
+   }).catch(error=>{if(this.encoders.get(s.device.id)===encoder)for(const [key,viewer]of this.sessions)if(viewer.device.id===s.device.id)this.remove(key,false);throw error;});
   }
-  const bytes=await (frame.pending||frame.bytes);this.get(id,scope);return bytes;
+  await encoder.ready;
+  if(this.sessions.get(id)!==s||res.destroyed) return;
+  if(!res.headersSent){res.setHeader('Content-Type','application/octet-stream');res.setHeader('X-Accel-Buffering','no');}
+  // Headers are also set lazily in send() if encoder output won the startup race.
+  if(encoder.meta&&!s.metaSent)this.send(s,encoder.meta,true);
  }
- stop(id,scope){this.get(id,scope);const s=this.sessions.get(id);this.sessions.delete(id);this.clearUnused(s.device.id);return {stopped:true};}
- clearUnused(deviceId){if(![...this.sessions.values()].some(s=>s.device.id===deviceId)){this.frames.get(deviceId)?.controller.abort();this.frames.delete(deviceId);}}
- expire(){for(const [id,s]of this.sessions)if(s.expires<=this.now()){this.sessions.delete(id);this.clearUnused(s.device.id);}}
- async close(){this.closed=true;clearInterval(this.timer);this.sessions.clear();const pending=[...this.frames.values()];for(const f of pending)f.controller.abort();await Promise.allSettled([...this.pending]);this.frames.clear();}
+ send(s,bytes,meta=false){
+  const res=s.response;if(!res||res.destroyed)return;
+  if(!res.headersSent){res.setHeader('Content-Type','application/octet-stream');res.setHeader('Cache-Control','no-store');res.setHeader('X-Accel-Buffering','no');}
+  if(meta)s.metaSent=true;
+  res.write(bytes);if(res.writableLength>2*1024*1024)res.destroy(); // Bound lagging viewers; never stall another viewer or buffer indefinitely.
+ }
+ consume(deviceId,e,chunk){
+  e.buffer=Buffer.concat([e.buffer,chunk]);
+  if(!e.meta){if(e.buffer.length<12)return;e.meta=e.buffer.subarray(0,12);e.buffer=e.buffer.subarray(12);if(e.meta.readUInt32BE(0)!==0x68323634)throw Error('codec');}
+  for(const s of this.sessions.values())if(s.device.id===deviceId&&s.response&&!s.metaSent)this.send(s,e.meta,true);
+  while(e.buffer.length>=12){
+   const size=e.buffer.readUInt32BE(8);if(size>MAX_PACKET)throw Error('packet');if(e.buffer.length<12+size)return;
+   const packet=e.buffer.subarray(0,12+size);e.buffer=e.buffer.subarray(12+size);
+   const config=!!(packet[0]&128),key=!!(packet[0]&64);if(config)e.config=packet;
+   for(const s of this.sessions.values()){
+    if(s.device.id!==deviceId||!s.response)continue;
+    if(config){s.waitKey=true;continue;}
+    if(s.waitKey){if(!key||!e.config)continue;this.send(s,e.config);s.waitKey=false;}
+    this.send(s,packet);
+   }
+  }
+ }
+ track(promise){this.pending.add(promise);promise.finally(()=>this.pending.delete(promise)).catch(()=>{});return promise;}
+ remove(id,destroy=true){const s=this.sessions.get(id);if(!s)return;this.sessions.delete(id);if(destroy)s.response?.destroy();
+  if(![...this.sessions.values()].some(other=>other.device.id===s.device.id&&other.response)){
+   const e=this.encoders.get(s.device.id);if(e){this.encoders.delete(s.device.id);e.controller.abort();const drain=this.track(e.ready.catch(()=>{}).then(()=>e.transport?.close()));this.draining.set(s.device.id,drain);drain.finally(()=>{if(this.draining.get(s.device.id)===drain)this.draining.delete(s.device.id);}).catch(()=>{});}
+  }
+ }
+ fail(deviceId,encoder){if(this.encoders.get(deviceId)!==encoder)return;for(const [id,s]of this.sessions)if(s.device.id===deviceId)this.remove(id);}
+ heartbeat(id,scope){const s=this.get(id,scope);s.expires=this.now()+this.ttlMs;return {expires_in_ms:this.ttlMs};}
+ stop(id,scope){this.get(id,scope);this.remove(id);return {stopped:true};}
+ expire(){for(const [id,s]of this.sessions)if(s.expires<=this.now())this.remove(id);}
+ async close(){this.closed=true;clearInterval(this.timer);for(const id of this.sessions.keys())this.remove(id);await Promise.allSettled([...this.pending]);}
 }
 module.exports={DisplaySessions};

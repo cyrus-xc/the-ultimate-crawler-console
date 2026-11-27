@@ -31,7 +31,7 @@ function registerPhoneAdapters({store,gateway,adapters,config,selectorRoot}){
   const existing=store.devices().find(x=>x.kind==='android'&&x.serial===d.serial);if(!existing||existing.owner||adapters.has(existing.id))continue;
   const capabilities=d.operations.map(operation=>({platform:'xiaohongshu',operation,...(operation==='search.posts'?{sorts:(d.sorts||['general']).flatMap(s=>[s,SORT_LABELS[s]])}: {})}));
   store.register({id:existing.id,kind:'android',serial:d.serial,capabilities});
-  const consumer=new PhoneConsumer({store,gateway,deviceId:existing.id,python:config.python,contractPath:config.contractPath,binary:config.binary,sha256:config.sha256,selectorRoot,verifiedOperations:d.operations});
+  const consumer=new PhoneConsumer({store,gateway,deviceId:existing.id,python:config.python,contractPath:d.contractPath||config.contractPath,binary:config.binary,sha256:config.sha256,selectorRoot,verifiedOperations:d.operations});
   adapters.set(existing.id,consumer);registered.push(existing.id);
  }
  return registered;

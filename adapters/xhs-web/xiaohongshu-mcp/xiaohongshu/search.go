@@ -101,15 +101,18 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 	// 等搜索数据容器，不等整个页面静止：动画/视频会让 WaitStable 无谓超时。
 	page := s.page.Context(ctx).Timeout(60 * time.Second)
 
-	// 顶层文档导航单独定上限，避免平台挂住导航时吃掉整个 read 预算。
-	navCtx, navCancel := context.WithTimeout(ctx, navTimeout)
-	navErr := page.Context(navCtx).Navigate(makeSearchURL(keyword))
-	navCancel()
-	if navErr != nil {
-		return nil, navErr
+	// 不用 rod 的 Navigate：它等的是 load 事件，而搜索页在 load 之后还要拉
+	// 图片和长连接，load 被拖住时 Navigate 先超时（超时还会取消它自己绑的
+	// page ctx，后续 Eval 全是 context canceled）。这里只触发跳转，就绪与否
+	// 交给证据探针判断，load 慢不慢与结果数据无关。
+	if _, err := page.Eval(`(u) => { location.href = u }`, makeSearchURL(keyword)); err != nil {
+		return nil, err
 	}
-	if err := waitEvidenceReady(ctx, page, searchReadyJS); err != nil {
-		return nil, fmt.Errorf("SEARCH_STATE_UNAVAILABLE: %w", err)
+	readyCtx, readyCancel := context.WithTimeout(ctx, navTimeout)
+	readyErr := waitEvidenceReady(readyCtx, page, searchReadyJS)
+	readyCancel()
+	if readyErr != nil {
+		return nil, fmt.Errorf("SEARCH_STATE_UNAVAILABLE: %w", readyErr)
 	}
 	humanize.Delay(ctx, humanize.AfterNavigate)
 
@@ -284,5 +287,8 @@ func makeSearchURL(keyword string) string {
 
 	//https://www.xiaohongshu.com/search_result?keyword=%25E7%258E%258B%25E5%25AD%2590&source=web_search_result_notes
 	//https://www.xiaohongshu.com/search_result?keyword=%25E7%258E%258B%25E5%25AD%2590&source=web_explore_feed
-	return fmt.Sprintf("https://www.xiaohongshu.com/search_result?%s", values.Encode())
+	// 必须带结尾斜杠：平台对 /search_result?… 回 301 到 http:// 再回 https 的
+	// /search_result/?…，多跳一次明文 http 会让导航挂在“已发出、无响应”的半路
+	// （诊断里 documents 有 requested_at 却没有 response_at）。直接命中 200。
+	return fmt.Sprintf("https://www.xiaohongshu.com/search_result/?%s", values.Encode())
 }

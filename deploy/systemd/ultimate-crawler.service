@@ -2,6 +2,8 @@
 Description=Unified crawler queue, platform consumers and device control
 After=network-online.target pipeline-crawler-desktop.service
 Requires=pipeline-crawler-desktop.service
+StartLimitIntervalSec=60s
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -10,13 +12,11 @@ EnvironmentFile=%h/Development/the-ultimate-crawler-console/.env
 Environment=ENABLE_TIKHUB_NETWORK=0
 Environment=ENABLE_LLM_NETWORK=0
 ExecStart=/usr/bin/node service/server.js
-# Keep the independent fail-closed guardian alive if the main process crashes.
-# Graceful shutdown explicitly drains children; recovery owns any crash orphans.
-KillMode=process
+# Let the main process drain its workers; systemd cleans remaining children.
+KillMode=mixed
 TimeoutStopSec=120
-# A crash deliberately retains the guardian barrier. Do not restart repeatedly
-# and do not reclaim it without proving remote input has stopped.
-Restart=no
+Restart=on-failure
+RestartSec=5s
 UMask=0077
 
 [Install]

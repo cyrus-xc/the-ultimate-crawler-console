@@ -2,9 +2,13 @@
 const {setTimeout: delay}=require('node:timers/promises');
 const {problem}=require('./contract');
 
+const {verifyPhoneIdle}=require('./phone_idle');
+const {PhoneRecoveryLog}=require('./phone_recovery_log');
+
 class ConnectionRecovery {
- constructor(store,gateway,inventory,{hasDisplay=()=>false,pollMs=5000,retryMs=60000,waitMs=800,attempts=24,sleep=delay}={}){
-  Object.assign(this,{store,gateway,inventory,hasDisplay,pollMs,retryMs,waitMs,attempts,sleep});
+ constructor(store,gateway,inventory,{hasDisplay=()=>false,pollMs=1000,retryMs=60000,waitMs=800,attempts=24,sleep=delay,verifyIdle=serial=>verifyPhoneIdle(serial,{adbPath:gateway.adbPath})}={}){
+  Object.assign(this,{store,gateway,inventory,hasDisplay,pollMs,retryMs,waitMs,attempts,sleep,verifyIdle});
+  this.log=new PhoneRecoveryLog(store);
   this.pending=new Map();
   this.lastAttempt=new Map();
   this.closed=false;
@@ -14,17 +18,36 @@ class ConnectionRecovery {
   if(this.closed)return Promise.reject(problem('CONNECTION_REPAIR_UNAVAILABLE',503));
   const active=this.pending.get(id);
   if(active)return active;
-  const work=this.reconnect(id,manual).finally(()=>this.pending.delete(id));
+  const work=this.attempt(id,manual).finally(()=>this.pending.delete(id));
   this.pending.set(id,work);
   return work;
  }
- async reconnect(id,manual){
+ async attempt(id,manual){
   const device=this.store.devices().find(d=>d.id===id&&d.kind==='android');
   if(!device)throw problem('ANDROID_DEVICE_REQUIRED',404);
-  if(device.quarantined)throw problem('DEVICE_RECOVERY_REQUIRED',409);
+  const schedule=device.quarantined?this.log.schedule(id):null;
+  const entry=this.log.start(id,manual,schedule);
+  try{return await this.reconnect(device,manual,schedule);}
+  catch(error){
+   const code=/^[A-Z][A-Z0-9_]{0,70}$/.test(error.code)?error.code:'CONNECTION_REPAIR_FAILED';
+   this.log.failed(entry,code,this.offlineRetry(device));
+   throw problem(code,error.status||409);
+  }
+ }
+ offlineRetry(device){
+  const last=this.lastAttempt.get(device.id);
+  return this.inventory.snapshot?.get(device.serial)?.state==='offline' && last!==undefined ? last+this.retryMs : null;
+ }
+ describe(device){
+  return this.log.view(device,this.isRepairing(device.id),this.offlineRetry(device));
+ }
+ async reconnect(device,manual,schedule){
+  const id=device.id;
   if(this.hasDisplay(id))throw problem('DEVICE_BUSY',409);
   this.gateway.beforeCommand();
+  if(schedule && this.store.db.prepare("SELECT 1 FROM attempts WHERE device_id=? AND finished IS NULL").get(id))throw problem('DEVICE_BUSY',409);
   const lease=this.store.externalLease(id,'local:connection-repair',{connectionRepair:true});
+  let verified=false;
   try{
    let transport=await this.readTransport(device.serial);
    if(!transport)throw problem('PHONE_NOT_DETECTED',409);
@@ -33,7 +56,7 @@ class ConnectionRecovery {
    if(transport.state==='offline'){
     this.lastAttempt.set(id,this.store.now());
     try{
-     await this.gateway.executeTrusted(lease,{serial:device.serial,args:['reconnect']},{timeoutMs:3500});
+     await this.gateway.executeTrusted(lease,{serial:device.serial,args:['reconnect']},{timeoutMs:3500,cleanup:!!schedule});
     }catch(error){
      // The transport can disappear after inventory but before the ADB command.
      // Recheck the connection without retrying an uncertain command.
@@ -49,14 +72,31 @@ class ConnectionRecovery {
    }
    if(transport?.state==='unauthorized')throw problem('ADB_AUTHORIZATION_REQUIRED',409);
    if(transport?.state!=='device')throw problem('PHONE_RECONNECT_FAILED',409);
-   this.store.assertLease(lease);
-   const current=this.store.devices().find(d=>d.id===id);
-   this.store.event(null,'device.connection_verified',{device_id:id,manual});
-   return {connection_state:'device',health:current.health,capabilities:current.capabilities.length};
-  }finally{
+   this.store.heartbeat(lease);
+   if(schedule){
+    try{await this.verifyIdle(device.serial);}
+    catch(error){throw problem(/^PHONE_[A-Z_]+$/.test(error.code)?error.code:'PHONE_IDLE_CHECK_FAILED',409);}
+   }
    await this.gateway.drain(lease);
-   this.store.releaseExternal(lease);
+   this.store.tx(()=>{
+    this.gateway.beforeCommand();
+    const current=this.store.devices().find(d=>d.id===id);
+    if(this.closed || this.hasDisplay(id) || (!!current.quarantined!==!!schedule) ||
+       (schedule && this.log.schedule(id).incident!==schedule.incident))throw problem('RECOVERY_SUPERSEDED',409);
+    this.store.releaseExternal(lease);
+    if(schedule)this.gateway.recoverDevice(id,{stopped:true});
+    const healthy=(!!schedule||current.health==='ready') && !Object.keys(current.faults).length;
+    this.store.event(null,'device.connection_verified',{device_id:id,manual,healthy});
+   });
+   verified=true;
+  }finally{
+   if(!verified){
+    await this.gateway.drain(lease);
+    this.store.releaseExternal(lease);
+   }
   }
+  const current=this.store.devices().find(d=>d.id===id);
+  return {connection_state:'device',health:current.health,capabilities:current.capabilities.length};
  }
  async readTransport(serial){
   const found=await this.inventory.refresh();
@@ -64,16 +104,22 @@ class ConnectionRecovery {
   return found.find(item=>item.serial===serial);
  }
  tick(){
-  if(this.closed||!this.inventory.snapshot)return;
+  if(this.closed)return;
   for(const device of this.store.devices()){
-   if(device.kind!=='android'||device.owner||device.quarantined||this.inventory.snapshot.get(device.serial)?.state!=='offline')continue;
+   if(device.kind!=='android'||this.isRepairing(device.id))continue;
+   if(device.quarantined){
+    if(this.store.now()>=this.log.schedule(device.id).next)this.repair(device.id,{manual:false}).catch(()=>{});
+    continue;
+   }
+   if(device.owner||this.inventory.snapshot?.get(device.serial)?.state!=='offline')continue;
    if(this.store.now()-(this.lastAttempt.get(device.id)??-Infinity)<this.retryMs)continue;
+   this.lastAttempt.set(device.id,this.store.now());
    this.repair(device.id,{manual:false}).catch(()=>{});
   }
  }
  start(){
   this.timer=setInterval(()=>this.tick(),this.pollMs);
-  this.timer.unref();
+  this.timer.unref();this.tick();
   return this;
  }
  async close(){

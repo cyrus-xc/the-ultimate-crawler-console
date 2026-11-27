@@ -74,7 +74,7 @@ for(const writeFailure of ['quarantine','command'])test('uncertain cancellation 
  assert.equal(gateway.requiresRecovery(),false);
 });
 
-test('two trusted recovered devices permit real normal main.close to release only its own guardian',async t=>{
+test('normal shutdown releases the service lock after two devices recover',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'gateway-recovered-close-'));
  const token=path.join(root,'token'),adb=path.join(root,'fake-adb'),locks=path.join(root,'legacy-lock');
  fs.writeFileSync(token,'synthetic-recovery-credential-not-real-123456789');
@@ -82,11 +82,9 @@ test('two trusted recovered devices permit real normal main.close to release onl
  const saved=new Store(path.join(root,'queue.db'));devices(saved);
  saved.quarantine('android:RECOVERY_ONE');saved.quarantine('android:RECOVERY_TWO');saved.close();
  const service=await start({listen:false,env:{CRAWLER_RUNTIME_DIR:root,CRAWLER_SERVICE_TOKEN_FILE:token,CRAWLER_DEVICE_GATEWAY_ENABLED:'true',CRAWLER_LEGACY_ANDROID_LOCK_DIR:locks,ADB_PATH:adb}});
- const file=path.join(locks,'.worker.lock'),guardianPid=Number(fs.readFileSync(file,'utf8'));
+ const file=path.join(locks,'.worker.lock');
  t.after(async()=>{
   await service.close().catch(()=>{});
-  // Only this test's freshly spawned guardian; never enumerate runtime PIDs.
-  if(fs.existsSync(file)){try{process.kill(guardianPid,'SIGKILL');}catch{}}
   fs.rmSync(root,{recursive:true,force:true});
  });
  service.store.recoverDevice('android:RECOVERY_ONE',{stopped:true});
@@ -95,7 +93,7 @@ test('two trusted recovered devices permit real normal main.close to release onl
  assert.equal(service.gateway.active.size,0);
  assert.equal(service.gateway.requiresRecovery(),false);
  await service.close();
- assert.equal(fs.existsSync(file),false,'normal owning IPC release must retire the guardian lock');
+ assert.equal(fs.existsSync(file),false);
 });
 
 test('unknown database read failure cannot authorize a release',t=>{

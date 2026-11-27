@@ -92,7 +92,7 @@ class DeviceGateway {
   }
   // Local supervisor only, after independently proving input has stopped.
   recoverDevice(id,proof={}) {
-    if(this.active.size)throw problem('WORKER_STOP_REQUIRED',409);
+    if([...this.active.values()].some(command=>!command.deviceId||command.deviceId===id))throw problem('WORKER_STOP_REQUIRED',409);
     this.store.recoverDevice(id,proof);
     this.recoveryFaults.delete(id);
   }
@@ -119,7 +119,8 @@ class DeviceGateway {
     if (!Array.isArray(args) || args.some(a=>typeof a!=='string'||/[\x00\r\n]/.test(a))) return Promise.reject(problem('ADB_COMMAND_UNSUPPORTED',400));
     if(cleanup){
       const words=args.map(a=>a.startsWith("'")&&a.endsWith("'")?a.slice(1,-1):a);
-      const safe=(words[0]==='forward'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
+      const safe=(args.length===1 && args[0]==='reconnect' && this.store.assertLease(lease).owner==='local:connection-repair')||
+        (words[0]==='forward'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
         (words[0]==='reverse'&&words[1]==='--remove'&&/^tcp:\d+$/.test(words[2]||'')&&words.length===3)||
         (words[0]==='shell'&&words[1]==='pidof'&&/^xhs-lab-frida-[\w.-]+$/.test(words[2]||'')&&words.length===3)||
         (words[0]==='shell'&&words[1]==='su'&&words[2]==='-c'&&/^(?:cat \/proc\/(\d+)\/stat 2>\/dev\/null \|\| test ! -d \/proc\/\1|kill (?:-KILL )?\d+)$/.test(words[3]||'')&&words.length===4);
@@ -169,18 +170,19 @@ class DeviceGateway {
     });
     let child, failure, killTimer, timer, monitor, closePromise, closed=false, stopping=false, outputBytes=0;
     const stdout=[],stderr=[];
-    const quarantine=()=>this.store.db.prepare('UPDATE devices SET quarantined=1 WHERE id=?').run(device.id);
+    const quarantine=()=>this.store.quarantine(device.id,failure?.code||'DEVICE_COMMAND_CANCELLED');
     const abort=reason=>{
       if(!failure)failure=reason;
       if(child && !stopping && !closed){
         stopping=true;this.recoveryFaults.add(device.id);
-        quarantine();this.store.db.prepare("UPDATE device_commands SET state='stopping' WHERE command_id=?").run(commandId);
+        if(!(device.quarantined && cleanup && command.args.length===1 && command.args[0]==='reconnect'))quarantine();
+        this.store.db.prepare("UPDATE device_commands SET state='stopping' WHERE command_id=?").run(commandId);
         this.recoveryFaults.delete(device.id); // Both durable barriers landed.
         child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),this.killGraceMs);
       }
     };
     const onAbort=()=>abort(problem('DEVICE_COMMAND_CANCELLED',409));
-    this.active.set(commandId,{key,abort});
+    this.active.set(commandId,{key,abort,deviceId:device.id});
     try {
       this.assert(lease,{cleanup});
       // Only the configured executable and the database serial reach spawn.

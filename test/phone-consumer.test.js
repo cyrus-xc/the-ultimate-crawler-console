@@ -298,3 +298,14 @@ test('combined comment pages count only projected comments while retaining surve
  assert.equal(value.data.non_comment_count,2);assert.equal(value.data.native_evidence.length,2);assert.equal(value.data.end_observed,true);
  assert.equal(value.data.native_responses.reduce((total,r)=>total+r.response.data.comments.length,0),4);
 });
+
+test('phone registry uses each device version contract independently',t=>{
+ const f=fixture(t),adapters=new Map();
+ f.store.register({id:'new-phone',kind:'android',serial:'NEW',capabilities:[]});
+ const oldContract=path.resolve(__dirname,'../contracts/xhs-app-9.51.0.json');
+ const newContract=path.resolve(__dirname,'../contracts/xhs-app-9.53.3.json');
+ registerPhoneAdapters({store:f.store,gateway:f.consumer.gateway,adapters,config:{contractPath:oldContract,devices:[{serial:'S',operations:['post.detail']},{serial:'NEW',contractPath:newContract,operations:['post.detail']}]}});
+ assert.equal(adapters.get('p').contract.version,'9.51.0');
+ assert.equal(adapters.get('new-phone').contract.version,'9.53.3');
+ assert.equal(adapters.get('new-phone').contractPath,newContract);
+});

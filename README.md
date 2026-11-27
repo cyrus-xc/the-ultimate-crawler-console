@@ -58,12 +58,11 @@ operators. `CRAWLER_LEGACY_ANDROID_LOCK_DIR` must be the absolute original
 barrier. The original console operators use `CRAWLER_DEVICE_LOCK_MODE=queue`,
 `CRAWLER_SERVICE_URL`, and the same private credential file. The installed deployment explicitly enables both queue collection and queue device locking; use the deployment guide when switching an existing installation.
 
-The independent guardian retains the legacy lock after a service crash. Forced
-command cancellation is also treated as uncertain remote state: the barrier
-must remain until an operator/supervisor has verified that remote input stopped.
-Do not delete or reclaim the lock merely because the service or local ADB child
-is gone. A normal, fully drained shutdown releases it. Per-device quarantine and
-persisted command records are separate recovery checks.
+The service owns an OS lock for its lifetime. Startup and shutdown clear
+runtime leases and command reservations. The queue can assign interrupted tasks
+again from their last checkpoint. Completed results and per-device quarantine
+survive a restart. The systemd unit starts before login when user lingering is
+enabled and restarts the service after a crash.
 
 Discovery reads `adb devices -l` and registers phones without advertising
 collection capabilities. Single screenshots are explicit commands; no continuous

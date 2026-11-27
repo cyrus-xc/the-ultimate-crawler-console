@@ -35,11 +35,11 @@ systemd unit 使用 `EnvironmentFile` 读取私有 `.env`；直接运行 `npm st
 | `CRAWLER_DESKTOP_VNC_PORT` / `CRAWLER_VNC_PORT` | 前者供 desktop 脚本监听，后者供后端连接；两者必须相同，默认 `15910`，只监听 loopback |
 | `CRAWLER_DEVICE_GATEWAY_ENABLED` | 启用手机输入网关和显式屏幕帧；未启用时不能注册手机消费者 |
 | `CRAWLER_DEVICE_DISCOVERY_ENABLED` | 允许只读 `adb devices -l` 发现；仅发现不授予采集能力 |
-| `CRAWLER_LEGACY_ANDROID_LOCK_DIR` | 必须是旧 `XHS_ANDROID_LOCK_DIR` 的绝对路径；兼容守护进程在此持有 `.worker.lock` |
+| `CRAWLER_LEGACY_ANDROID_LOCK_DIR` | 必须是旧 `XHS_ANDROID_LOCK_DIR` 的绝对路径；服务在此持有系统锁，并将当前 PID 写入 `.worker.lock` |
 | `ADB_PATH` | 主机 ADB 可执行文件，默认 `adb` |
 | `CRAWLER_PHONE_ENABLED` / `CRAWLER_PHONE_CONFIG_FILE` | 显式启用及引用私有手机能力配置；只登记真实验证的操作 |
 
-手机配置包含 `python`、本地 Frida `binary`、其 `sha256`、可选 `contractPath`，以及 `devices` 数组。每台设备提供显式 `serial`、经验证的 `operations`、搜索 `sorts`；`douyin_poi: true` 是单独能力声明。`ui_capabilities` 可逐项列出 `{platform, operation}`，只允许 XHS `place.search` 和 XHS/Douyin `post.detail` 的 `ui_identity` 表示；仅登记实际验证的项，不必同时开启两平台辅助能力。不要因为 ADB 可见就复制另一台手机的能力声明。运行时、App 版本、二进制摘要和响应身份检查仍会执行。
+手机配置包含 `python`、本地 Frida `binary`、其 `sha256`、可选 `contractPath`，以及 `devices` 数组。每台设备可用 `contractPath` 指定其当前 App 版本契约（省略时使用公共契约），并提供显式 `serial`、经验证的 `operations`、搜索 `sorts`；`douyin_poi: true` 是单独能力声明。`ui_capabilities` 可逐项列出 `{platform, operation}`，只允许 XHS `place.search` 和 XHS/Douyin `post.detail` 的 `ui_identity` 表示；仅登记实际验证的项，不必同时开启两平台辅助能力。不要因为 ADB 可见就复制另一台手机的能力声明。运行时、App 版本、二进制摘要和响应身份检查仍会执行。
 
 后端不使用付费采集补救。部署 unit 明确设置 `ENABLE_TIKHUB_NETWORK=0`、`ENABLE_LLM_NETWORK=0`；测试也强制关闭这两个 gate。
 
@@ -81,27 +81,31 @@ curl --fail --silent http://127.0.0.1:18323/health
 
 ## 屏幕与控制
 
-手机画面当前是**显式请求的 PNG 帧，最高 2 fps**，不是 H.264 视频；前端每帧完成后至少等待 500 ms。无 viewer 请求不启动截图，多个 viewer 共享同设备在途帧和短缓存。切换页面、隐藏页面或停止串流会释放 viewer；服务 TTL 作为断网兜底，最后 viewer 离开会中止在途截图。
+手机画面使用 scrcpy 3.3.3 手机端编码的 H.264 视频，最高 30 fps、4 Mbps，保留原始屏幕分辨率。浏览器通过 WebCodecs 解码，不落盘录屏。首次部署运行 `node tools/install-display-encoder.cjs`，下载官方固定版本并校验 SHA-256；默认保存到 `runtime/scrcpy-server-v3.3.3`，也可通过 `CRAWLER_SCRCPY_SERVER` 指定路径。运行期间不自动下载依赖，缺包返回 `DISPLAY_ENCODER_MISSING`。
+
+点击开始才启动编码器；同设备多个 viewer 共享编码器，后加入者等待关键帧。视频走既有本机鉴权代理，服务凭据不发送到浏览器。停止、隐藏页面或离开控制台会关闭流；每 5 秒的 viewer 心跳及 20 秒 TTL 处理断网。最后 viewer 离开会关闭视频 socket、结束该次编码进程并删除其独有 ADB forward 和临时包，慢客户端不会拖住其他 viewer。控制、键盘和群控仍使用独立设备租约。
+
+浏览器须支持 H.264 WebCodecs，并通过 localhost 或安全上下文访问。受 Android 保护的页面仍可能黑屏。更换前后端协议需要一起切换爬虫服务、控制台 API 和前端；停止现有串流后再更新，不能只热更新其中一端。
 
 画面仅用于观看/控制，不用 OCR 替代内容数据获取。手机采集仍以正常 UI 动作触发请求，并读取匹配的结构化响应。控制需要独立的物理设备租约；观看不自动授权输入。群控仅向已选择且已取得控制的设备逐台发送操作，失败不会转而操作别的手机。
 
 Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原始服务 token 不交给浏览器。接管期间全部 Web 租约持续续租；丢失租约就停止输入。单次打开/定位/确认操作也受租约守卫约束，释放必须等待操作和子进程完成清理。
 
-## 正常关闭、崩溃与兼容锁
+## 开机启动与队列重新分配
 
-正常关闭停止接受新任务，断开控制与画面，drain 桌面动作、scheduler、所有 adapter、输入网关。没有错误或不确定远端状态时，释放仍有效的外部租约，再释放 guardian 兼容屏障。原未完成队列任务保留断点，不因正常关机被误记为采集完成。
+运行 `systemctl --user enable ultimate-crawler.service` 和 `loginctl enable-linger "$USER"` 后，服务会在开机时由 systemd 启动。可用 `systemctl --user is-active ultimate-crawler.service` 查看运行状态。服务异常退出后，systemd 等待 5 秒再启动，每分钟最多尝试 3 次。
 
-两台手机各自有物理租约，兼容 guardian 仍只持有旧工具的一个全局锁。它的用途是阻止旧工具绕过新调度器；它**不是两台手机共用的一把工作锁**。队列消费者和已迁移的其他工具可以分别持有不同手机的租约并行。
+服务持有 Linux 内核排他锁，并在 `.worker.lock` 写入当前 PID。进程退出时内核释放锁。下次启动取得所有权后会覆盖遗留的 PID 文件。运行中的服务独占队列和手机池，每部手机仍可由队列独立分配。
 
-服务异常退出时，独立 guardian 保留 `.worker.lock`。强制取消、孤儿 `device_commands` 或隔离状态同样要求恢复；本机 ADB 子进程退出不能证明手机端输入已经停止。错误会以 `DEVICE_RECOVERY_REQUIRED`、`LEGACY_WORKER_BUSY` 或 `LEGACY_LOCK_REQUIRES_RECOVERY` 等形式暴露。
+启动和退出时在同一笔 SQLite 事务中释放租约、清除命令占用、结束中断的执行，并将未完成的任务从原断点交回队列。已经完成的结果、暂停或取消的请求和既有设备隔离都会保留。如果关机前还留有未确认结束的手机命令，只有对应手机进入隔离，其他设备继续接单。
 
-恢复必须由操作员/受信 supervisor 确认对应输入进程已停止或实体设备已隔离，再处理那一次命令、过期租约与该设备 quarantine。保持其他设备、队列结果和断点不变。**不要直接删除 guardian 锁文件，不要凭 PID 消失、超时或 USB 重连自动清除隔离**。当前没有“一键抹掉所有锁”的恢复接口；源码中的受信恢复方法不能当作浏览器端授权。
+## 手机隔离与连接恢复
 
-### 手机连接自愈
+每部隔离手机在 5 秒后首次运行「修复连接」。失败后从本次尝试结束起等待 10 秒、20 秒、40 秒，依次翻倍。间隔达到 24 小时后，每 24 小时继续重试，直至恢复。重启服务会接续已记录的重试计划。一次新的隔离从 5 秒重新计时。
 
-已登记手机被 ADB 确认为 `offline` 时，服务自动尝试重连该设备，同一设备的重试间隔至少 60 秒。控制台每台手机的「修复连接」按钮调用同一流程。修复期间独占该手机的设备租约，并等待 ADB 重新报告 `device`。已在线的连接只做验证。缺少设备时检查 USB 或无线调试，出现 `unauthorized` 时在手机上确认调试授权。
+手动点击「修复连接」可以立即尝试。手动和自动恢复共用该手机的修复租约，同时触发时共用一次执行。遇到已登记的离线传输时，服务只重连指定手机。ADB 在线、输入进程已停止、转发已清空，且隔离记录与租约仍然有效时，才将手机恢复为可分配。平台登录或验证故障继续按平台处理。
 
-处于采集、手动控制、串流或隔离状态的设备不能执行连接修复。修复单独反馈 ADB 连接与采集健康状态，原有采集故障和平台登录状态继续由各自的验证流程处理。
+控制台的「手机连接」会在故障手机卡片上显示本轮原因、最近 50 条事件和下次尝试的日期时间。每次重试记录触发方式和结果。恢复正常后卡片清空本轮记录。未被隔离的离线传输继续使用原有的 60 秒重连间隔。
 
 小红书启动连续三次未就绪时，手机采集在原租约内对小红书执行一次 Android `force-stop` 并重新启动。重新启动后仍未就绪时返回 `APP_NOT_READY`。已持有作品列表或帖子页面的发现会话只校验前台进程，保持当前页面供详情和评论读取。
 
@@ -109,7 +113,7 @@ Web 画面经控制台的带票据 WebSocket 代理连接 loopback WayVNC。原�
 
 ## 回滚
 
-回滚也必须先 drain，不能在新服务尚有输入时把 `CRAWLER_DEVICE_LOCK_MODE` 改回 legacy。依次停止新任务、断开人工控制、关闭新后端并验证所有受控输入结束；存在恢复错误时先按上节处理。确认 guardian 已正常释放或完成受信恢复后，才可恢复原执行环境和旧服务。保留新 SQLite 及请求引用以便恢复，不重写旧 canonical 数据，不自动重放已经成功的任务，不回退 V2。
+回滚也必须先 drain，不能在新服务尚有输入时把 `CRAWLER_DEVICE_LOCK_MODE` 改回 legacy。依次停止新任务、断开人工控制、关闭新后端并验证所有受控输入结束；存在恢复错误时先按上节处理。确认服务锁已释放、手机输入已结束后，才可恢复原执行环境和旧服务。保留新 SQLite 及请求引用以便恢复，不重写旧 canonical 数据，不自动重放已经成功的任务，不回退 V2。
 
 由于 legacy 后端仅保留历史兼容，恢复旧采集还需要与选定回滚提交匹配的旧运行时。不能通过把原 App 主动请求重新打开来绕过手机 UI 被动读取方案。
 

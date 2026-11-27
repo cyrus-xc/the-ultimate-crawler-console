@@ -12,18 +12,16 @@ then call `gateway.recoverDevice(id, {stopped:true, platform})`. This invokes th
 existing store recovery guards (no active command or device lease) and clears only
 that device's memory uncertainty after store recovery succeeds. A failed recovery
 or recovery of another device cannot clear it. The gateway refuses recovery while
-any local command is active. No HTTP recovery endpoint or automatic unlock exists.
+any local command is active. Manual and scheduled connection repairs use the same supervisor checks before clearing a phone’s quarantine.
 
-Normal shutdown drains work and retains an unsafe verdict even after the owner
-closes SQLite. With all inputs stopped and corresponding trusted recoveries
-complete, normal shutdown can release its own guardian through the existing IPC.
+The service holds an OS lock on the queue and device directories. Linux releases
+ownership when the process exits. A fresh start replaces the PID marker and
+resets leases and command reservations in one transaction. Interrupted work
+returns to the queue with its checkpoint and results. Normal shutdown performs
+the same cleanup after draining the workers.
 
-A service already running older code can retain its prior sticky memory flag.
-A separately authorized one-time operational recovery may therefore be required:
-stop the dedicated API so it cannot dispatch during the switch, normally stop the
-crawler main, independently recheck remote input/commands/leases, validate the exact
-old guardian PID, process start time, script and lock identity, stop only that idle
-guardian, verify its exit, then atomically archive its unchanged orphan lock for
-audit. Never archive a lock with a live owner or remove an unverified lock. Any
-identity, input, lease or state mismatch stops the procedure. Preserve device
-contracts, unrelated processes, queue history and other devices.
+If an interrupted command remains in the ledger, its phone stays isolated until
+the operator or trusted supervisor verifies that input stopped. Other devices can
+accept work immediately. Existing quarantines retain their recorded causes.
+
+The first quarantine repair is due after five seconds. Each failure doubles the interval up to 24 hours. At that limit retries continue daily. The service reconstructs the next deadline from the current incident’s persistent events.

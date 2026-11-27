@@ -31,7 +31,7 @@ const SessionVersion = "crawler_browser_session_v1"
 // revisit an author, and 16 idle tabs per worker held ~14 GB across three
 // workers, starving the machine into CRAWLER_RESOURCE_BUSY.
 const maxEngineTabs = 4
-const BrowserResponseTimeout = 10 * time.Second
+const BrowserResponseTimeout = 25 * time.Second
 
 // MaxConcurrentTabs bounds how many reads one browser runs at the same time,
 // each in its own tab. XHS counts every browser profile as a logged-in PC, so

@@ -140,3 +140,18 @@ test-concurrency=1；没有证据把失败归因于文件级并行，也没有�
 | `env ENABLE_TIKHUB_NETWORK=0 ENABLE_LLM_NETWORK=0 PYTHONDONTWRITEBYTECODE=1 node --test --test-concurrency=1 --test-timeout=600000 server/rockhouse-browser.test.js` | PASS，1 |
 
 这不能替代整套控制台验收通过；未将单文件成功覆盖两次全套失败记录。
+
+## 2026-11-10 App 更新后的桥接复核
+
+手机契约可按 `devices[].contractPath` 单独指定，两台当前版本分别校验，不放宽版本限制：
+
+| 手机 | App 版本 / versionCode | 本次桥接验证 |
+| --- | --- | --- |
+| OnePlus GM1910（c7dee0b3） | 9.53.3 / 9533801 | APK 摘要匹配；Frida 16.7.19 附加成功；`cronet_observer_ready`、`observer_ready` 均通过 |
+| Redmi K20 Pro（7e9c701e） | 9.51.0 / 9510803 | APK 摘要匹配；Frida 16.7.19 附加成功；两个观察器就绪 |
+
+Redmi 曾因 `RUNTIME_CLEANUP_FAILED` 隔离。确认无未结束网关命令、租约和手机端输入/Frida 进程后，经受信 `recoverDevice` 恢复。复核通过正式服务外部租约及 DeviceGateway 完成，结束时 detach 观察器、移除本次 forward、停止本次启动的运行时并释放租约。没有启动新的业务采集、没有调用付费 API。桥接就绪不等于各业务接口和分页已在新版重新验收，既有能力范围未扩大。
+
+回归：`PYTHON=.venv/bin/python npm test` PASS（Node 275 项、Python 72 项），测试强制关闭两个付费 gate。第一次使用系统 Python 的运行因缺少 `cv2` 失败，换用服务 `.venv` 后完整通过。`git diff --check` PASS。
+
+用户允许中断既有会话后，正常重启触发 Redmi 清理隔离与旧 guardian 屏障。确认主机无输入子进程、双机无输入 shell、队列无租约/命令后，校验并停止遗留 OnePlus 固定路径 Frida 进程，核对旧 guardian 的 PID/脚本身份并停止，将锁归档到私有 `runtime/recovery/`，再经受信方法恢复 Redmi。服务重新启动，`/health` 的 scheduler/device_gateway/live_adapters 均为 true。此处为运行恢复，未修改会话清理实现；活动会话关闭后的清理隔离问题需另行排查。

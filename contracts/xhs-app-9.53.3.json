@@ -1,0 +1,286 @@
+{
+  "package": "com.xingin.xhs",
+  "version": "9.53.3",
+  "apk_sha256": "667248f0deca66f9be57f948fdcaf505336dd573eb1fe12a1d98f8a107f0f4e9",
+  "frida_version": "16.7.19",
+  "operations": {
+    "image_detail": {
+      "http_method": "GET",
+      "allowed_hosts": [
+        "edith.rnote.com",
+        "edith.xiaohongshu.com"
+      ],
+      "path": "/api/sns/v1/note/imagefeed",
+      "parameters": [
+        {
+          "name": "note_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "page",
+          "type": "int"
+        },
+        {
+          "name": "has_ads_tag",
+          "type": "boolean"
+        },
+        {
+          "name": "num",
+          "type": "int"
+        },
+        {
+          "name": "fetch_mode",
+          "type": "int"
+        },
+        {
+          "name": "source",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "source_scene",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "ads_track_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "ads_track_url",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "from_rec_local",
+          "type": "boolean"
+        },
+        {
+          "name": "extra_params",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "biz_ext_json",
+          "type": "java.lang.String"
+        }
+      ]
+    },
+    "comments": {
+      "http_method": "GET",
+      "allowed_hosts": [
+        "edith.rnote.com",
+        "edith.xiaohongshu.com"
+      ],
+      "path": "/api/sns/v5/note/comment/list",
+      "parameters": [
+        {
+          "name": "note_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "start",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "num",
+          "type": "int"
+        },
+        {
+          "name": "show_priority_sub_comments",
+          "type": "int"
+        },
+        {
+          "name": "source",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "top_comment_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "top_comment_id_v2",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "exclude_comment_ids",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "force_master",
+          "type": "java.lang.Boolean"
+        },
+        {
+          "name": "page_context",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "preload_scene",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "sort_strategy",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "video_feed_type",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "request_comment_list_type",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "session_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "request_tag",
+          "type": "y4c.w"
+        },
+        {
+          "name": "top_comment_operate_scene",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "container",
+          "type": "java.lang.String"
+        }
+      ]
+    },
+    "user_posted": {
+      "http_method": "GET",
+      "path": "/api/sns/v4/note/user/posted",
+      "allowed_hosts": [
+        "edith.rnote.com",
+        "edith.xiaohongshu.com"
+      ],
+      "parameters": [
+        {
+          "name": "user_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "sub_tag_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "cursor",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "num",
+          "type": "int"
+        },
+        {
+          "name": "use_cursor",
+          "type": "boolean"
+        },
+        {
+          "name": "pin_note_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "pin_note_ids",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "source",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "just_viewed_note_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "privacy_type",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "empty_state_mode",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "page_strategy",
+          "type": "int"
+        },
+        {
+          "name": "request_tag",
+          "type": "y4c.i"
+        }
+      ]
+    },
+    "search": {
+      "http_method": "GET",
+      "path": "/api/sns/v10/search/notes",
+      "allowed_hosts": [
+        "so.rnote.com",
+        "so.xiaohongshu.com"
+      ],
+      "parameters": [
+        {
+          "name": "query",
+          "type": "java.util.Map"
+        },
+        {
+          "name": "request_tag",
+          "type": "y4c.w"
+        }
+      ]
+    },
+    "user_info": {
+      "http_method": "GET",
+      "path": "/api/sns/v3/user/info",
+      "allowed_hosts": [
+        "edith.rnote.com",
+        "edith.xiaohongshu.com"
+      ],
+      "parameters": [
+        {
+          "name": "query",
+          "type": "java.util.Map"
+        }
+      ]
+    },
+    "topic_feed": {
+      "http_method": "GET",
+      "path": "/api/sns/v5/page/notes",
+      "allowed_hosts": [
+        "www.rnote.com",
+        "www.xiaohongshu.com"
+      ],
+      "success_code_key": "result",
+      "parameters": [
+        {
+          "name": "page_id",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "page_size",
+          "type": "int"
+        },
+        {
+          "name": "sort",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "cursor",
+          "type": "java.lang.String"
+        },
+        {
+          "name": "inspiration_top_note_ids",
+          "type": "java.lang.String"
+        }
+      ]
+    },
+    "video_detail": {
+      "http_method": "GET",
+      "allowed_hosts": [
+        "rec.xiaohongshu.com"
+      ],
+      "path": "/api/sns/v4/note/videofeed",
+      "parameters": [
+        {
+          "name": "note_id",
+          "type": "java.lang.String"
+        }
+      ]
+    }
+  }
+}

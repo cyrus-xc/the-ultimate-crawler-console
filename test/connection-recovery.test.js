@@ -52,7 +52,7 @@ test('repair preserves platform and capture failures even when transport is onli
  assert.deepEqual(f.calls,[]);
  assert.deepEqual(f.store.devices().find(d=>d.id===f.id).faults,{xiaohongshu:'LOGIN_REQUIRED'});
 });
-test('repair rejects active control, active display, quarantine, and unauthorized or absent devices',async t=>{
+test('repair rejects active control, active display, and unauthorized or absent devices',async t=>{
  let display=false;
  const f=fixture(t,{hasDisplay:()=>display});
  const lease=f.store.externalLease(f.id,'test');
@@ -65,7 +65,7 @@ test('repair rejects active control, active display, quarantine, and unauthorize
  f.inventory.snapshot.set(f.serial,{serial:f.serial,state:'unauthorized'});
  await assert.rejects(f.recovery.repair(f.id),{code:'ADB_AUTHORIZATION_REQUIRED'});
  f.store.quarantine(f.id,'RUNTIME_CLEANUP_FAILED');
- await assert.rejects(f.recovery.repair(f.id),{code:'DEVICE_RECOVERY_REQUIRED'});
+ await assert.rejects(f.recovery.repair(f.id),{code:'ADB_AUTHORIZATION_REQUIRED'});
  assert.deepEqual(f.calls,[]);
 });
 test('concurrent clicks share one repair, and offline automatic retries are bounded',async t=>{

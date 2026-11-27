@@ -44,7 +44,9 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
       if(req.headers.origin)throw problem('DIRECT_BROWSER_ACCESS_DENIED',403);
       if(!authenticated(req,token))throw problem('UNAUTHORIZED',401);
       if(url.pathname==='/v1/capabilities'&&req.method==='GET')return send(200,{operations:OPERATIONS,devices:store.devices().map(d=>({device_id:d.id,capabilities:d.capabilities}))});
-      if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>({...d,...(warmup?{warmup:warmup.view(d)}:{}),...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT json_extract(payload,'$.code') code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? ORDER BY seq DESC LIMIT 1").get(d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null}))});
+      if(url.pathname==='/v1/devices'&&req.method==='GET')return send(200,{devices:store.devices().map(d=>{const device={...d,...(warmup?{warmup:warmup.view(d)}:{}),...(inventory?inventory.describe(d):{...(d.kind==='android'?{connection_state:d.health==='ready'?'device':'offline'}:{})}),last_error:store.db.prepare("SELECT coalesce(json_extract(payload,'$.code'),json_extract(payload,'$.reason')) code FROM events WHERE type IN ('unit.failed','device.quarantined') AND json_extract(payload,'$.device_id')=? AND seq>coalesce((SELECT max(seq) FROM events WHERE (type='device.recovered' OR (type='device.connection_verified' AND json_extract(payload,'$.healthy')=1)) AND json_extract(payload,'$.device_id')=?),0) ORDER BY seq DESC LIMIT 1").get(d.id,d.id)?.code||null,recovered_at:store.db.prepare("SELECT max(created) at FROM events WHERE type='device.recovered' AND json_extract(payload,'$.device_id')=?").get(d.id).at||null};
+        if(device.kind==='android'&&connectionRecovery)device.recovery=connectionRecovery.describe(device);
+        return device;})});
       if(url.pathname==='/v1/queue'&&req.method==='GET')return send(200,{counts:store.db.prepare('SELECT state,count(*) count FROM requests WHERE scope=? GROUP BY state').all(scope)});
       if(url.pathname==='/v1/devices/warmup'&&req.method==='POST'){
         if(!warmup)throw problem('WARMUP_UNAVAILABLE',503);
@@ -108,7 +110,7 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         store.assertNoCommand(device.id);const faults={...device.faults};delete faults[input.platform];
         store.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(JSON.stringify(faults),device.id);store.event(null,'device.recovered',{device_id:device.id,platform:input.platform,confirmation:'operator'});return send(200,{resumed:true});
       }
-      const displayRoute=url.pathname.match(/^\/v1\/displays(?:\/([0-9a-f-]+)(?:\/(frame|stop))?)?$/);
+      const displayRoute=url.pathname.match(/^\/v1\/displays(?:\/([0-9a-f-]+)(?:\/(stream|stop|heartbeat))?)?$/);
       if(displayRoute){
         if(!displays)throw problem('DISPLAY_DISABLED',503);
         const [,id,action]=displayRoute;
@@ -117,8 +119,9 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
           if(connectionRecovery?.isRepairing(input.device_id))throw problem('DEVICE_BUSY',409);
           return send(201,displays.open(input.device_id,scope));
         }
+        if(id&&action==='heartbeat'&&req.method==='POST')return send(200,displays.heartbeat(id,scope));
         if(id&&action==='stop'&&req.method==='POST')return send(200,displays.stop(id,scope));
-        if(id&&action==='frame'&&req.method==='GET'){const bytes=await displays.frame(id,scope);res.setHeader('Content-Type','image/png');res.writeHead(200);res.end(bytes);return;}
+        if(id&&action==='stream'&&req.method==='GET'){await displays.stream(id,scope,res);return;}
         throw problem('METHOD_NOT_ALLOWED',405);
       }
       if(url.pathname==='/v1/link-utilities'&&req.method==='POST'){
