@@ -64,16 +64,19 @@ class PhoneRuntime {
   if(!appPid)throw fail('APP_NOT_READY');
   return {pid:Number(appPid),endpoint:`127.0.0.1:${this.forward}`,app:this.app};
  }
+ async foregroundPid(){
+  const candidates=(await this.pidof(this.contract.package)).split(/\s+/);
+  const appPid=foregroundMainPid(await this.adb.shell('dumpsys','activity','activities'),candidates);
+  if(!appPid)return null;
+  const cmdline=await this.adb.shell('cat',`/proc/${appPid}/cmdline`);
+  if(cmdline.split('\0',1)[0]!==this.contract.package)throw fail('APP_MAIN_PROCESS_MISMATCH');
+  return appPid;
+ }
  async waitForForeground(){
   const deadline=this.now()+4000;
   while(this.now()<deadline){
-   const candidates=(await this.pidof(this.contract.package)).split(/\s+/);
-   const appPid=foregroundMainPid(await this.adb.shell('dumpsys','activity','activities'),candidates);
-   if(appPid){
-    const cmdline=await this.adb.shell('cat',`/proc/${appPid}/cmdline`);
-    if(cmdline.split('\0',1)[0]!==this.contract.package)throw fail('APP_MAIN_PROCESS_MISMATCH');
-    return appPid;
-   }
+   const appPid=await this.foregroundPid();
+   if(appPid)return appPid;
    await this.adb.wait(250);
   }
   return null;
@@ -84,6 +87,10 @@ class PhoneRuntime {
   return this.waitForForeground();
  }
  async startApp(recoverLaunch){
+  // A person keeps using the open App between items; relaunch only when XHS
+  // is not already the foreground app.
+  const current=await this.foregroundPid();
+  if(current)return current;
   for(let attempt=0;attempt<(recoverLaunch?3:1);attempt++){
    const pid=await this.launchApp();if(pid)return pid;
   }
