@@ -180,3 +180,18 @@ test('idle proof requires a live process listing and no input or forwarding for 
   assert.equal(result,expected);
  }
 });
+
+test('manual repair also returns a phone whose App or observer ended, never one with other codes',async t=>{
+ for(const [code,expected] of [['APP_MAIN_PROCESS_MISMATCH','ready'],['APP_NOT_READY','ready'],['OBSERVER_DETACHED','ready'],['CAPTURE_TIMEOUT','unavailable'],['APP_VERSION_MISMATCH','unavailable']]){
+  const f=setup(t),error={code,scope:'device'};
+  f.store.tx(()=>{
+   f.store.finish(f.claim,'failed',error);
+   f.store.db.prepare("UPDATE units SET state='queued',error=? WHERE id=?").run(JSON.stringify(error),f.claim.unit_id);
+   f.store.db.prepare("UPDATE devices SET health='unavailable' WHERE id=?").run(phone);
+   f.store.event(f.claim.request_id,'unit.failed',{device_id:phone,unit_id:f.claim.unit_id,code});
+   f.store.settle(f.claim.request_id);
+  });
+  const repair=repairService(t,f,async()=>true);
+  assert.equal((await repair.repair(phone)).health,expected,code);
+ }
+});

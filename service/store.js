@@ -9,7 +9,11 @@ const parse = value => value == null ? null : JSON.parse(value);
 const SCHEMA_VERSION=5;
 // UI-observation failures that leave a phone unavailable without a platform or
 // transport fault. Manual repair may restore them after an idle check.
-const REPAIRABLE_UI_CODES=new Set(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED','UI_BLOCKED_BY_OVERLAY']);
+// Transient phone failures a guarded connection repair may return to service:
+// UI observation misses and an App or observer that ended (the next unit
+// relaunches the App). Login, verification and version faults are never here.
+const REPAIRABLE_UI_CODES=new Set(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED','UI_BLOCKED_BY_OVERLAY',
+  'APP_MAIN_PROCESS_MISMATCH','APP_NOT_READY','OBSERVER_DETACHED']);
 function repairableUiMiss(error,platform,kind){
   return REPAIRABLE_UI_CODES.has(error?.code) && error.scope==='device' && platform==='xiaohongshu' && kind==='android';
 }

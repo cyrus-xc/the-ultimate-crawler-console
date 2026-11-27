@@ -1,16 +1,24 @@
 'use strict';
-// Crawler watcher for the first week of human-like pacing. Read-only: it never
-// changes settings, devices or requests. Every cycle it digests queue results,
-// pacing and input evidence; on a detection signal it asks the local LLM
-// (never a paid API) which preceding sequence most likely triggered it and
-// journals the answer. It sends a daily summary and day-2/day-7 reports to
-// Feishu without @, and person-needed alerts with @All. It exits at WATCHER_UNTIL.
+// Crawler watcher: one of the agent-work watchers that share the local DeepSeek
+// model. Code rules run every cycle; the model is asked only to explain a
+// detection and to write summaries (never a paid API, at most LLM_PER_HOUR).
+// It never changes settings, pacing or requests. Its one write is a whitelisted
+// self-fix: after a transient phone failure (UI observation miss, App crash,
+// observer detach) and a 2-5 minute rest it asks the service's own guarded
+// connection repair to return the phone, at most FIX_PER_DAY per phone. Every
+// other condition (login/verification, disconnection, version mismatch, three
+// failures in a row, a failed or exhausted fix) is a Feishu alert with @All.
+// Records share one shape across watchers: agent, at, and status.json.
+// It runs until WATCHER_UNTIL when set, otherwise permanently.
 const fs=require('node:fs'),path=require('node:path');
 const Database=require('better-sqlite3');
 
 const MIN=60000,HOUR=60*MIN,DAY=24*HOUR,OFFSET=8*HOUR;
 const localDay=ms=>Math.floor((ms+OFFSET)/DAY)*DAY-OFFSET;
 const stamp=ms=>new Date(ms+OFFSET).toISOString().slice(0,16).replace('T',' ');
+const AGENT='crawler',FIX_PER_DAY=3,LLM_PER_HOUR=6;
+const SELF_FIX=new Set(['PHONE_FIRST_PAGE_UNOBSERVED','PHONE_PAGE_RESPONSE_UNOBSERVED','UI_BLOCKED_BY_OVERLAY',
+ 'APP_MAIN_PROCESS_MISMATCH','APP_NOT_READY','OBSERVER_DETACHED']);
 const DETECTION=new Set(['VERIFICATION_REQUIRED','CRAWLER_VERIFICATION_REQUIRED','LOGIN_OR_VERIFICATION_REQUIRED','LOGIN_REQUIRED',
  'XHS_ACCESS_RESTRICTED','CRAWLER_ACCESS_RESTRICTED','ACCESS_RESTRICTED','UI_BLOCKED_BY_OVERLAY','PHONE_CAPTCHA']);
 
@@ -20,11 +28,12 @@ function readEnv(file){
 }
 
 class Watcher {
- constructor({runtime,analysisRoot,until,intervalMs=5*MIN,now=Date.now,fetchImpl=fetch,startedAt}){
-  Object.assign(this,{runtime,analysisRoot,until,intervalMs,now,fetchImpl});
+ constructor({runtime,analysisRoot,until=Infinity,intervalMs=5*MIN,now=Date.now,fetchImpl=fetch,startedAt,service}){
+  Object.assign(this,{runtime,analysisRoot,until,intervalMs,now,fetchImpl,serviceOverride:service});
   this.dir=path.join(runtime,'watcher');fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
   this.stateFile=path.join(this.dir,'state.json');
-  this.state={cursor:0,eventCursor:0,inputOffsets:{},alerts:{},summaries:{},startedAt:startedAt||now(),...this.load()};
+  this.state={cursor:0,eventCursor:0,inputOffsets:{},alerts:{},summaries:{},fixes:{},llm:[],startedAt:startedAt||now(),...this.load()};
+  this.state.fixes=this.state.fixes||{};this.state.llm=this.state.llm||[];
   this.db=new Database(path.join(runtime,'queue.db'),{readonly:true,fileMustExist:true});
   this.db.pragma('query_only = ON');
   // The first start watches from now: history is not re-analysed.
@@ -92,9 +101,13 @@ class Watcher {
  }
  async ask(system,user){
   const source=this.llmSource();if(!source)return null;
+  // The model is shared with other agent work; keep this watcher's share small.
+  const now=this.now();this.state.llm=this.state.llm.filter(t=>t>now-HOUR);
+  if(this.state.llm.length>=LLM_PER_HOUR)return null;
+  this.state.llm.push(now);
   try{
    const res=await this.fetchImpl(source.base_url.replace(/\/$/,'')+'/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:source.model,temperature:0.2,max_tokens:1200,reasoning_effort:'low',messages:[{role:'system',content:system},{role:'user',content:user}]}),
+    body:JSON.stringify({model:source.model,temperature:0.2,max_tokens:600,reasoning_effort:'low',messages:[{role:'system',content:system},{role:'user',content:user}]}),
     signal:AbortSignal.timeout(300000)});
    if(!res.ok)return null;const body=await res.json();
    return String(body.choices?.[0]?.message?.content||'').trim()||null;
@@ -116,12 +129,57 @@ class Watcher {
   }catch{return false;}
  }
 
+ // ---- crawler service (the self-fix uses only its guarded repair route) ----
+ service(){
+  if(this.serviceOverride)return this.serviceOverride;
+  const env=readEnv(path.join(this.analysisRoot,'.env')),home=process.env.HOME||'';
+  const file=(env.CRAWLER_SERVICE_TOKEN_FILE||'').replace('$HOME',home).replace(/^~(?=\/)/,home);
+  try{return env.CRAWLER_SERVICE_URL&&file?{url:env.CRAWLER_SERVICE_URL,token:fs.readFileSync(file,'utf8').trim()}:null;}catch{return null;}
+ }
+ async repair(id){
+  const service=this.service();if(!service)return {ok:false,code:'SERVICE_UNCONFIGURED'};
+  try{
+   const res=await this.fetchImpl(service.url.replace(/\/$/,'')+'/v1/devices/repair-connection',{method:'POST',
+    headers:{Authorization:'Bearer '+service.token,'Content-Type':'application/json'},body:JSON.stringify({device_id:id}),signal:AbortSignal.timeout(120000)});
+   const body=await res.json().catch(()=>({}));
+   return res.ok&&body.health==='ready'?{ok:true}:{ok:false,code:body.code||body.error||'HTTP_'+res.status};
+  }catch(error){return {ok:false,code:error.name==='TimeoutError'?'REPAIR_TIMEOUT':'REPAIR_UNREACHABLE'};}
+ }
+ // Decide for one unavailable phone: rest, fix now, or alert a person.
+ fixPlan(d,now){
+  const rows=this.db.prepare('SELECT rowid seq,state,error,finished FROM attempts WHERE device_id=? AND finished IS NOT NULL ORDER BY rowid DESC LIMIT 3').all(d.id);
+  const last=rows[0];if(!last||last.state!=='failed')return {alert:'PHONE_NEEDS_REPAIR'};
+  let code=null;try{code=JSON.parse(last.error).code;}catch{}
+  if(!SELF_FIX.has(code))return {alert:'PHONE_NEEDS_REPAIR:'+(code||'UNKNOWN')};
+  if(rows.length===3&&rows.every(r=>r.state==='failed'))return {alert:'FAILED_IN_ROW_3:'+code};
+  const day=localDay(now),fixes=this.state.fixes[d.id]?.day===day?this.state.fixes[d.id]:{day,n:0};
+  if(fixes.lastSeq===last.seq)return {alert:'SELF_FIX_FAILED:'+(fixes.lastResult||code)};
+  if(fixes.n>=FIX_PER_DAY)return {alert:'SELF_FIX_LIMIT:'+code};
+  const rest=2*MIN+(last.seq%181)*1000;   // a 2-5 minute rest, stable per incident
+  if(now-last.finished<rest)return {wait:true};
+  return {fix:{seq:last.seq,code,fixes}};
+ }
+ async selfFix(d,plan){
+  const result=await this.repair(d.id),{seq,code,fixes}=plan;
+  this.state.fixes[d.id]={day:fixes.day,n:fixes.n+1,lastSeq:seq,lastResult:result.ok?'repaired':result.code};
+  this.save();
+  const record={agent:AGENT,at:this.now(),device:d.id,self_fix:code,ok:result.ok,result:result.code||'ready',fixes_today:fixes.n+1};
+  this.append('digests.jsonl',JSON.stringify(record)+'\n');
+  this.journal(`자가 수정 ${result.ok?'성공':'실패'} · ${d.id}`,`- 원인 ${code}, 휴식 후 connection repair 호출\n- 결과 ${record.result}, 오늘 ${record.fixes_today}/${FIX_PER_DAY}회`);
+  return result.ok;
+ }
+
  // ---- cycle ----
  async alerts(now){
   const day=localDay(now),wanted={};
-  for(const d of this.db.prepare("SELECT id,health,quarantined FROM devices WHERE kind='android'").all()){
+  for(const d of this.db.prepare("SELECT id,health,quarantined,faults FROM devices WHERE kind='android'").all()){
    const codes=[];
-   if(d.health==='unavailable'&&!d.quarantined)codes.push('PHONE_NEEDS_REPAIR');
+   if(d.health==='unavailable'&&!d.quarantined){
+    let faults={};try{faults=JSON.parse(d.faults||'{}');}catch{}
+    const plan=Object.keys(faults).length?{alert:'PHONE_NEEDS_REPAIR:'+Object.values(faults)[0]}:this.fixPlan(d,now);
+    if(plan.alert)codes.push(plan.alert);
+    else if(plan.fix&&!await this.selfFix(d,plan.fix))codes.push('SELF_FIX_FAILED:'+plan.fix.code);
+   }
    const p=this.has('device_pacing')?this.db.prepare('SELECT stopped_day,reason FROM device_pacing WHERE device_id=?').get(d.id):null;
    if(p&&p.stopped_day===day)codes.push('PACING_STOPPED:'+(p.reason||'UNKNOWN'));
    const w=this.has('phone_warmup')?this.db.prepare("SELECT state,error FROM phone_warmup WHERE device_id=? AND day=?").get(d.id,day):null;
@@ -139,14 +197,14 @@ class Watcher {
   for(const a of attempts){
    this.state.cursor=Math.max(this.state.cursor,a.seq);this.save();
    const code=a.error?JSON.parse(a.error).code:null;
-   this.append('digests.jsonl',JSON.stringify({at:a.finished,device:a.device_id,op:a.op,secs:Math.round((a.finished-a.started)/1000),state:a.state,code})+'\n');
+   this.append('digests.jsonl',JSON.stringify({agent:AGENT,at:a.finished,device:a.device_id,op:a.op,secs:Math.round((a.finished-a.started)/1000),state:a.state,code})+'\n');
    if(code&&DETECTION.has(code))found.push({at:a.finished,device:a.device_id,code,op:a.op});
   }
   for(const e of this.newIncidentsFromLog())if(e.kind==='ui_blocked')found.push({at:e.at,device:e.device_id,code:'UI_BLOCKED',overlay:e.overlay,labels:e.labels});
-  else this.append('digests.jsonl',JSON.stringify({at:e.at,device:e.device_id,dialog:e.dialog})+'\n');
+  else this.append('digests.jsonl',JSON.stringify({agent:AGENT,at:e.at,device:e.device_id,dialog:e.dialog})+'\n');
   for(const incident of found){
    const seq=this.sequence(incident.device,incident.at);
-   const record={...incident,sequence:seq};
+   const record={agent:AGENT,...incident,sequence:seq};
    const answer=await this.ask(
     '你是小红书采集节奏审查员。只根据给出的证据判断，不要臆测。用韩语回答，简短。输出: 1) 가장 의심되는 트리거(직전 순서 중 무엇) 2) 근거 3) 확신도(낮음/중간/높음) 4) 다음에 바꿔볼 수치 하나.',
     JSON.stringify(record));
@@ -192,9 +250,15 @@ class Watcher {
   await this.incidents(now);this.save();
   await this.summaries(now);
   this.state.lastCycle=now;this.save();
+  // One small status file per watcher, the same shape for every agent.
+  const day=localDay(now);
+  const status={agent:AGENT,at:now,until:Number.isFinite(this.until)?this.until:null,open_alerts:this.state.alerts,
+   self_fixes_today:Object.fromEntries(Object.entries(this.state.fixes).filter(([,f])=>f.day===day).map(([id,f])=>[id,f.n])),
+   llm_calls_last_hour:this.state.llm.filter(t=>t>now-HOUR).length,rss_mb:Math.round(process.memoryUsage().rss/1048576)};
+  fs.writeFileSync(path.join(this.dir,'status.json.tmp'),JSON.stringify(status));fs.renameSync(path.join(this.dir,'status.json.tmp'),path.join(this.dir,'status.json'));
  }
  async run({onError=()=>{}}={}){
-  this.journal('watcher 시작',`종료 예정 ${stamp(this.until)}, 주기 ${Math.round(this.intervalMs/MIN)}분, 모델 ${this.llmSource()?.model||'없음(증거만 기록)'}`);this.save();
+  this.journal('watcher 시작',`종료 ${Number.isFinite(this.until)?stamp(this.until):'없음(상시)'}, 주기 ${Math.round(this.intervalMs/MIN)}분, 모델 ${this.llmSource()?.model||'없음(증거만 기록)'}`);this.save();
   while(this.now()<this.until){
    try{await this.cycle();}catch(error){onError(error);}
    // Alerts and incidents are checked every 5 minutes; heavier work is throttled by state.
@@ -207,9 +271,9 @@ class Watcher {
 if(require.main===module){
  const runtime=path.resolve(process.env.CRAWLER_RUNTIME_DIR||'runtime');
  const analysisRoot=path.resolve(process.env.XHS_ANALYSIS_ROOT||path.join(process.env.HOME||'.','Development','xhs-analysis'));
- const until=Date.parse(process.env.WATCHER_UNTIL||'');
- if(!Number.isFinite(until)){process.stderr.write('WATCHER_UNTIL required (ISO time)\n');process.exit(2);}
+ const until=process.env.WATCHER_UNTIL?Date.parse(process.env.WATCHER_UNTIL):Infinity;
+ if(Number.isNaN(until)){process.stderr.write('WATCHER_UNTIL must be an ISO time when set\n');process.exit(2);}
  new Watcher({runtime,analysisRoot,until}).run({onError:e=>process.stderr.write('[watcher] '+(e.code||e.message)+'\n')})
   .then(()=>process.exit(0),e=>{process.stderr.write(String(e)+'\n');process.exit(1);});
 }
-module.exports={Watcher,DETECTION};
+module.exports={Watcher,DETECTION,SELF_FIX};

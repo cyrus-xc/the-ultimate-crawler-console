@@ -80,3 +80,69 @@ test('a first start watches from now and ignores earlier failures',async t=>{
  await w.cycle();
  assert.equal(fs.existsSync(path.join(f.runtime,'watcher','incidents.jsonl')),false);
 });
+
+// ---- whitelisted self-fix ----
+let key=0;
+function failPhone(f,code){
+ f.store.submit(input({idempotency_key:'fix'+(++key),targets:[{post_id:'n'+key}]}));const claim=f.store.claim();
+ f.at(f.now()+5000);f.store.fail(claim,{code,scope:'device'});
+ return f.store.devices().find(d=>d.id==='android:p').health;
+}
+function fixWatcher(f,repairHealth='ready'){
+ const repairs=[];
+ const fetchImpl=async(url,options)=>{
+  if(url.includes('repair-connection')){repairs.push({url,auth:options.headers.Authorization,body:JSON.parse(options.body)});
+   if(repairHealth==='ready')f.store.db.prepare("UPDATE devices SET health='ready' WHERE id='android:p'").run();
+   return {ok:true,json:async()=>({health:repairHealth})};}
+  return f.fetchImpl(url,options);
+ };
+ const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,now:f.now,fetchImpl,service:{url:'http://127.0.0.1:8790',token:'tok'}});
+ return {w,repairs,messages:()=>f.calls.filter(c=>c.url.includes('/im/v1/messages')).map(c=>JSON.parse(c.body.content).text)};
+}
+
+test('a transient App crash rests 2-5 minutes, then the guarded repair returns the phone',async t=>{
+ const f=setup(t);const {w,repairs,messages}=fixWatcher(f);
+ assert.equal(failPhone(f,'OBSERVER_DETACHED'),'unavailable');
+ await w.cycle();assert.equal(repairs.length,0,'rests first');assert.deepEqual(messages(),[]);
+ f.at(f.now()+5*60000);await w.cycle();
+ assert.equal(repairs.length,1);assert.equal(repairs[0].url,'http://127.0.0.1:8790/v1/devices/repair-connection');
+ assert.equal(repairs[0].auth,'Bearer tok');assert.deepEqual(repairs[0].body,{device_id:'android:p'});
+ assert.deepEqual(messages(),[],'a successful self-fix needs no person');
+ assert.match(fs.readFileSync(path.join(f.runtime,'watcher','journal.md'),'utf8'),/자가 수정 성공/);
+ const status=JSON.parse(fs.readFileSync(path.join(f.runtime,'watcher','status.json'),'utf8'));
+ assert.equal(status.agent,'crawler');assert.equal(status.until,null);assert.deepEqual(status.self_fixes_today,{'android:p':1});
+});
+
+test('a failure outside the whitelist is never fixed and alerts a person',async t=>{
+ const f=setup(t);const {w,repairs,messages}=fixWatcher(f);
+ failPhone(f,'CAPTURE_TIMEOUT');f.at(f.now()+10*60000);await w.cycle();
+ assert.equal(repairs.length,0);assert.match(messages()[0],/<at user_id="all">.*PHONE_NEEDS_REPAIR:CAPTURE_TIMEOUT/s);
+});
+
+test('three failures in a row alert instead of fixing',async t=>{
+ const f=setup(t);const {w,repairs,messages}=fixWatcher(f);
+ for(let i=0;i<3;i++){f.store.db.prepare("UPDATE devices SET health='ready' WHERE id='android:p'").run();failPhone(f,'APP_NOT_READY');}
+ f.at(f.now()+10*60000);await w.cycle();
+ assert.equal(repairs.length,0);assert.match(messages()[0],/FAILED_IN_ROW_3:APP_NOT_READY/);
+});
+
+test('a failed repair alerts, and fixes stop at three per phone per day',async t=>{
+ const f=setup(t);
+ const failing=fixWatcher(f,'unavailable');
+ failPhone(f,'UI_BLOCKED_BY_OVERLAY');f.at(f.now()+10*60000);await failing.w.cycle();
+ assert.equal(failing.repairs.length,1);assert.match(failing.messages()[0],/SELF_FIX_FAILED:UI_BLOCKED_BY_OVERLAY/);
+ const f2=setup(t);const {w,repairs,messages}=fixWatcher(f2);
+ for(let i=0;i<4;i++){
+  f2.store.submit(input({idempotency_key:'ok'+i+key,targets:[{post_id:'ok'+i}]}));f2.store.finish(f2.store.claim(),'succeeded');
+  failPhone(f2,'PHONE_PAGE_RESPONSE_UNOBSERVED');f2.at(f2.now()+10*60000);await w.cycle();
+ }
+ assert.equal(repairs.length,3);assert.match(messages().at(-1),/SELF_FIX_LIMIT:PHONE_PAGE_RESPONSE_UNOBSERVED/);
+});
+
+test('the shared local model is asked at most six times an hour',async t=>{
+ const f=setup(t);const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,now:f.now,fetchImpl:f.fetchImpl});
+ for(let i=0;i<8;i++)await w.ask('s','u');
+ assert.equal(f.calls.filter(c=>c.url.includes('chat/completions')).length,6);
+ f.at(f.now()+61*60000);await w.ask('s','u');
+ assert.equal(f.calls.filter(c=>c.url.includes('chat/completions')).length,7);
+});

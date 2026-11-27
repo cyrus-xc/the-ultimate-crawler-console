@@ -1,19 +1,21 @@
 [Unit]
-Description=Read-only crawler pacing watcher (first week; exits at WATCHER_UNTIL)
+Description=Crawler watcher (code rules, local model for analysis only, whitelisted self-fix)
 After=ultimate-crawler.service
 
 [Service]
 Type=simple
 WorkingDirectory=%h/Development/the-ultimate-crawler-console
 EnvironmentFile=%h/Development/the-ultimate-crawler-console/.env
-# Set at install time, e.g. Environment=WATCHER_UNTIL=2026-12-04T20:00:00+08:00
+# Optional: WATCHER_UNTIL=<ISO time> ends the watcher; unset, it runs permanently.
 EnvironmentFile=%h/.config/crawler-watcher.env
 Environment=ENABLE_TIKHUB_NETWORK=0
-ExecStart=/usr/bin/node tools/watcher/watcher.js
+ExecStart=/usr/bin/node --max-old-space-size=64 tools/watcher/watcher.js
 Restart=on-failure
 RestartSec=30s
 Nice=10
 UMask=0077
+MemoryHigh=96M
+MemoryMax=128M
 
 [Install]
 WantedBy=default.target
