@@ -59,6 +59,13 @@ test('clipboard reverse is per-device and URLs are generated as literal remote s
  assert.ok(checked.args[1].includes("'"+url+"'"));
  assert.throws(()=>validateCommand(['shell','am','start','-a','android.intent.action.VIEW','-d','https://evil.test','-p','com.xingin.xhs'],device),{code:'ADB_COMMAND_UNSUPPORTED'});
 });
+test('the XHS search link is accepted only with exactly one keyword',t=>{
+ const {store}=fixture(t),device=store.devices().find(d=>d.id==='p1');
+ const open=url=>validateCommand(['shell','am','start','-a','android.intent.action.VIEW','-d',url,'-p','com.xingin.xhs'],device);
+ assert.ok(open('xhsdiscover://search/result?keyword=%E4%B8%8A%E6%B5%B7%E7%BE%8E%E9%A3%9F').args[1].includes('search/result'));
+ for(const url of ['xhsdiscover://search/result','xhsdiscover://search/result?keyword=','xhsdiscover://search/result?keyword=a&source=x','xhsdiscover://search/other?keyword=a'])
+  assert.throws(()=>open(url),{code:'ADB_COMMAND_UNSUPPORTED'},url);
+});
 test('cancel drains the actual child and blocks queued work before releasing command ownership',async t=>{
  const {store,gateway,children}=fixture(t,{autoCloseOnKill:false}),lease=store.externalLease('p1','owner');
  const first=gateway.execute(lease,{args:tap}),second=gateway.execute(lease,{args:tap});const results=Promise.allSettled([first,second]);await tick();

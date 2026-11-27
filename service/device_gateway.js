@@ -27,6 +27,8 @@ function navigationUrl(value, pkg, device) {
     return url.protocol === 'http:' && url.hostname === '127.0.0.1' && Number(url.port) === device.clipboard_port && /^\/[a-f0-9]{48}$/.test(url.pathname) && !url.search && !url.hash;
   }
   if (pkg === 'com.xingin.xhs' && url.protocol === 'xhsdiscover:') {
+    // The search link carries exactly one non-empty keyword, as Douyin's does.
+    if (url.hostname === 'search') return url.pathname === '/result' && !url.hash && [...url.searchParams.keys()].length === 1 && !!url.searchParams.get('keyword');
     return ['item','user','profile'].includes(url.hostname) && /^\/(?:profile\/)?[a-f0-9]{24}$/i.test(url.pathname) && !url.search && !url.hash;
   }
   if (pkg === 'com.ss.android.ugc.aweme' && url.protocol === 'snssdk1128:') {
