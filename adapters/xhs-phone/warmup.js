@@ -91,12 +91,23 @@ async function browseFeed(adb,{guard,dwell,random,motion=Math.random,likeOk=()=>
   await adb.shell('input','swipe',...[...from,...to].map(Math.round),String(Math.round(v(260,600))));
   await adb.wait(Math.round(v(500,1400)));
  };
+ let restarted=false;
  const returnToFeed=async nodes=>{
-  for(let depth=0;depth<4&&!feed(nodes);depth++){
+  for(let depth=0;depth<6&&!feed(nodes);depth++){
    const home=unique(nodes.filter(n=>n.center&&feedTabs.test(label(n))));
    if(home)await tap(home);
    else await nav.back();
    nodes=await ui();
+  }
+  // Collection opens profiles/notes by deep link, which stacks dozens of
+  // pages (18-21 observed). When Back cannot reach Home, close and reopen XHS
+  // once, as a person would, which lands on the Home feed.
+  if(!feed(nodes)&&!restarted){
+   restarted=true;guard();
+   await adb.shell('am','force-stop',XHS);
+   await adb.wait(1200);
+   await nav.shell('monkey','-p',XHS,'-c','android.intent.category.LAUNCHER','1');
+   for(let attempt=0;attempt<6&&!feed(nodes);attempt++){await adb.wait(1000);nodes=await ui().catch(error=>{if(error.code==='APP_NOT_READY')return [];throw error;});}
   }
   if(!feed(nodes))fail('WARMUP_HOME_UNCONFIRMED');
   return nodes;

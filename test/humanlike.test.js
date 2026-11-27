@@ -162,3 +162,16 @@ test('Web XHS operations can be kept on phones only',t=>{
  const ops=store.devices().find(d=>d.id==='web:xhs:default').capabilities.map(c=>c.operation);
  assert.ok(!ops.includes('search.posts'));assert.ok(ops.includes('post.detail'));
 });
+
+test('warm-up closes and reopens XHS once when Back cannot reach Home through stacked pages',async()=>{
+ const {browseFeed}=require('../adapters/xhs-phone/warmup');
+ const XHS='com.xingin.xhs',node=(text,extra={})=>({text,package:XHS,center:[200,350],width:400,height:700,...extra});
+ const profile=[node('Notes'),node('Follow')],home=[node('首页'),node('发现'),node('图文,样本,来自作者,12赞',{clickable:'true'})];
+ const commands=[];let restarted=false,reads=0;
+ const adb={ui:async()=>{reads++;if(restarted&&reads>40)throw Object.assign(Error('STOP'),{code:'STOP'});return restarted?home:profile;},
+  shell:async(...a)=>{commands.push(a.join(' '));if(a[0]==='am'&&a[1]==='force-stop')restarted=true;},tap:async()=>{},wait:async()=>{}};
+ // After reaching Home it opens a card; the fixture has no post page, so it stops there.
+ await assert.rejects(browseFeed(adb,{guard:()=>{},dwell:async()=>{},random:()=>0}),error=>error.code!=='WARMUP_HOME_UNCONFIRMED');
+ assert.equal(commands.filter(c=>c==='am force-stop com.xingin.xhs').length,1);
+ assert.ok(commands.filter(c=>c==='input keyevent 4').length>=6);
+});
