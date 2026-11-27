@@ -27,9 +27,9 @@ test('a detection is journaled with its preceding sequence and analysed only by 
  const f=setup(t);
  const log=createInputLog(path.join(f.runtime,'input-log'),{now:f.now});
  log('android:p',{kind:'swipe',values:[1,2,3,4,400]});
+ const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,until:f.now()+1,now:f.now,fetchImpl:f.fetchImpl});
  f.store.submit(input());const claim=f.store.claim();
  f.at(f.now()+20000);f.store.fail(claim,{code:'XHS_ACCESS_RESTRICTED',scope:'platform'});
- const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,until:f.now()+1,now:f.now,fetchImpl:f.fetchImpl});
  await w.cycle();
  const incident=JSON.parse(fs.readFileSync(path.join(f.runtime,'watcher','incidents.jsonl'),'utf8').trim());
  assert.equal(incident.code,'XHS_ACCESS_RESTRICTED');assert.equal(incident.sequence.items.length,1);
@@ -43,8 +43,8 @@ test('a detection is journaled with its preceding sequence and analysed only by 
 
 test('a metered model is never called; evidence is still recorded',async t=>{
  const f=setup(t,{local:false});
- f.store.submit(input());const claim=f.store.claim();f.store.fail(claim,{code:'VERIFICATION_REQUIRED',scope:'platform'});
  const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,until:f.now()+1,now:f.now,fetchImpl:f.fetchImpl});
+ f.store.submit(input());const claim=f.store.claim();f.store.fail(claim,{code:'VERIFICATION_REQUIRED',scope:'platform'});
  await w.cycle();
  assert.ok(!f.calls.some(c=>c.url.includes('chat/completions')));
  assert.equal(JSON.parse(fs.readFileSync(path.join(f.runtime,'watcher','incidents.jsonl'),'utf8').trim()).analysis,null);
@@ -71,4 +71,12 @@ test('daily summary goes out once after 23:30 without @',async t=>{
  const sent=f.calls.filter(c=>c.url.includes('/im/v1/messages'));
  assert.equal(sent.length,1);const text=JSON.parse(sent[0].body.content).text;
  assert.match(text,/일일 요약/);assert.ok(!text.includes('<at'));
+});
+
+test('a first start watches from now and ignores earlier failures',async t=>{
+ const f=setup(t);
+ f.store.submit(input());const claim=f.store.claim();f.store.fail(claim,{code:'XHS_ACCESS_RESTRICTED',scope:'platform'});
+ const w=new Watcher({runtime:f.runtime,analysisRoot:f.analysis,until:f.now()+1,now:f.now,fetchImpl:f.fetchImpl});
+ await w.cycle();
+ assert.equal(fs.existsSync(path.join(f.runtime,'watcher','incidents.jsonl')),false);
 });

@@ -27,6 +27,11 @@ class Watcher {
   this.state={cursor:0,eventCursor:0,inputOffsets:{},alerts:{},summaries:{},startedAt:startedAt||now(),...this.load()};
   this.db=new Database(path.join(runtime,'queue.db'),{readonly:true,fileMustExist:true});
   this.db.pragma('query_only = ON');
+  // The first start watches from now: history is not re-analysed.
+  if(this.state.cursor===0&&!fs.existsSync(this.stateFile)){
+   this.state.cursor=this.db.prepare('SELECT coalesce(max(rowid),0) n FROM attempts').get().n;
+   try{for(const name of fs.readdirSync(path.join(runtime,'input-log')))this.state.inputOffsets[name]=fs.statSync(path.join(runtime,'input-log',name)).size;}catch{}
+  }
  }
  has(table){return !!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);}
  load(){try{return JSON.parse(fs.readFileSync(this.stateFile,'utf8'));}catch{return {};}}
@@ -132,7 +137,7 @@ class Watcher {
  async incidents(now){
   const attempts=this.attemptsSince(this.state.cursor),found=[];
   for(const a of attempts){
-   this.state.cursor=Math.max(this.state.cursor,a.seq);
+   this.state.cursor=Math.max(this.state.cursor,a.seq);this.save();
    const code=a.error?JSON.parse(a.error).code:null;
    this.append('digests.jsonl',JSON.stringify({at:a.finished,device:a.device_id,op:a.op,secs:Math.round((a.finished-a.started)/1000),state:a.state,code})+'\n');
    if(code&&DETECTION.has(code))found.push({at:a.finished,device:a.device_id,code,op:a.op});
@@ -182,7 +187,10 @@ class Watcher {
  }
  async cycle(){
   const now=this.now();
-  await this.alerts(now);await this.incidents(now);await this.summaries(now);
+  // Save after each step so a stop never repeats a delivered alert or report.
+  await this.alerts(now);this.save();
+  await this.incidents(now);this.save();
+  await this.summaries(now);
   this.state.lastCycle=now;this.save();
  }
  async run({onError=()=>{}}={}){
