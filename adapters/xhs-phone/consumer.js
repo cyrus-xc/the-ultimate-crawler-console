@@ -69,7 +69,7 @@ function makeTransport({gateway,store,claim,context,cleanup=false,drainOnStop=fa
  adb.clipboardPort=device.clipboard_port;return adb;
 }
 class PhoneConsumer {
- constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture,observerFactory,transportFactory=makeTransport,timeoutSeconds=45}={}){
+ constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture,observerFactory,transportFactory=makeTransport,timeoutSeconds=45,searchInput='clipboard'}={}){
   if(!store||!gateway||!deviceId)throw failure('INVALID_PHONE_CONSUMER_CONFIG');
   this.store=store;this.gateway=gateway;this.deviceId=deviceId;this.python=python;this.contractPath=contractPath;this.contract=JSON.parse(fs.readFileSync(contractPath,'utf8'));
   this.binary=binary;this.sha256=sha256;this.selectorRoot=selectorRoot;
@@ -79,7 +79,7 @@ class PhoneConsumer {
   this.observer=capture?null:(observerFactory||(()=>new ObserverHost({python,contractPath})))();
   this.capture=capture||(options=>this.observer.capture(options));this.transportFactory=transportFactory;this.timeoutSeconds=timeoutSeconds;this.verifiedOperations=new Set(verifiedOperations);
   this.runtimeFactory=runtimeFactory||((adb,cleanup)=>new PhoneRuntime(adb,{binary,sha256,contract:this.contract,cleanupAdb:cleanup,state:this.runtimeState}));
-  this.navFactory=navFactory||((adb,guard)=>new XhsNavigation(adb,{guard,clipboardPort:adb.clipboardPort,locator:new UiLocator({serial:adb.serial,appVersion:this.contract.version,root:selectorRoot})}));
+  this.navFactory=navFactory||((adb,guard)=>new XhsNavigation(adb,{guard,clipboardPort:adb.clipboardPort,searchInput,locator:new UiLocator({serial:adb.serial,appVersion:this.contract.version,root:selectorRoot})}));
   this.version=VERSION;
  }
  async execute(context){

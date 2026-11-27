@@ -158,3 +158,13 @@ test('a positioned discovery card can only be revalidated and tapped under the o
  await assert.rejects(nav.openDiscoveryCard(state,{},true),{code:'DISCOVERY_CARD_LOCATOR_UNAVAILABLE'});
  assert.equal(scrolls,1);assert.equal(taps,1);
 });
+
+test('a phone without the clipboard helper searches through the XHS search link and verifies the query',async()=>{
+ const commands=[];let views=[[{text:'上海美食',class:'android.widget.EditText',center:[400,160]}]];
+ const nav=new XhsNavigation({shell:async(...a)=>commands.push(a),ui:async()=>views[0],wait:async()=>{}},{guard:()=>{},searchInput:'deeplink',writeClipboard:async()=>{throw Error('no clipboard');}});
+ await nav.search('上海美食',{submit:false});assert.equal(commands.length,0,'nothing happens before the observed action');
+ await nav.submitSearch();
+ assert.deepEqual(commands[0],['am','start','-a','android.intent.action.VIEW','-d','xhsdiscover://search/result?keyword=%E4%B8%8A%E6%B5%B7%E7%BE%8E%E9%A3%9F','-p','com.xingin.xhs']);
+ views=[[{text:'别的词',class:'android.widget.EditText',center:[400,160]}]];
+ await nav.search('上海探店',{submit:false});await assert.rejects(nav.submitSearch(),{code:'SEARCH_INPUT_MISMATCH'});
+});

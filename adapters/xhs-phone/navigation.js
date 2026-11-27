@@ -40,9 +40,10 @@ const fingerprint=nodes=>nodes.map(n=>label(n)).filter(Boolean).join('|');
 const between=(random,min,max)=>min+random()*(max-min);
 
 class XhsNavigation {
-  constructor(adb,{guard,writeClipboard=writeAndroidClipboard,locator,clipboardPort,random=Math.random}={}) {
+  constructor(adb,{guard,writeClipboard=writeAndroidClipboard,locator,clipboardPort,random=Math.random,searchInput='clipboard'}={}) {
     if(typeof guard!=='function')throw new Error('Device lease guard required');
-    this.adb=adb;this.guard=guard;this.writeClipboard=writeClipboard;this.random=random;
+    if(!['clipboard','deeplink'].includes(searchInput))throw new Error('Unsupported search input');
+    this.adb=adb;this.guard=guard;this.writeClipboard=writeClipboard;this.random=random;this.searchInput=searchInput;this.pendingQuery=null;
     this.clipboardPort=clipboardPort;this.locator=locator||new UiLocator({serial:adb.serial||'offline',appVersion:'unverified'});this.pendingSort=null;
   }
   async action(fn){await this.guard();return await fn();}
@@ -70,6 +71,13 @@ class XhsNavigation {
   async tap(node){return this.action(()=>this.adb.tap(node));}
   async search(keyword,{submit=true}={}) {
     if(typeof keyword!=='string'||!keyword.trim()||keyword.length>200)failed('INVALID_KEYWORD');
+    if(this.searchInput==='deeplink'){
+      // Phones without the Chrome clipboard helper open XHS's own search link,
+      // the way a shared search link opens; the query box is then verified.
+      this.pendingQuery=keyword;
+      if(submit)await this.submitSearch();
+      return;
+    }
     await this.shell('monkey','-p','com.xingin.xhs','-c','android.intent.category.LAUNCHER','1');
     let nodes=await this.ui();
     let edits=nodes.filter(n=>/EditText$/.test(n.class||''));
@@ -107,7 +115,21 @@ class XhsNavigation {
     this.locator.confirm(inputCandidate,'search_text_verified');
     if(submit)await this.submitSearch();
   }
-  async submitSearch(){await this.shell('input','keyevent','66');await this.adb.wait(500);}
+  async submitSearch(){
+    if(this.searchInput!=='deeplink'){await this.shell('input','keyevent','66');await this.adb.wait(500);return;}
+    const keyword=this.pendingQuery;this.pendingQuery=null;
+    if(!keyword)failed('SEARCH_INPUT_UNAVAILABLE');
+    await this.shell('am','start','-a','android.intent.action.VIEW','-d',`xhsdiscover://search/result?keyword=${encodeURIComponent(keyword)}`,'-p','com.xingin.xhs');
+    await this.adb.wait(500);
+    let nodes=[];
+    for(let attempt=0;attempt<6;attempt++){
+      nodes=await this.ui();
+      if(nodes.some(n=>/EditText$/.test(n.class||'')||label(n)===keyword))break;
+      await this.adb.wait(400);
+    }
+    const shown=nodes.filter(n=>n.center&&n.center[1]<400&&label(n).replace(/^(?:搜索|Search),\s*/i,'')===keyword);
+    if(!shown.length)failed('SEARCH_INPUT_MISMATCH');
+  }
   async sort(value){
     const wanted=SORT_LABELS[value];if(!wanted)failed('UNSUPPORTED_SORT');
     let nodes=await this.ui();
