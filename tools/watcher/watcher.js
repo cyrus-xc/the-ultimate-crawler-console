@@ -188,7 +188,7 @@ class Watcher {
   }
   for(const [id,value] of Object.entries(wanted)){
    if(this.state.alerts[id]===value)continue;
-   if(await this.feishu(`Crawler watcher: ${id}: ${value}`,{all:true}))this.state.alerts[id]=value;
+   if(await this.feishu(`Crawler watcher alert (person needed): ${id}: ${value}`,{all:true}))this.state.alerts[id]=value;
   }
   for(const id of Object.keys(this.state.alerts))if(!wanted[id])delete this.state.alerts[id];
  }
@@ -227,8 +227,9 @@ class Watcher {
   const local=now-day;
   if(local>=23.5*HOUR&&!this.state.summaries[key]){
    const stats=this.dayStats(day,now);
-   const answer=await this.ask('你是小红书采集节奏审查员。用韩语写当日总结，5行以内：처리량, 탐지/브레이크, 의심 패턴, 내일 확인할 것.',JSON.stringify(stats));
-   const text=`크롤러 watcher 일일 요약 (${stamp(now).slice(0,10)})\n`+Object.entries(stats.devices).map(([d,s])=>`- ${d}: ${s.items}건, 성공 ${s.ok}, 오류 ${JSON.stringify(s.codes)}`).join('\n')+`\n- 브레이크 ${stats.brakes}회, 탐지 ${stats.incidents.length}건\n\n${answer||''}`;
+   // Feishu is read by partners: summaries and reports go out in English.
+   const answer=await this.ask('You review Xiaohongshu crawler pacing. Write today\'s summary in English, at most 5 lines: throughput, detections/brakes, suspicious patterns, what to check tomorrow. Use only the evidence given.',JSON.stringify(stats));
+   const text=`Crawler watcher daily summary (${stamp(now).slice(0,10)})\n`+Object.entries(stats.devices).map(([d,s])=>`- ${d}: ${s.items} items, ${s.ok} succeeded, errors ${JSON.stringify(s.codes)}`).join('\n')+`\n- Brakes ${stats.brakes}, detections ${stats.incidents.length}\n\n${answer||''}`;
    this.journal('일일 요약',text);await this.feishu(text);
    this.state.summaries[key]=true;
   }
@@ -236,8 +237,8 @@ class Watcher {
    const due=this.state.startedAt+checkpoint*DAY,flag='report'+checkpoint;
    if(now>=due&&!this.state.summaries[flag]){
     const stats=this.dayStats(this.state.startedAt,now);
-    const answer=await this.ask('你是小红书采集节奏审查员。用韩语写报告：어떤 순서/수치 조합에서 탐지가 났는지, 안전했던 범위, config/pacing.json 의 human_v1 에서 바꿀 값과 이유(최대 5개). 증거 없는 주장은 하지 마.',JSON.stringify(stats));
-    const text=`크롤러 watcher ${checkpoint}일차 보고\n- 기간 처리: ${Object.entries(stats.devices).map(([d,s])=>`${d} ${s.items}건`).join(', ')}\n- 브레이크 ${stats.brakes}회, 탐지 ${stats.incidents.length}건\n\n${answer||'(로컬 모델 응답 없음)'}`;
+    const answer=await this.ask('You review Xiaohongshu crawler pacing. Write a report in English: which sequence/number combinations preceded detections, the ranges that stayed safe, and up to 5 values in config/pacing.json human_v1 to change, with reasons. Make no claim without evidence.',JSON.stringify(stats));
+    const text=`Crawler watcher day-${checkpoint} report\n- Items in period: ${Object.entries(stats.devices).map(([d,s])=>`${d} ${s.items}`).join(', ')}\n- Brakes ${stats.brakes}, detections ${stats.incidents.length}\n\n${answer||'(no local model answer)'}`;
     this.journal(`${checkpoint}일차 보고`,text);await this.feishu(text);
     this.state.summaries[flag]=true;
    }

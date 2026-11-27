@@ -70,7 +70,7 @@ test('daily summary goes out once after 23:30 without @',async t=>{
  await w.cycle();await w.cycle();
  const sent=f.calls.filter(c=>c.url.includes('/im/v1/messages'));
  assert.equal(sent.length,1);const text=JSON.parse(sent[0].body.content).text;
- assert.match(text,/일일 요약/);assert.ok(!text.includes('<at'));
+ assert.match(text,/daily summary/);assert.ok(!/[\uac00-\ud7a3]/.test(text.split('\n\n')[0]),'English for partners');assert.ok(!text.includes('<at'));
 });
 
 test('a first start watches from now and ignores earlier failures',async t=>{
