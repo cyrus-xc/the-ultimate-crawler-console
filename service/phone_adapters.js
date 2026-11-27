@@ -25,7 +25,7 @@ function phoneConfig(env=process.env){
  }
  return {...config,contractPath:config.contractPath||path.resolve(__dirname,'../contracts/xhs-app-9.51.0.json')};
 }
-function registerPhoneAdapters({store,gateway,adapters,config,selectorRoot}){
+function registerPhoneAdapters({store,gateway,adapters,config,selectorRoot,stateDir=null}){
  if(!config)return [];
  if(!gateway)throw fail('PHONE_GATEWAY_REQUIRED');
  const registered=[];
@@ -33,7 +33,8 @@ function registerPhoneAdapters({store,gateway,adapters,config,selectorRoot}){
   const existing=store.devices().find(x=>x.kind==='android'&&x.serial===d.serial);if(!existing||existing.owner||adapters.has(existing.id))continue;
   const capabilities=d.operations.map(operation=>({platform:'xiaohongshu',operation,...(operation==='search.posts'?{sorts:(d.sorts||['general']).flatMap(s=>[s,SORT_LABELS[s]])}: {})}));
   store.register({id:existing.id,kind:'android',serial:d.serial,capabilities});
-  const consumer=new PhoneConsumer({store,gateway,deviceId:existing.id,python:config.python,contractPath:d.contractPath||config.contractPath,binary:config.binary,sha256:config.sha256,selectorRoot,verifiedOperations:d.operations,searchInput:d.search_input||'clipboard'});
+  const consumer=new PhoneConsumer({store,gateway,deviceId:existing.id,python:config.python,contractPath:d.contractPath||config.contractPath,binary:config.binary,sha256:config.sha256,selectorRoot,verifiedOperations:d.operations,searchInput:d.search_input||'clipboard',
+   stateFile:stateDir?path.join(stateDir,'phone-runtime-'+d.serial.replace(/[^\w.-]/g,'_')+'.json'):null});
   adapters.set(existing.id,consumer);registered.push(existing.id);
  }
  return registered;

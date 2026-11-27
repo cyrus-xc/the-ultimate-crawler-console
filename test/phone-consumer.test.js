@@ -309,3 +309,33 @@ test('phone registry uses each device version contract independently',t=>{
  assert.equal(adapters.get('new-phone').contract.version,'9.53.3');
  assert.equal(adapters.get('new-phone').contractPath,newContract);
 });
+
+// ---- persistent observer ownership ----
+function observerFixture(t,{fail=null}={}){
+ const fs=require('node:fs'),os=require('node:os');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'phone-state-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const stateFile=path.join(dir,'phone-runtime-S.json');
+ const store=new Store();store.register({id:'p',kind:'android',serial:'S',capabilities:[{platform:'xiaohongshu',operation:'search.posts'}]});
+ const events=[],gateway={drain:async()=>{}};
+ const runtimeFactory=(adb,cleanup)=>({ensure:async()=>{consumer.runtimeState.forward=41000;consumer.runtimeState.ownedServer={pid:'900',start:'1'};return {pid:1,endpoint:'127.0.0.1:41000'};},
+  close:async({keep}={})=>{events.push('runtime-close:'+(keep?'keep':'release'));if(!keep){consumer.runtimeState.forward=null;consumer.runtimeState.ownedServer=null;}}});
+ const nav={search:async()=>{},submitSearch:async()=>{},sort:async()=>{},confirmSortResponse:()=>{}};
+ const observer={alive:()=>true,close:async()=>events.push('observer-close'),capture:async options=>{await options.trigger();if(fail)throw Object.assign(Error(fail),{code:fail,scope:'device'});
+  return {captured_at_ms:1000,status:200,operation:options.operation,request:{query:[]},effective_sort:'general',response:{data:{items:[{id:id(1),user:{userid:id(2)}}],has_more:false}}};}};
+ const consumer=new PhoneConsumer({store,gateway,deviceId:'p',contractPath:path.resolve(__dirname,'../contracts/xhs-app-9.51.0.json'),verifiedOperations:['search.posts'],
+  transportFactory:()=>({wait:async()=>{}}),runtimeFactory,navFactory:()=>nav,observerFactory:()=>observer,stateFile});
+ const worker=new LocalWorker(store,new Map([['p',consumer]]),{heartbeatMs:5});t.after(async()=>{await worker.close();store.close();});
+ store.submit(base);return {store,worker,events,consumer,stateFile,fs};
+}
+test('a successful unit keeps the observer and records owned runtime state for a restart',async t=>{
+ const f=observerFixture(t);f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.deepEqual(f.events,['runtime-close:keep']);
+ assert.deepEqual(JSON.parse(f.fs.readFileSync(f.stateFile,'utf8')),{forward:41000,ownedServer:{pid:'900',start:'1'}});
+ const restarted=new PhoneConsumer({store:f.store,gateway:{},deviceId:'p',contractPath:path.resolve(__dirname,'../contracts/xhs-app-9.51.0.json'),stateFile:f.stateFile,capture:async()=>{}});
+ assert.deepEqual(restarted.runtimeState,{forward:41000,ownedServer:{pid:'900',start:'1'}});
+});
+test('a device-scoped failure releases observer, forward and server so a repair can prove the phone idle',async t=>{
+ const f=observerFixture(t,{fail:'PHONE_PAGE_RESPONSE_UNOBSERVED'});f.worker.dispatch();await Promise.all(f.worker.active.values());
+ assert.deepEqual(f.events,['observer-close','runtime-close:release']);
+ assert.deepEqual(JSON.parse(f.fs.readFileSync(f.stateFile,'utf8')),{forward:null,ownedServer:null});
+});

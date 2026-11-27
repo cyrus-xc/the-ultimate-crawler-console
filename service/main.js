@@ -50,7 +50,7 @@ async function start({env=process.env,listen=true}={}){
   const {Scheduler}=require('./scheduler');const adapters=require('./web_adapters').registerWebAdapters(store,{env});
   const {phoneConfig,registerPhoneAdapters,uiCapabilities}=require('./phone_adapters'),phoneSettings=phoneConfig(env);
   const registerPhones=()=>{
-   registerPhoneAdapters({store,gateway,adapters,config:phoneSettings,selectorRoot:path.join(root,'selectors')});
+   registerPhoneAdapters({store,gateway,adapters,config:phoneSettings,selectorRoot:path.join(root,'selectors'),stateDir:root});
    for(const configured of phoneSettings?.devices||[]){
     const utilityCapabilities=uiCapabilities(configured);
     if(configured.douyin_poi!==true&&!utilityCapabilities.length)continue;

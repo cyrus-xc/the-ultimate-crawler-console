@@ -69,13 +69,15 @@ function makeTransport({gateway,store,claim,context,cleanup=false,drainOnStop=fa
  adb.clipboardPort=device.clipboard_port;return adb;
 }
 class PhoneConsumer {
- constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture,observerFactory,transportFactory=makeTransport,timeoutSeconds=45,searchInput='clipboard'}={}){
+ constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture,observerFactory,transportFactory=makeTransport,timeoutSeconds=45,searchInput='clipboard',stateFile=null}={}){
   if(!store||!gateway||!deviceId)throw failure('INVALID_PHONE_CONSUMER_CONFIG');
   this.store=store;this.gateway=gateway;this.deviceId=deviceId;this.python=python;this.contractPath=contractPath;this.contract=JSON.parse(fs.readFileSync(contractPath,'utf8'));
   this.binary=binary;this.sha256=sha256;this.selectorRoot=selectorRoot;
   // Production keeps one observer attached per App pid across units; the
   // forward and frida-server it uses persist in runtimeState until a fault.
-  this.runtimeState={forward:null,ownedServer:null};
+  // The state file keeps that ownership across service restarts, so a server
+  // and forward this service created are never orphaned as "borrowed".
+  this.stateFile=stateFile;this.runtimeState={forward:null,ownedServer:null,...this.loadState()};
   this.observer=capture?null:(observerFactory||(()=>new ObserverHost({python,contractPath})))();
   this.capture=capture||(options=>this.observer.capture(options));this.transportFactory=transportFactory;this.timeoutSeconds=timeoutSeconds;this.verifiedOperations=new Set(verifiedOperations);
   this.runtimeFactory=runtimeFactory||((adb,cleanup)=>new PhoneRuntime(adb,{binary,sha256,contract:this.contract,cleanupAdb:cleanup,state:this.runtimeState}));
@@ -104,7 +106,7 @@ class PhoneConsumer {
     context.discovery.openNoteId=null;context.discovery.initialComments=null;
    };
    const heldNote=!!context.discovery&&['post.detail','post.comments'].includes(operation);
-   let session=await runtime.ensure({foregroundOnly:heldNote});context.guard();sessionRef=()=>session;
+   let session;try{session=await runtime.ensure({foregroundOnly:heldNote});}finally{this.saveState();}context.guard();sessionRef=()=>session;
    let attachmentRestarted=false;
    const capture=async(native,values,trigger)=>{
     const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
@@ -275,16 +277,25 @@ class PhoneConsumer {
   finally{
    try{
     await this.gateway.drain(claim.lease);
-    // Keep the attached observer (and its forward/server) across units unless
-    // the fault concerns the observer, App process or runtime itself. UI-level
-    // faults leave the hooks intact; removing them is what crashed the App.
-    const runtimeFault=/^(?:CAPTURE_|OBSERVER_|APP_|RUNTIME_|FRIDA_|FORWARD_)/.test(failureCaught?.code||'');
-    const last=sessionRef(),keep=!!this.observer&&!!last&&!runtimeFault&&this.observer.alive(last.endpoint,last.pid);
+    // Keep the attached observer (and its forward/server) while the phone stays
+    // in service. A device-scoped failure takes it out until a guarded repair,
+    // which must prove the phone idle (no Frida, no forward): release all then.
+    const leaves=!!failureCaught&&failureCaught.scope!=='item';
+    const last=sessionRef(),keep=!!this.observer&&!!last&&!leaves&&this.observer.alive(last.endpoint,last.pid);
     if(!keep)await this.observer?.close();
-    await runtime.close({keep});await this.gateway.drain(claim.lease);
+    try{await runtime.close({keep});}finally{this.saveState();}
+    await this.gateway.drain(claim.lease);
    }
    catch(error){this.store.quarantine(claim.device_id,'RUNTIME_CLEANUP_FAILED');if(failureCaught)failureCaught.cleanup_codes=error.cleanup_codes||[error.code];else throw error;}
   }
+ }
+ loadState(){
+  if(!this.stateFile)return {};
+  try{const s=JSON.parse(fs.readFileSync(this.stateFile,'utf8'));return {forward:Number.isInteger(s.forward)?s.forward:null,ownedServer:s.ownedServer&&/^\d+$/.test(s.ownedServer.pid)&&/^\d+$/.test(s.ownedServer.start)?s.ownedServer:null};}catch{return {};}
+ }
+ saveState(){
+  if(!this.stateFile)return;
+  const tmp=this.stateFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify({forward:this.runtimeState.forward,ownedServer:this.runtimeState.ownedServer}),{mode:0o600});fs.renameSync(tmp,this.stateFile);
  }
  async close(){await this.observer?.close();}
 }
