@@ -154,3 +154,11 @@ test('warm-up sessions are short daytime windows and likes have a daily budget',
  assert.equal(warmup.inSession(REDMI,{...row,manual:0},windows[0][0]+MIN),true);
  assert.equal(warmup.inSession(REDMI,{...row,manual:0},windows[0][1]+MIN),false);
 });
+
+test('Web XHS operations can be kept on phones only',t=>{
+ const {registerWebAdapters}=require('../service/web_adapters');
+ const store=new Store(':memory:');t.after(()=>store.close());
+ registerWebAdapters(store,{env:{CRAWLER_XHS_WEB_ENABLED:'true',CRAWLER_XHS_WEB_EXCLUDE:'search.posts'}});
+ const ops=store.devices().find(d=>d.id==='web:xhs:default').capabilities.map(c=>c.operation);
+ assert.ok(!ops.includes('search.posts'));assert.ok(ops.includes('post.detail'));
+});
