@@ -50,7 +50,7 @@ test('a run of items is followed by a short break and the daily cap stops the de
  f.at(f.now()+HOUR);
  assert.equal(f.pacer.state(REDMI).state,'daily_cap');
  assert.equal(f.pacer.view(REDMI).count,400);
- f.at(localDay(f.now())+DAY+12*HOUR);
+ f.at(localDay(f.now())+DAY+15*HOUR);
  assert.equal(f.pacer.state(REDMI).state,'ready','a new day resets the cap');
 });
 

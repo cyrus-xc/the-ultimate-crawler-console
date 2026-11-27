@@ -7,8 +7,8 @@
       "daily_cap": 400,
       "start_stagger_s": [5, 45],
       "sleep": {
-        "android:7e9c701e": ["00:00", "06:00"],
-        "android:c7dee0b3": ["06:30", "12:30"]
+        "android:c7dee0b3": ["00:00", "06:00"],
+        "android:7e9c701e": ["06:30", "12:30"]
       },
       "sleep_jitter_min": 15
     },
