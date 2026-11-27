@@ -4,7 +4,7 @@ const {AndroidAdb,nodesFromXml}=require('../../android/android_adb');
 const {UiLocator}=require('../../android/ui_locator');
 const {PhoneRuntime}=require('./runtime');
 const {XhsNavigation,SORT_LABELS}=require('./navigation');
-const {captureResponse}=require('./capture');
+const {ObserverHost}=require('./capture');
 const {envelope,first}=require('./projection');
 const {digest}=require('../../service/contract');
 const VERSION='xhs_ui_response_v1';
@@ -69,11 +69,16 @@ function makeTransport({gateway,store,claim,context,cleanup=false,drainOnStop=fa
  adb.clipboardPort=device.clipboard_port;return adb;
 }
 class PhoneConsumer {
- constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture=captureResponse,transportFactory=makeTransport,timeoutSeconds=45}={}){
+ constructor({store,gateway,deviceId,python,contractPath,binary,sha256,selectorRoot,verifiedOperations=[],runtimeFactory,navFactory,capture,observerFactory,transportFactory=makeTransport,timeoutSeconds=45}={}){
   if(!store||!gateway||!deviceId)throw failure('INVALID_PHONE_CONSUMER_CONFIG');
   this.store=store;this.gateway=gateway;this.deviceId=deviceId;this.python=python;this.contractPath=contractPath;this.contract=JSON.parse(fs.readFileSync(contractPath,'utf8'));
-  this.binary=binary;this.sha256=sha256;this.selectorRoot=selectorRoot;this.capture=capture;this.transportFactory=transportFactory;this.timeoutSeconds=timeoutSeconds;this.verifiedOperations=new Set(verifiedOperations);
-  this.runtimeFactory=runtimeFactory||((adb,cleanup)=>new PhoneRuntime(adb,{binary,sha256,contract:this.contract,cleanupAdb:cleanup}));
+  this.binary=binary;this.sha256=sha256;this.selectorRoot=selectorRoot;
+  // Production keeps one observer attached per App pid across units; the
+  // forward and frida-server it uses persist in runtimeState until a fault.
+  this.runtimeState={forward:null,ownedServer:null};
+  this.observer=capture?null:(observerFactory||(()=>new ObserverHost({python,contractPath})))();
+  this.capture=capture||(options=>this.observer.capture(options));this.transportFactory=transportFactory;this.timeoutSeconds=timeoutSeconds;this.verifiedOperations=new Set(verifiedOperations);
+  this.runtimeFactory=runtimeFactory||((adb,cleanup)=>new PhoneRuntime(adb,{binary,sha256,contract:this.contract,cleanupAdb:cleanup,state:this.runtimeState}));
   this.navFactory=navFactory||((adb,guard)=>new XhsNavigation(adb,{guard,clipboardPort:adb.clipboardPort,locator:new UiLocator({serial:adb.serial,appVersion:this.contract.version,root:selectorRoot})}));
   this.version=VERSION;
  }
@@ -87,7 +92,7 @@ class PhoneConsumer {
   const adb=this.transportFactory({gateway:this.gateway,store:this.store,claim,context});
   const cleanup=this.transportFactory({gateway:this.gateway,store:this.store,claim,context,cleanup:true});
   const runtime=this.runtimeFactory(adb,cleanup),nav=this.navFactory(adb,()=>context.guard());
-  let failureCaught;
+  let failureCaught,sessionRef=()=>null;
   try{
    let commentControlTapped=false;
    const restoreDiscoveryProfile=async()=>{
@@ -99,7 +104,7 @@ class PhoneConsumer {
     context.discovery.openNoteId=null;context.discovery.initialComments=null;
    };
    const heldNote=!!context.discovery&&['post.detail','post.comments'].includes(operation);
-   let session=await runtime.ensure({foregroundOnly:heldNote});context.guard();
+   let session=await runtime.ensure({foregroundOnly:heldNote});context.guard();sessionRef=()=>session;
    let attachmentRestarted=false;
    const capture=async(native,values,trigger)=>{
     const read=()=>this.capture({python:this.python,contractPath:this.contractPath,...session,operation:native,values,privateMedia:Boolean(context.discovery),trigger:control=>context.input(()=>trigger(control)),guard:context.guard,signal:context.signal,timeoutSeconds:this.timeoutSeconds});
@@ -110,7 +115,7 @@ class PhoneConsumer {
      const attachmentFailure=['ProcessNotRespondingError','ProcessNotFoundError','TransportError'].includes(exception);
      if(heldNote||attachmentRestarted||error.code!=='CAPTURE_FAILED'||error.diagnostics?.stage!=='attachment'||!attachmentFailure)throw error;
      attachmentRestarted=true;context.guard();
-     if(exception==='TransportError')await runtime.close();
+     if(exception==='TransportError'){await this.observer?.close();await runtime.close();}
      session=await runtime.restartApp();context.guard();return read();
     }
    };
@@ -268,9 +273,19 @@ class PhoneConsumer {
    if(operation==='post.comments'&&context.discovery)await restoreDiscoveryProfile();
   }catch(error){failureCaught=error;if(['ACCOUNT_REQUIRED','LOGIN_OR_VERIFICATION_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','APP_VERSION_MISMATCH'].includes(error.code))error.scope='platform';throw error;}
   finally{
-   try{await this.gateway.drain(claim.lease);await runtime.close();await this.gateway.drain(claim.lease);}
+   try{
+    await this.gateway.drain(claim.lease);
+    // Keep the attached observer (and its forward/server) across units unless
+    // the fault concerns the observer, App process or runtime itself. UI-level
+    // faults leave the hooks intact; removing them is what crashed the App.
+    const runtimeFault=/^(?:CAPTURE_|OBSERVER_|APP_|RUNTIME_|FRIDA_|FORWARD_)/.test(failureCaught?.code||'');
+    const last=sessionRef(),keep=!!this.observer&&!!last&&!runtimeFault&&this.observer.alive(last.endpoint,last.pid);
+    if(!keep)await this.observer?.close();
+    await runtime.close({keep});await this.gateway.drain(claim.lease);
+   }
    catch(error){this.store.quarantine(claim.device_id,'RUNTIME_CLEANUP_FAILED');if(failureCaught)failureCaught.cleanup_codes=error.cleanup_codes||[error.code];else throw error;}
   }
  }
+ async close(){await this.observer?.close();}
 }
 module.exports={PhoneConsumer,makeTransport,observedCursor,combinedEnvelope,VERSION,NATIVE};

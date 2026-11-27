@@ -15,12 +15,19 @@ function foregroundMainPid(activity,candidates){
 }
 function processStart(stat){const tail=stat.slice(stat.lastIndexOf(')')+1).trim().split(/\s+/);return /^\d+$/.test(tail[19]||'')?tail[19]:null;}
 class PhoneRuntime {
- constructor(adb,{binary,sha256,devicePath='/data/local/tmp/xhs-lab-frida-16.7.19',devicePort=27043,contract,cleanupAdb=adb,now=Date.now}={}){
+ constructor(adb,{binary,sha256,devicePath='/data/local/tmp/xhs-lab-frida-16.7.19',devicePort=27043,contract,cleanupAdb=adb,now=Date.now,state}={}){
   if(!adb?.serial)throw fail('DEVICE_REQUIRED');
   if(!/^\/data\/local\/tmp\/[a-zA-Z0-9_.-]+$/.test(devicePath)||!Number.isInteger(devicePort)||devicePort<1||devicePort>65535||!/^[a-f0-9]{64}$/.test(sha256||''))throw fail('INVALID_RUNTIME_CONFIG');
   if(contract?.package!=='com.xingin.xhs'||typeof contract.version!=='string')throw fail('INVALID_APP_CONTRACT');
-  this.adb=adb;this.cleanupAdb=cleanupAdb;this.binary=path.resolve(binary);this.sha256=sha256;this.devicePath=devicePath;this.devicePort=devicePort;this.contract=contract;this.now=now;this.forward=null;this.ownedServer=null;
+  this.adb=adb;this.cleanupAdb=cleanupAdb;this.binary=path.resolve(binary);this.sha256=sha256;this.devicePath=devicePath;this.devicePort=devicePort;this.contract=contract;this.now=now;
+  // A consumer may share one state object across its units so the forward and
+  // the owned frida-server outlive one unit while its observer host is attached.
+  this.state=state||{forward:null,ownedServer:null};
  }
+ get forward(){return this.state.forward??null;}
+ set forward(value){this.state.forward=value;}
+ get ownedServer(){return this.state.ownedServer??null;}
+ set ownedServer(value){this.state.ownedServer=value;}
  async root(command,adb=this.adb){return adb.command(['shell','su','-c',`'${command}'`]);}
  async pidof(name,adb=this.adb){
   try{return (await adb.shell('pidof',name)).trim();}
@@ -106,7 +113,10 @@ class PhoneRuntime {
   await this.adb.shell('am','force-stop','com.xingin.xhs');
   return this.ensure({recoverLaunch:false});
  }
- async close(){
+ async close({keep=false}={}){
+  // keep: a healthy persistent observer still uses this forward and server;
+  // both stay owned in the shared state and are released by a later close().
+  if(keep)return;
   // The caller keeps its device lease through cleanup. A supervisor may provide
   // a lease-only cleanupAdb so cancellation cannot suppress owned cleanup.
   const errors=[];

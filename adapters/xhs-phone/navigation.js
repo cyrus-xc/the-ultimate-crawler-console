@@ -227,8 +227,22 @@ class XhsNavigation {
   async comments(){
     const nodes=await this.ui();
     const controls=nodes.filter(n=>n.center&&/^(?:共\s*)?\d+\s*条评论$|^评论(?:\s*\d+)?$|^Comments?(?:\s*\d+)?$/i.test(label(n)));
-    if(controls.length===1){await this.tap(controls[0]);await this.adb.wait(350);return true;}
+    // A note without comments opens the composer when its comment control is
+    // tapped. Never tap it then; scrolling still reveals the (empty) list.
+    const empty=nodes.some(n=>/^(?:还没有评论哦|抢首评|这里还没有评论)/.test(label(n)))||(controls.length===1&&/^(?:评论|Comments?)\s*0$/i.test(label(controls[0])));
+    if(controls.length===1&&!empty){
+      await this.tap(controls[0]);await this.adb.wait(350);
+      if(await this.composerOpen()){
+        // Nothing is typed; leave the composer and record it for review.
+        this.adb.logIncident?.({kind:'comment_composer_closed'});await this.back();return false;
+      }
+      return true;
+    }
     await this.swipe();return false;
+  }
+  async composerOpen(){
+    const nodes=await this.ui();
+    return nodes.some(n=>n.package==='com.xingin.xhs'&&n.class==='android.widget.EditText'&&n.focused==='true');
   }
   async back(){await this.shell('input','keyevent','4');await this.adb.wait(350);}
   async waitForProfileFirstPage(responseReady=()=>false,control={}){

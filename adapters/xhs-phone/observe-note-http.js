@@ -2,11 +2,17 @@
 
 // App-driven reads only. Reuses the original study's OkHttp observation point.
 // peekBody may prefetch bytes; it does not consume or replace the original body.
-const paths = new Set([
+const defaultPaths = [
   '/api/sns/v10/note', '/api/sns/v1/note/imagefeed',
   '/api/sns/v4/note/videofeed', '/api/sns/v5/note/comment/list',
   '/api/sns/v3/note/comment/sub_comments',
-]);
+];
+const paths = new Set(defaultPaths);
+// Hooks stay installed for the App process lifetime: installing and removing
+// Java hooks per action crashed XHS natively (SIGBUS in the agent). Each action
+// calls reset() instead, which restores the per-action bounds below.
+const seen = new Set();
+let cronetReady = false;
 let shareTarget = null;
 const observedShares = new Map();
 function retainObservedShare(body, request, observationId) {
@@ -38,6 +44,13 @@ function retainObservedMedia(body, observationId) {
   observedMedia.set(observationId,records);
 }
 rpc.exports = {
+  reset() {
+    paths.clear(); defaultPaths.forEach(p => paths.add(p));
+    seen.clear(); count = 0;
+    shareTarget = null; observedShares.clear();
+    privateMediaEnabled = false; observedMedia.clear();
+    return {at: Date.now(), cronet: cronetReady, paths: Array.from(paths)};
+  },
   allowmedia() { privateMediaEnabled=true; observedMedia.clear(); },
   takemedia(observationId) { const records=observedMedia.get(observationId)||[]; observedMedia.delete(observationId); return records; },
   observerclock() { return Date.now(); },
@@ -66,7 +79,6 @@ function emit(value) { if (count++ < 100) send(value); }
 Java.perform(() => {
   const Uri = Java.use('android.net.Uri');
   const Builder = Java.use('okhttp3.Response$Builder');
-  const seen = new Set();
   function clean(value, key = '') {
     if (secret.test(key)) return '[REDACTED]';
     if (Array.isArray(value)) return value.map(x => clean(x));
@@ -149,6 +161,7 @@ Java.perform(() => {
       } catch (_) { emit({event:'cronet_observer_error',reason:'callback metadata unavailable'}); }
       return callback.call(this,status,statusText,headers,wasCached,protocol,proxy,byteCount);
     };
+    cronetReady = true;
     emit({event:'cronet_observer_ready',at:Date.now()});
   } catch (_) { emit({event:'cronet_observer_unavailable',at:Date.now()}); }
   const build = Builder.build.overload();
@@ -180,7 +193,9 @@ Java.perform(() => {
     } catch(e) { emit({event:'observer_error', reason:String(e)}); }
     return res;
   };
-  send({event:'observer_ready', at:Date.now(), paths:Array.from(paths), limits:{events:100,peek_bytes:limit},
+  let appPackage = null;
+  try { const app = Java.use('android.app.ActivityThread').currentApplication(); appPackage = app ? String(app.getPackageName()) : null; } catch (_) {}
+  send({event:'observer_ready', at:Date.now(), package:appPackage, paths:Array.from(paths), limits:{events:100,peek_bytes:limit},
     basis:'xhs/observe-content-http.js; selected OkHttp Response.Builder.build observation',
     limitations:['attach window only','peekBody may prefetch bytes','builder events are not independent network request counts','header values excluded','missing OkHttp network/cache metadata is unknown, including alternate transports']});
 });
