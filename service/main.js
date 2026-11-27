@@ -38,7 +38,8 @@ async function start({env=process.env,listen=true}={}){
   if(token.length<32)throw Object.assign(Error('SERVICE_TOKEN_REQUIRED'),{code:'SERVICE_TOKEN_REQUIRED'});
   if(deviceControl){
    const {DeviceGateway}=require('./device_gateway');
-   gateway=new DeviceGateway(store,{adbPath:env.ADB_PATH||'adb',rootInputSerials:(env.CRAWLER_ROOT_INPUT_SERIALS||'').split(',').filter(Boolean),beforeCommand:()=>barrier.assert()});
+   const {createInputLog}=require('./input_log');
+   gateway=new DeviceGateway(store,{adbPath:env.ADB_PATH||'adb',rootInputSerials:(env.CRAWLER_ROOT_INPUT_SERIALS||'').split(',').filter(Boolean),inputLog:createInputLog(path.join(root,'input-log')),beforeCommand:()=>barrier.assert()});
    if(env.CRAWLER_CHROME_MANIFEST_FILE){const {PhoneProvisioner}=require('./phone_provisioning');provisioner=new PhoneProvisioner({store,gateway,manifestPath:env.CRAWLER_CHROME_MANIFEST_FILE});}
    const {DisplaySessions}=require('./display_sessions');displays=new DisplaySessions(store,{adbPath:env.ADB_PATH||'adb'});
   }

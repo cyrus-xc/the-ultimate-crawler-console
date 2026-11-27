@@ -2,6 +2,7 @@
 const {spawn} = require('node:child_process');
 const {randomUUID} = require('node:crypto');
 const {problem} = require('./contract');
+const {describeInput} = require('./input_log');
 
 const PACKAGES = new Set(['com.xingin.xhs', 'com.ss.android.ugc.aweme', 'com.android.chrome']);
 const DUMPS = new Set(['/sdcard/handygadgets-ui.xml', '/sdcard/douyin-poi-ui.xml']);
@@ -68,10 +69,12 @@ function validateCommand(args, device) {
 }
 
 class DeviceGateway {
-  constructor(store, {adbPath='adb', spawnProcess=spawn, beforeCommand=()=>{}, rootInputSerials=[], pollMs=100, timeoutMs=15000, killGraceMs=1000, maxOutputBytes=16*1024*1024}={}) {
+  constructor(store, {adbPath='adb', spawnProcess=spawn, beforeCommand=()=>{}, rootInputSerials=[], inputLog=null, pollMs=100, timeoutMs=15000, killGraceMs=1000, maxOutputBytes=16*1024*1024}={}) {
     if (typeof adbPath !== 'string' || !adbPath || typeof beforeCommand !== 'function' || pollMs < 1 || timeoutMs < 1 || killGraceMs < 1) throw problem('INVALID_GATEWAY_CONFIG',500);
     if(!Array.isArray(rootInputSerials)||rootInputSerials.some(s=>typeof s!=='string'||!/^[-\w.:]+$/.test(s)))throw problem('INVALID_GATEWAY_CONFIG',500);
     this.rootInputSerials=new Set(rootInputSerials);
+    // Devices whose ordinary shell input was denied once go straight to root.
+    this.rootFirst=new Set();this.inputLog=inputLog;
     this.store=store;this.adbPath=adbPath;this.spawnProcess=spawnProcess;this.beforeCommand=beforeCommand;
     this.pollMs=pollMs;this.timeoutMs=timeoutMs;this.killGraceMs=killGraceMs;this.maxOutputBytes=maxOutputBytes;
     this.id=randomUUID();this.tails=new Map();this.operations=new Map();this.active=new Map();this.cancelled=new Set();this.closing=false;
@@ -133,6 +136,7 @@ class DeviceGateway {
     if (this.closing) return Promise.reject(problem('GATEWAY_CLOSED',503));
     let device, command;
     try { device=this.assert(lease,{cleanup});if(serial!==undefined && serial!==device.serial)throw problem('DEVICE_IDENTITY_MISMATCH',409);command=trusted?{args:[...args],binary:false,timeoutMs}:validateCommand(args,device);
+      if(!trusted&&args[0]==='shell')command.input=describeInput(args.slice(1).map(shellToken));
       if(!trusted&&this.rootInputSerials.has(device.serial)&&args[0]==='shell'){
         const words=args.slice(1).map(shellToken),[input,action,...values]=words;
         if(input==='input'&&['tap','swipe','keyevent'].includes(action)&&values.length&&values.every(v=>/^\d+$/.test(v)))command.rootArgs=['shell','su','-c',`'input ${action} ${values.join(' ')}'`];
@@ -140,13 +144,18 @@ class DeviceGateway {
     catch(error) { return Promise.reject(error); }
     const key=keyOf(lease), previous=this.tails.get(device.id) || Promise.resolve();
     const operation=previous.catch(()=>{}).then(async()=>{
-      try{return await this.run(lease,command,signal,{cleanup});}
+      const started=Date.now();
+      const logged=result=>{if(command.input)this.inputLog?.(device.id,{...command.input,ms:Date.now()-started});return result;};
+      if(command.rootArgs&&this.rootFirst.has(device.id))return logged(await this.run(lease,{args:command.rootArgs,binary:false},signal,{cleanup}));
+      try{return logged(await this.run(lease,command,signal,{cleanup}));}
       catch(error){
         // Opt-in rooted devices may deny ordinary shell INJECT_EVENTS. Retry
         // only validated numeric input, under the unchanged lease and command
         // lifetime. No HTTP request can name a root command or enable fallback.
         if(error.code!=='INPUT_PERMISSION_REQUIRED'||!command.rootArgs)throw error;
-        return this.run(lease,{args:command.rootArgs,binary:false},signal,{cleanup});
+        const result=await this.run(lease,{args:command.rootArgs,binary:false},signal,{cleanup});
+        this.rootFirst.add(device.id);
+        return logged(result);
       }
     });
     this.tails.set(device.id,operation);
