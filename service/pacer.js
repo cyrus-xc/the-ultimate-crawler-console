@@ -113,7 +113,7 @@ class Pacer {
  }
  view(id,now=this.now()){
   const settings=this.settings(id),row=this.row(id,now),state=this.state(id,now);
-  return {...state,count:row.count,cap:settings.daily_cap};
+  return {...state,count:row.count,cap:settings.daily_cap,stopped:row.stopped_day===localDay(now),reason:row.reason};
  }
 }
 module.exports={Pacer,loadProfile,localDay,seeded};
