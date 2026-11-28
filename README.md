@@ -34,6 +34,11 @@ All `/v1` endpoints require `Authorization: Bearer <credential>`. Direct browser
 
 Python client: `clients/python/crawler_queue.py`. The client never implements browser/ADB recovery; it preserves service errors and request IDs. External device leases are available to authenticated local operators through `POST /v1/device-leases` and `/v1/device-leases/{assert,heartbeat,command,release}`. Commands carry a lease and are restricted to the registered device and gateway allowlist; arbitrary ADB execution is not exposed.
 
+### Device modes
+
+`node tools/fleetctl.js status` / `node tools/fleetctl.js set <redmi|gm|web|device-id> <off|crawl|nurture|mixed> [--project NAME] [--topic WORD] [--hours N]`.
+`off` takes no work; `crawl` queue only; `nurture` warm-up browsing only (phones); `mixed` (default) both. `--project` limits queue work to requests whose `context.pipeline` matches; `--hours` returns the device to `mixed` afterwards. API: `GET /v1/devices/modes`, `POST /v1/devices/mode`.
+
 ## Migration
 
 See [execution plan](docs/EXECUTION_PLAN_ZH.md) and [source manifest](docs/migration-manifest.json). Source hashes refer to the actual dirty xhs-analysis worktree, not only its HEAD. Preserve existing response readers, normalizers, evidence and cache semantics. The change to phone collection replaces App internal-method request triggering with normal deep-link navigation/taps/swipes; it does not replace structured interface response reads with OCR.
