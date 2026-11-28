@@ -56,6 +56,18 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
           !['start','stop'].includes(input.action)||Object.keys(input).length!==2)throw problem('INVALID_WARMUP_REQUEST',400);
         return send(200,warmup.change(input.device_id,input.action==='start'));
       }
+      if(url.pathname==='/v1/devices/modes'&&req.method==='GET'){
+        if(!store.modes)throw problem('MODES_UNAVAILABLE',503);
+        return send(200,{devices:store.modes.view()});
+      }
+      if(url.pathname==='/v1/devices/mode'&&req.method==='POST'){
+        if(!store.modes)throw problem('MODES_UNAVAILABLE',503);
+        const input=await body(req),allowed=new Set(['device_id','mode','projects','topics','hours']);
+        if(!input||typeof input.device_id!=='string'||!Object.keys(input).every(k=>allowed.has(k)))throw problem('INVALID_MODE_REQUEST',400);
+        const value=store.modes.set(input.device_id,input);
+        if(!store.modes.warms(input.device_id))await warmup?.yieldDevice(input.device_id);
+        return send(200,{device_id:input.device_id,...value});
+      }
       if(url.pathname==='/v1/devices/repair-connection'&&req.method==='POST'){
         if(!connectionRecovery)throw problem('CONNECTION_REPAIR_UNAVAILABLE',503);
         const input=await body(req);

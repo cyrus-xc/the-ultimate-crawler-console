@@ -222,7 +222,7 @@ class Store {
           if(candidates.some(d=>d.quarantined)){this.state(r.id,'waiting_resources','DEVICE_QUARANTINED');continue;}
           this.db.prepare("UPDATE units SET state='failed',error=? WHERE request_id=? AND state='queued'").run(canonical({code:'NO_AVAILABLE_DEVICE'}),r.id);this.settle(r.id);continue;
         }
-        const free=this.preferredDevices(healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id))));
+        const free=this.preferredDevices(healthy.filter(d=>!d.owner && (deviceIds===null || deviceIds.includes(d.id)) && (!this.modes||this.modes.accepts(d.id,p))));
         let unit,device,waitingReason;
         for(const queued of units){
           const excluded=parse(queued.excluded);

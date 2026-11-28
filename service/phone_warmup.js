@@ -55,6 +55,8 @@ class PhoneWarmup {
  // Manual runs and rows without windows browse continuously; otherwise only
  // inside a planned session or while the pacer has this phone on a break.
  inSession(id,row,now){
+  const modes=this.store.modes;
+  if(modes?.nurturing(id))return !this.pacer?.sleepWindow(id,now);
   if(row.manual||!row.windows)return true;
   if(this.pacer?.inBreak(id,now))return true;
   return JSON.parse(row.windows).some(([from,to])=>now>=from&&now<to);
@@ -94,7 +96,7 @@ class PhoneWarmup {
  }
  waiting(device){
   // A pacing break leaves queued work waiting on purpose; browse meanwhile.
-  if(this.pacer?.inBreak(device.id))return false;
+  if(this.pacer?.inBreak(device.id)||this.store.modes?.nurturing(device.id))return false;
   return this.store.db.prepare(`SELECT r.payload FROM requests r
     WHERE r.state IN ('queued','running','waiting_resources')
       AND EXISTS (SELECT 1 FROM units u WHERE u.request_id=r.id AND u.state='queued')`).all().some(row=>{
@@ -120,9 +122,13 @@ class PhoneWarmup {
    this.store.db.prepare(`UPDATE phone_warmup SET state=?
      WHERE device_id=? AND day=? AND state='scheduled' AND starts_at<=?`)
     .run(now<day+(this.sessions?23:20)*HOUR?'queued':'expired',id,day,now);
+   const modes=this.store.modes;
+   if(modes?.nurturing(id))this.store.db.prepare(`UPDATE phone_warmup SET state='queued'
+     WHERE device_id=? AND day=? AND state='scheduled'`).run(id,day);
    const task=this.active.get(id),row=this.latest(id);
    if(task){
-    const reason=task.day!==row.day||!readyStates.has(row.state)?'WARMUP_STOPPED':
+    const reason=modes&&!modes.warms(id)?'WARMUP_PREEMPTED':
+     task.day!==row.day||!readyStates.has(row.state)?'WARMUP_STOPPED':
      !this.available(device,row)?'WARMUP_PHONE_UNAVAILABLE':
      this.waiting(device)?'WARMUP_PREEMPTED':
      !this.inSession(id,row,now)?'WARMUP_PREEMPTED':null;
@@ -131,6 +137,7 @@ class PhoneWarmup {
     continue;
    }
    if((this.handoff.get(id)||0)<=now)this.handoff.delete(id);
+   if(modes&&!modes.warms(id))continue;
    if(!readyStates.has(row.state)||device.owner||this.handoff.has(id)||!this.available(device,row)||this.waiting(device)||!this.inSession(id,row,now))continue;
    this.run(device,row);
   }

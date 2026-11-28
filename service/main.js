@@ -32,6 +32,7 @@ async function start({env=process.env,listen=true}={}){
  };
  try{
   store=new Store(path.join(root,'queue.db'));
+  store.modes=new (require('./device_modes').DeviceModes)(store);
   store.resetAllocations();
   if(!env.CRAWLER_SERVICE_TOKEN_FILE)throw Object.assign(Error('SERVICE_TOKEN_REQUIRED'),{code:'SERVICE_TOKEN_REQUIRED'});
   const token=fs.readFileSync(env.CRAWLER_SERVICE_TOKEN_FILE,'utf8').trim();

@@ -10,7 +10,8 @@ class LocalWorker {
     if(this.closing)return 0;
     let count=0,claim;
     // A paced device receives no new item until its gap/break/sleep ends.
-    const deviceIds=[...this.adapters.keys()].filter(id=>!this.pacer||this.pacer.ready(id));
+    const modes=this.store.modes;
+    const deviceIds=[...this.adapters.keys()].filter(id=>(!this.pacer||this.pacer.ready(id))&&(!modes||modes.takesQueue(id)));
     while((claim=this.store.claim({deviceIds}))) {
       this.pacer?.started(claim.device_id);
       const adapter=this.adapters.get(claim.device_id);
