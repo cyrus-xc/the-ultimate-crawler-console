@@ -99,7 +99,7 @@ class Watcher {
    return source?.provider==='local'?source:null;   // never a metered source
   }catch{return null;}
  }
- async ask(system,user){
+ async ask(system,user,{maxTokens=600}={}){
   const source=this.llmSource();if(!source)return null;
   // The model is shared with other agent work; keep this watcher's share small.
   const now=this.now();this.state.llm=this.state.llm.filter(t=>t>now-HOUR);
@@ -107,7 +107,7 @@ class Watcher {
   this.state.llm.push(now);
   try{
    const res=await this.fetchImpl(source.base_url.replace(/\/$/,'')+'/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:source.model,temperature:0.2,max_tokens:600,reasoning_effort:'low',messages:[{role:'system',content:system},{role:'user',content:user}]}),
+    body:JSON.stringify({model:source.model,temperature:0.2,max_tokens:maxTokens,reasoning_effort:'low',messages:[{role:'system',content:system},{role:'user',content:user}]}),
     signal:AbortSignal.timeout(300000)});
    if(!res.ok)return null;const body=await res.json();
    return String(body.choices?.[0]?.message?.content||'').trim()||null;
@@ -115,6 +115,13 @@ class Watcher {
  }
 
  // ---- Feishu ----
+ env(){return readEnv(path.join(this.analysisRoot,'.env'));}
+ async feishuToken(){
+  const env=this.env(),secret=env.FEISHU_APP_SECRET||env.PIPELINE_AGENT_APP_SECRET;
+  if(!env.FEISHU_APP_ID||!secret)return null;
+  try{const t=await (await this.fetchImpl('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({app_id:env.FEISHU_APP_ID,app_secret:secret}),signal:AbortSignal.timeout(15000)})).json();return t.tenant_access_token||null;}catch{return null;}
+ }
  async feishu(text,{all=false}={}){
   const env=readEnv(path.join(this.analysisRoot,'.env')),secret=env.FEISHU_APP_SECRET||env.PIPELINE_AGENT_APP_SECRET;
   if(!env.FEISHU_APP_ID||!secret||!env.FEISHU_CHAT_ID)return false;
@@ -249,7 +256,8 @@ class Watcher {
   // Save after each step so a stop never repeats a delivered alert or report.
   await this.alerts(now);this.save();
   await this.incidents(now);this.save();
-  await this.summaries(now);
+  await this.summaries(now);this.save();
+  if(this.planner){await this.planner.cycle(now);this.save();}
   this.state.lastCycle=now;this.save();
   // One small status file per watcher, the same shape for every agent.
   const day=localDay(now);
@@ -274,7 +282,10 @@ if(require.main===module){
  const analysisRoot=path.resolve(process.env.XHS_ANALYSIS_ROOT||path.join(process.env.HOME||'.','Development','xhs-analysis'));
  const until=process.env.WATCHER_UNTIL?Date.parse(process.env.WATCHER_UNTIL):Infinity;
  if(Number.isNaN(until)){process.stderr.write('WATCHER_UNTIL must be an ISO time when set\n');process.exit(2);}
- new Watcher({runtime,analysisRoot,until}).run({onError:e=>process.stderr.write('[watcher] '+(e.code||e.message)+'\n')})
+ const watcher=new Watcher({runtime,analysisRoot,until});
+ // WATCHER_PLAN=0 turns the daily activity plan off.
+ if(process.env.WATCHER_PLAN!=='0')watcher.planner=new (require('./planner').Planner)(watcher);
+ watcher.run({onError:e=>process.stderr.write('[watcher] '+(e.code||e.message)+'\n')})
   .then(()=>process.exit(0),e=>{process.stderr.write(String(e)+'\n');process.exit(1);});
 }
 module.exports={Watcher,DETECTION,SELF_FIX};
