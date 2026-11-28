@@ -32,7 +32,9 @@ test('devices default to mixed and reject unknown modes, web nurture and bad hou
 
 test('off and nurture devices receive no queue work; projects narrow what a device takes',t=>{
  const {store,modes}=fixture(t);
- const worker=new LocalWorker(store,new Map([[phone,{execute:()=>new Promise(()=>{})}],[web,{execute:()=>new Promise(()=>{})}]]));
+ const pending=[],hold={execute:()=>new Promise(resolve=>pending.push(resolve))};
+ const worker=new LocalWorker(store,new Map([[phone,hold],[web,hold]]));
+ t.after(async()=>{worker.closing=true;pending.forEach(resolve=>resolve({items:[]}));await Promise.allSettled([...worker.active.values()]);});
  modes.set(phone,{mode:'off'});modes.set(web,{mode:'crawl',projects:['kol-food']});
  store.submit(request('other'));
  assert.equal(worker.dispatch(),0);
