@@ -43,7 +43,7 @@ async function start({env=process.env,listen=true}={}){
    const {createInputLog}=require('./input_log');
    gateway=new DeviceGateway(store,{adbPath:env.ADB_PATH||'adb',rootInputSerials:(env.CRAWLER_ROOT_INPUT_SERIALS||'').split(',').filter(Boolean),inputLog:createInputLog(path.join(root,'input-log')),beforeCommand:()=>barrier.assert()});
    if(env.CRAWLER_CHROME_MANIFEST_FILE){const {PhoneProvisioner}=require('./phone_provisioning');provisioner=new PhoneProvisioner({store,gateway,manifestPath:env.CRAWLER_CHROME_MANIFEST_FILE});}
-   const {DisplaySessions}=require('./display_sessions');displays=new DisplaySessions(store,{adbPath:env.ADB_PATH||'adb'});
+   const {DisplaySessions}=require('./display_sessions');const adbPath=env.ADB_PATH||'adb';displays=new DisplaySessions(store,{adbPath,needsRoot:serial=>require('./display_sessions').rootForInput(adbPath,serial)});
   }
   if(gateway||enabled(env.CRAWLER_DEVICE_DISCOVERY_ENABLED)){
    const {DeviceInventory}=require('./device_inventory');inventory=new DeviceInventory(store,{adbPath:env.ADB_PATH||'adb'});await inventory.refresh();inventory.start();

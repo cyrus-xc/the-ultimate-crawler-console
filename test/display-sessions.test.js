@@ -31,3 +31,31 @@ test('startup failure remains a coded HTTP error and releases the session',async
 test('a stalled viewer is removed without ending a healthy viewer',async t=>{
  const {display,source,counts}=setup(t),a=display.open('android:a','a'),b=display.open('android:a','a'),slow=new Response(),fast=new Response();await display.stream(a.id,'a',slow);await display.stream(b.id,'a',fast);slow.writableLength=3*1024*1024;source.write(Buffer.concat([meta,packet(128,'config'),packet(64,'key')]));assert.equal(slow.destroyed,true);assert.equal(fast.destroyed,undefined);assert.equal(fast.data.length,3);assert.equal(counts().closes,0);
 });
+test('live touch goes to the control socket in video pixels and keeps gesture timing',async t=>{
+ const source=new PassThrough(),written=[],control={destroyed:false,write:b=>written.push({b,at:Date.now()})};
+ const calls=[];const display=new DisplaySessions(store,{needsRoot:async()=>true,start:async(serial,options)=>{calls.push(options);return {stream:source,control,close:async()=>source.destroy()};}});
+ t.after(()=>display.close());
+ assert.throws(()=>display.touch('android:a',[{a:'down',x:.5,y:.5,t:0}]),{code:'DISPLAY_REQUIRED'});
+ const a=display.open('android:a','a');await display.stream(a.id,'a',new Response());source.write(meta);
+ assert.equal(calls[0].control,true);assert.equal(calls[0].root,true);
+ assert.throws(()=>display.touch('android:a',[{a:'tap',x:.5,y:.5,t:0}]),{code:'INVALID_TOUCH'});
+ assert.throws(()=>display.touch('android:a',[{a:'down',x:2,y:.5,t:0}]),{code:'INVALID_TOUCH'});
+ display.touch('android:a',[{a:'down',x:0,y:0,t:1000},{a:'move',x:.5,y:.5,t:1100}]);
+ display.touch('android:a',[{a:'up',x:1,y:1,t:1200}]);
+ await new Promise(r=>setTimeout(r,400));
+ assert.equal(written.length,3);
+ const [down,move,up]=written.map(w=>w.b);
+ assert.deepEqual([down[0],down[1],move[1],up[1]],[2,0,2,1]);
+ // meta is 1080x2336: the far corner is (1079,2335) and the size travels with each event
+ assert.deepEqual([up.readInt32BE(10),up.readInt32BE(14),up.readUInt16BE(18),up.readUInt16BE(20)],[1079,2335,1080,2336]);
+ assert.ok(written[2].at-written[0].at>=150,'gesture keeps its 200 ms span');
+});
+test('a phone without a control socket still streams video',async t=>{
+ const source=new PassThrough(),calls=[];
+ const display=new DisplaySessions(store,{start:async(serial,options)=>{calls.push(options);if(options.control)throw new Error('no control');return {stream:source,close:async()=>source.destroy()};}});
+ t.after(()=>display.close());
+ const a=display.open('android:a','a'),r=new Response();await display.stream(a.id,'a',r);source.write(meta);
+ assert.deepEqual(calls.map(c=>!!c.control),[true,false]);
+ assert.equal(r.data.length,1);
+ assert.throws(()=>display.touch('android:a',[{a:'down',x:.5,y:.5,t:0}]),{code:'TOUCH_UNAVAILABLE'});
+});

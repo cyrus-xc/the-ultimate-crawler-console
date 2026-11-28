@@ -1,11 +1,12 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
 const {problem}=require('./contract');
-const {startVideo}=require('./scrcpy_video');
+const {startVideo,touchMessage}=require('./scrcpy_video');
+const {execFile}=require('node:child_process');
 const MAX_PACKET=12*1024*1024;
 class DisplaySessions {
- constructor(store,{adbPath='adb',start=startVideo,now=Date.now,ttlMs=20000}={}){
-  Object.assign(this,{store,adbPath,start,now,ttlMs});this.sessions=new Map();this.encoders=new Map();this.pending=new Set();this.draining=new Map();this.closed=false;
+ constructor(store,{adbPath='adb',start=startVideo,now=Date.now,ttlMs=20000,needsRoot=null}={}){
+  Object.assign(this,{store,adbPath,start,now,ttlMs});this.needsRoot=needsRoot||(async()=>false);this.rootCache=new Map();this.gestures=new Map();this.sessions=new Map();this.encoders=new Map();this.pending=new Set();this.draining=new Map();this.closed=false;
   this.timer=setInterval(()=>this.expire(),1000);this.timer.unref();
  }
  usesDevice(id){
@@ -26,7 +27,7 @@ class DisplaySessions {
   let encoder=this.encoders.get(s.device.id);
   if(!encoder){
    encoder={controller:new AbortController(),buffer:Buffer.alloc(0)};this.encoders.set(s.device.id,encoder);
-   encoder.ready=Promise.resolve(this.draining.get(s.device.id)).then(()=>this.start(s.device.serial,{adbPath:this.adbPath,signal:encoder.controller.signal})).then(transport=>{
+   encoder.ready=Promise.resolve(this.draining.get(s.device.id)).then(()=>this.startControlled(s.device.serial,encoder.controller.signal)).then(transport=>{
     encoder.transport=transport;
     if(encoder.controller.signal.aborted){this.track(transport.close());return;}
     transport.stream.on('data',chunk=>{try{this.consume(s.device.id,encoder,chunk);}catch{this.fail(s.device.id,encoder);}});
@@ -61,6 +62,30 @@ class DisplaySessions {
    }
   }
  }
+ // Live touch needs the server's control socket; a phone whose shell user may
+ // not inject input runs it as root. Without control the video still works.
+ async startControlled(serial,signal){
+  if(!this.rootCache.has(serial))this.rootCache.set(serial,await this.needsRoot(serial).catch(()=>false));
+  try{return await this.start(serial,{adbPath:this.adbPath,signal,control:true,root:this.rootCache.get(serial)});}
+  catch(error){if(signal.aborted)throw error;this.rootCache.delete(serial);return this.start(serial,{adbPath:this.adbPath,signal});}
+ }
+ // events: [{a:'down'|'move'|'up',x,y,t}] with x/y in 0..1 of the screen and t
+ // in client ms. Timing inside a gesture is kept; late batches play at once.
+ touch(deviceId,events){
+  const e=this.encoders.get(deviceId),control=e?.transport?.control;
+  if(!e?.meta)throw problem('DISPLAY_REQUIRED',409);
+  if(!control||control.destroyed)throw problem('TOUCH_UNAVAILABLE',409);
+  if(!Array.isArray(events)||!events.length||events.length>240||!events.every(v=>v&&['down','move','up'].includes(v.a)&&[v.x,v.y].every(n=>typeof n==='number'&&n>=0&&n<=1)&&Number.isFinite(v.t)))throw problem('INVALID_TOUCH',400);
+  const width=e.meta.readUInt32BE(4),height=e.meta.readUInt32BE(8),now=this.now();
+  let g=this.gestures.get(deviceId);
+  for(const v of events){
+   if(v.a==='down'||!g)g={base:now+40-v.t};
+   const at=Math.max(0,g.base+v.t-this.now()),message=touchMessage(v.a,Math.round(v.x*(width-1)),Math.round(v.y*(height-1)),width,height);
+   setTimeout(()=>{if(!control.destroyed)control.write(message);},Math.min(at,2000)).unref?.();
+   if(v.a==='up'){this.gestures.delete(deviceId);g=null;}else this.gestures.set(deviceId,g);
+  }
+  return {accepted:events.length};
+ }
  track(promise){this.pending.add(promise);promise.finally(()=>this.pending.delete(promise)).catch(()=>{});return promise;}
  remove(id,destroy=true){const s=this.sessions.get(id);if(!s)return;this.sessions.delete(id);if(destroy)s.response?.destroy();
   if(![...this.sessions.values()].some(other=>other.device.id===s.device.id&&other.response)){
@@ -73,4 +98,9 @@ class DisplaySessions {
  expire(){for(const [id,s]of this.sessions)if(s.expires<=this.now())this.remove(id);}
  async close(){this.closed=true;clearInterval(this.timer);for(const id of this.sessions.keys())this.remove(id);await Promise.allSettled([...this.pending]);}
 }
-module.exports={DisplaySessions};
+// True when the shell user may not inject input but su works (e.g. MIUI).
+function rootForInput(adbPath,serial){
+ const run=args=>new Promise(resolve=>execFile(adbPath,['-s',serial,'shell',...args],{timeout:8000},(error,stdout,stderr)=>resolve(String(stdout)+String(stderr))));
+ return run(['input','keyevent','0']).then(async out=>/INJECT_EVENTS|SecurityException/.test(out)&&/uid=0\(/.test(await run(['su','-c','id'])));
+}
+module.exports={DisplaySessions,rootForInput};

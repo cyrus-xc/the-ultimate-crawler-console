@@ -165,7 +165,7 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         try{const result=await promise;guard();if(!res.destroyed)return send(200,result);return;}
         finally{clearTimeout(timer);clearInterval(monitor);res.removeListener('close',disconnect);await gateway.drain(lease);phoneActions.delete(lease.token);}
       }
-      const leaseRoute=url.pathname.match(/^\/v1\/device-leases(?:\/(heartbeat|assert|release|command))?$/);
+      const leaseRoute=url.pathname.match(/^\/v1\/device-leases(?:\/(heartbeat|assert|release|command|touch))?$/);
       if(leaseRoute){
         if(req.method!=='POST')throw problem('METHOD_NOT_ALLOWED',405);
         if(leaseRoute[1]==='command'&&!gateway)throw problem('DEVICE_GATEWAY_DISABLED',503);
@@ -188,6 +188,12 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(!current.owner.startsWith('external:'+scope+':'))throw problem('LEASE_NOT_OWNED',403);
         if(action==='heartbeat')return send(200,{lease:store.heartbeat(lease)});
         if(action==='assert')return send(200,{valid:true,expires:current.expires});
+        if(action==='touch'){
+          if(!displays)throw problem('DISPLAY_DISABLED',503);
+          const result=displays.touch(lease.device_id,input.events);
+          if(input.events.some(v=>v.a==='up'))gateway?.inputLog?.(lease.device_id,{kind:'touch',values:[input.events.length]});
+          return send(200,result);
+        }
         if(action==='release'){
           await drainPhone(lease);await server.retireDesktopControl?.(lease);await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
           const released=store.releaseExternal(lease);gateway?.forgetReleased?.(lease);return send(200,released);
