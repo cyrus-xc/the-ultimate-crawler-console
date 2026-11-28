@@ -40,3 +40,18 @@ test('heartbeat renews a lease and lease release closes future command admission
  assert.equal((await post('/v1/device-leases/assert',{lease:renewed.body.lease})).body.valid,true);
  assert.equal((await post('/v1/device-leases/release',{lease:renewed.body.lease})).body.released,true);
 });
+test('a person can preempt a busy phone: automation stops, the item finishes, the mode comes back',async t=>{
+ const {store,post}=await setup(t);
+ store.modes=new (require('../service/device_modes').DeviceModes)(store);
+ store.modes.set('android:s1',{mode:'crawl',projects:['kol-food']});
+ const busy=store.externalLease('android:s1','local:fake-collection');
+ setTimeout(()=>store.releaseExternal(busy),700);
+ const started=Date.now(),taken=await post('/v1/device-leases',{device_id:'android:s1',owner:'console:abc',preempt:true});
+ assert.equal(taken.status,201);
+ assert.ok(Date.now()-started>=600,'waited for the running item');
+ assert.equal(store.modes.get('android:s1').mode,'off');
+ assert.equal((await post('/v1/device-leases',{device_id:'android:s2',owner:'console:abc',preempt:'yes'})).status,400);
+ assert.equal((await post('/v1/device-leases/release',{lease:taken.body.lease})).status,200);
+ const back=store.modes.get('android:s1');
+ assert.equal(back.mode,'crawl');assert.deepEqual(back.projects,['kol-food']);
+});

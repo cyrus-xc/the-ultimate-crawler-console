@@ -20,10 +20,16 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
+function restoreModeIn(store,id,before){
+ const left=before.until?(before.until-store.now())/3600000:null;
+ if(left!==null&&left<=0)return store.modes.set(id,{mode:'mixed'});
+ return store.modes.set(id,{mode:before.mode,projects:before.projects,topics:before.topics,...(left?{hours:left}:{})});
+}
 function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,pacer=null,webActivity=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
   const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway,yieldWarmup:warmup?id=>warmup.yieldDevice(id):null});
-  const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
+  const restoreMode=(id,before)=>{try{restoreModeIn(store,id,before);}catch{}};
+  const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map(),preempted=new Map();
   const drainPhone=async lease=>{const action=phoneActions.get(lease.token);if(action){action.controller.abort(problem('STOP_REQUESTED',409));await action.promise.catch(()=>{});}};
   const drainDesktop=async lease=>{const active=desktopActions.get(lease.token);if(active){await active.adapter.close();await active.promise.catch(()=>{});}};
   const desktopAction=async(lease,action)=>{
@@ -174,12 +180,26 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(!input||typeof input!=='object'||Array.isArray(input))throw problem('INVALID_REQUEST');
         const action=leaseRoute[1];
         if(!action){
-          if(Object.keys(input).some(k=>!['serial','device_id','owner'].includes(k))||(!input.device_id&&(typeof input.serial!=='string'||!/^[-\w.:]+$/.test(input.serial)))||typeof input.owner!=='string'||!/^[-\w.:/]{1,160}$/.test(input.owner))throw problem('INVALID_DEVICE_LEASE');
+          if(Object.keys(input).some(k=>!['serial','device_id','owner','preempt'].includes(k))||(input.preempt!==undefined&&typeof input.preempt!=='boolean')||(!input.device_id&&(typeof input.serial!=='string'||!/^[-\w.:]+$/.test(input.serial)))||typeof input.owner!=='string'||!/^[-\w.:/]{1,160}$/.test(input.owner))throw problem('INVALID_DEVICE_LEASE');
           let device=store.devices().find(d=>input.device_id?d.id===input.device_id:d.kind==='android'&&d.serial===input.serial);
           if(!device&&inventory){await inventory.refresh();device=store.devices().find(d=>d.kind==='android'&&d.serial===input.serial);}
           if(!device)throw problem('DEVICE_NOT_FOUND',404);
+          // A person taking a busy phone: hold automation off, let the running
+          // item finish (bounded), and restore the previous mode on release.
+          let before=null;
+          if(input.preempt&&store.modes&&device.kind==='android'){
+           before=store.modes.get(device.id);store.modes.set(device.id,{mode:'off',hours:1});
+           for(const end=Date.now()+120000;Date.now()<end;){
+            const owner=store.devices().find(d=>d.id===device.id)?.owner;
+            if(!owner||owner==='local:phone-warmup')break;
+            await new Promise(r=>setTimeout(r,500));
+           }
+          }
           if(warmup&&device.kind==='android')await warmup.yieldDevice(device.id);
-          const lease=store.externalLease(device.id,'external:'+scope+':'+input.owner,{control:device.kind==='web'});
+          let lease;
+          try{lease=store.externalLease(device.id,'external:'+scope+':'+input.owner,{control:device.kind==='web'});}
+          catch(error){if(before)restoreMode(device.id,before);throw error;}
+          if(before)preempted.set(lease.token,{device_id:device.id,before});
           return send(201,{lease,device:{id:device.id,serial:device.serial,clipboard_port:device.clipboard_port},heartbeat_ms:Math.max(1,Math.floor(store.leaseMs/3))});
         }
         const lease=input.lease;
@@ -196,7 +216,9 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         }
         if(action==='release'){
           await drainPhone(lease);await server.retireDesktopControl?.(lease);await drainDesktop(lease);if(loginUploads.has(lease.token)){await require('./login_qr').removeLoginQr(gateway,lease);loginUploads.delete(lease.token);}if(gateway?.retire)await gateway.retire(lease);else await gateway?.cancel(lease);await gateway?.drain(lease);
-          const released=store.releaseExternal(lease);gateway?.forgetReleased?.(lease);return send(200,released);
+          const released=store.releaseExternal(lease);gateway?.forgetReleased?.(lease);
+          const held=preempted.get(lease.token);if(held){preempted.delete(lease.token);restoreMode(held.device_id,held.before);}
+          return send(200,released);
         }
         if(phoneActions.has(lease.token))throw problem('DEVICE_BUSY',409);
         const controller=new AbortController();
