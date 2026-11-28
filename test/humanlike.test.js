@@ -168,7 +168,8 @@ test('warm-up sessions are short daytime windows and likes have a daily budget',
  warmup.plan(REDMI,day);
  const row=store.db.prepare('SELECT * FROM phone_warmup WHERE device_id=?').get(REDMI);
  const windows=JSON.parse(row.windows);
- assert.ok(windows.length>=4&&windows.length<=8,'sessions: '+windows.length);
+ // 2.5-3.5 h in 20-40 min sessions: between 4 and 11 of them.
+ assert.ok(windows.length>=4&&windows.length<=11,'sessions: '+windows.length);
  for(const [from,to] of windows){assert.ok(from>=day+10*HOUR&&to<=day+23*HOUR);assert.ok(to-from<=40*MIN);}
  for(let i=1;i<windows.length;i++)assert.ok(windows[i][0]-windows[i-1][1]>=25*MIN);
  let liked=0;for(let i=0;i<20;i++)liked+=warmup.likeOk(REDMI,day);assert.equal(liked,8);
