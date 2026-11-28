@@ -64,7 +64,7 @@ func (u *UserProfileAction) UserProfile(ctx context.Context, userID, xsecToken s
 	}
 	logrus.Infof("[navigation] profile via url")
 	navCtx, navCancel := context.WithTimeout(ctx, navTimeout)
-	navErr := page.Context(navCtx).Navigate(makeUserProfileURL(userID, xsecToken, tab))
+	navErr := openInNewTab(navCtx, page, makeUserProfileURL(userID, xsecToken, tab))
 	navCancel()
 	if navErr != nil {
 		return nil, navErr

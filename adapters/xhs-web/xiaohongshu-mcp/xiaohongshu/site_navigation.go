@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/input"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/xiaohongshu-mcp/humanize"
 )
@@ -185,4 +186,25 @@ func waitScript(ctx context.Context, page *rod.Page, timeout time.Duration, scri
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
+}
+
+const siteReferrer = "https://www.xiaohongshu.com/explore"
+
+// openInNewTab loads url the way a link opened in a new tab arrives: with the
+// site as referrer instead of none. Used only when no in-page move exists.
+func openInNewTab(ctx context.Context, page *rod.Page, url string) error {
+	ref := ""
+	if r, err := page.Context(ctx).Timeout(2 * time.Second).Eval(`() => location.hostname`); err == nil && r.Value.Str() == "" {
+		ref = siteReferrer // a blank identity tab
+	}
+	_ = page.Context(ctx).StopLoading()
+	// Rod's Eval re-resolves the JS context after this navigation by itself.
+	res, err := proto.PageNavigate{URL: url, Referrer: ref}.Call(page.Context(ctx))
+	if err != nil {
+		return err
+	}
+	if res.ErrorText != "" {
+		return &rod.NavigationError{Reason: res.ErrorText}
+	}
+	return nil
 }
