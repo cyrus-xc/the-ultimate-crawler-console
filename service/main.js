@@ -9,7 +9,7 @@ async function start({env=process.env,listen=true}={}){
  const {LegacyBarrier}=require('./legacy_barrier');
  const barrier=new LegacyBarrier(deviceControl?env.CRAWLER_LEGACY_ANDROID_LOCK_DIR:root,root);
  await barrier.acquire();
- let store,gateway,inventory,scheduler,server,closing,displays,desktop,registrationTimer,provisioner,connectionRecovery,warmup,pacer=null;
+ let store,gateway,inventory,scheduler,server,closing,displays,desktop,registrationTimer,provisioner,connectionRecovery,warmup,webActivity,pacer=null;
  const close=()=>{
   if(closing)return closing;
   closing=(async()=>{
@@ -18,6 +18,7 @@ async function start({env=process.env,listen=true}={}){
    const stopped=server?.listening?new Promise(resolve=>server.close(resolve)):Promise.resolve();
    await attempt(()=>connectionRecovery?.close());
    await attempt(()=>warmup?.close());
+   await attempt(()=>webActivity?.close());
    await Promise.all([attempt(()=>desktop?.close()),attempt(()=>displays?.close()),attempt(()=>inventory?.close())]);
    await attempt(()=>server?.drainDesktop?.());
    await attempt(()=>scheduler?.close());
@@ -81,7 +82,12 @@ async function start({env=process.env,listen=true}={}){
     onError:error=>process.stderr.write((error.code||'WARMUP_SCHEDULER_FAILED')+'\n'),
    }).start();
   }
-  server=createServer({store,token,gateway,inventory,scheduler,barrier,displays,provisioner,connectionRecovery,warmup,pacer});
+  // Web activity (browse in breaks, approved follows/posts) needs a pacing profile.
+  if(pacer&&env.CRAWLER_WEB_ACTIVITY!=='0'){
+   const {WebActivity}=require('./web_activity');
+   webActivity=new WebActivity(store,adapters,{pacer,onError:error=>process.stderr.write((error.code||'WEB_ACTIVITY_FAILED')+String.fromCharCode(10))}).start();
+  }
+  server=createServer({store,token,gateway,inventory,scheduler,barrier,displays,provisioner,connectionRecovery,warmup,pacer,webActivity});
   const {DesktopControl}=require('./desktop_control');desktop=new DesktopControl(store,{token,port:Number(env.CRAWLER_VNC_PORT||15910)});desktop.attach(server);
   const port=Number(env.CRAWLER_PORT||18323);if(!Number.isInteger(port)||port<1||port>65535)throw Object.assign(Error('INVALID_PORT'),{code:'INVALID_PORT'});
   if(listen)await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});

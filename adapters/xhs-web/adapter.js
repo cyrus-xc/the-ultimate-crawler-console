@@ -59,6 +59,17 @@ class XhsWebAdapter{
    if(!final)throw error('XHS_RESULT_MISSING');
   }catch(e){if(e.scope!=='platform'||ctx.signal.aborted)await this.close();throw e;}
  }
+ // One human-activity call (/browse, /follow, /publish); the session refuses it while a read runs.
+ async activity(route,body,{guard=()=>{},signal}={}){
+  if(!['/browse','/follow','/publish'].includes(route))throw error('ACTIVITY_UNSUPPORTED','item');
+  guard();const session=await this.ensure();guard();
+  const response=await this.request(session,route,body,signal);let text='';
+  for await(const chunk of response){text+=chunk;if(text.length>65536)throw error('XHS_SESSION_PROTOCOL');}
+  let result;try{result=JSON.parse(text);}catch{throw error('XHS_SESSION_PROTOCOL');}
+  if(!result.success){const code=/^[A-Z][A-Z0-9_]+$/.test(result.error||'')?result.error:'ACTIVITY_FAILED';
+   throw error(code,/LOGIN|CAPTCHA|VERIFICATION|ACCOUNT|RESTRICTED|RATE_LIMITED/.test(code)?'platform':'item');}
+  guard();return result.data;
+ }
  async desktop({guard=()=>{},signal}={}){guard();const session=await this.ensure();guard();const response=await this.request(session,'/desktop',{},signal);for await(const _ of response){}guard();return {opened:true};}
  async loginQr({guard=()=>{},signal}={}){guard();const session=await this.ensure();guard();const response=await this.request(session,'/desktop/qr',{},signal);let body='';for await(const chunk of response){body+=chunk;if(body.length>3*1024*1024)throw error('LOGIN_QR_TOO_LARGE');}const result=JSON.parse(body);guard();if(!result.success)throw error('LOGIN_QR_UNAVAILABLE','platform');return {authenticated:result.authenticated===true,png_base64:result.png_base64};}
  async resume({guard=()=>{},signal}={}){

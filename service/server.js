@@ -20,7 +20,7 @@ function cursor(url) {
   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw problem('INVALID_CURSOR');
   return Number(raw);
 }
-function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,pacer=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
+function createServer({store,token,scope='pipeline',gateway=null,inventory=null,scheduler=null,barrier=null,displays=null,provisioner=null,connectionRecovery=null,warmup=null,pacer=null,webActivity=null,phoneUtility=require('./phone_utilities').phoneUtility,linkUtility=require('./phone_utilities').linkUtility}) {
   if(typeof token!=='string'||token.length<32)throw problem('SERVICE_TOKEN_REQUIRED',500);
   const discovery=new (require('./discovery_sessions').DiscoverySessions)({store,adapters:scheduler?.worker?.adapters||new Map(),gateway,yieldWarmup:warmup?id=>warmup.yieldDevice(id):null});
   const desktopActions=new Map(),loginUploads=new Map(),phoneActions=new Map(),loginQrs=new Map();
@@ -55,6 +55,18 @@ function createServer({store,token,scope='pipeline',gateway=null,inventory=null,
         if(!input||typeof input.device_id!=='string'||!/^android:[-\w.:]+$/.test(input.device_id)||
           !['start','stop'].includes(input.action)||Object.keys(input).length!==2)throw problem('INVALID_WARMUP_REQUEST',400);
         return send(200,warmup.change(input.device_id,input.action==='start'));
+      }
+      const activityRoute=url.pathname.match(/^\/v1\/activities(?:\/(\d+)\/(approve|reject))?$/);
+      if(activityRoute){
+        if(!webActivity)throw problem('ACTIVITY_UNAVAILABLE',503);
+        const [,id,action]=activityRoute;
+        if(!id&&req.method==='GET')return send(200,{activities:webActivity.list({states:url.searchParams.get('state')?url.searchParams.get('state').split(','):null})});
+        if(!id&&req.method==='POST'){
+          const input=await body(req);
+          if(!input||typeof input.kind!=='string'||typeof input.device_id!=='string'||typeof input.payload!=='object'||!Object.keys(input).every(k=>['kind','device_id','payload','note'].includes(k)))throw problem('INVALID_ACTIVITY',400);
+          return send(201,webActivity.propose(input.kind,input.device_id,input.payload,{note:typeof input.note==='string'?input.note.slice(0,500):null}));
+        }
+        if(id&&req.method==='POST'){const input=await body(req).catch(()=>({}));return send(200,webActivity.decide(Number(id),action==='approve',typeof input?.by==='string'?input.by.slice(0,40):'operator'));}
       }
       if(url.pathname==='/v1/devices/modes'&&req.method==='GET'){
         if(!store.modes)throw problem('MODES_UNAVAILABLE',503);

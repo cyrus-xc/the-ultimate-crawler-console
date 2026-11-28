@@ -55,7 +55,27 @@ async function main(argv=process.argv.slice(2),svc=null){
   const value=await call(svc||service(),'POST','/v1/devices/mode',body);
   return fmt({...value,health:'',faults:{}});
  }
- throw new Error('usage: fleetctl status | fleetctl set <redmi|gm|web|device-id> <off|crawl|nurture|mixed> [--project NAME] [--topic WORD] [--hours N]');
+ if(o.command==='activities'){
+  const {activities}=await call(svc||service(),'GET','/v1/activities'+(o.args?.[0]?'?state='+encodeURIComponent(o.args[0]):''));
+  return activities.map(a=>[(a.kind==='follow'?'F':'P')+a.id,a.kind.padEnd(7),a.state.padEnd(9),a.device_id,
+   a.kind==='follow'?(a.payload.nickname||'')+' '+a.payload.user_id:a.payload.title,a.result?.code||''].join('  ').trimEnd()).join('\n')||'(none)';
+ }
+ if(['approve','reject'].includes(o.command)&&o.args?.length===1){
+  const id=o.args[0].replace(/^[FP]/i,'');
+  const a=await call(svc||service(),'POST',`/v1/activities/${encodeURIComponent(id)}/${o.command}`,{by:'fleetctl'});
+  return `${a.kind} ${a.id} ${a.state}`;
+ }
+ if(o.command==='follow'&&o.args?.length===1){
+  const a=await call(svc||service(),'POST','/v1/activities',{kind:'follow',device_id:ALIASES.web,payload:{user_id:o.args[0]},note:'fleetctl'});
+  return `F${a.id} ${a.state}`;
+ }
+ if(o.command==='post'&&o.args?.length===1){
+  const draft=JSON.parse(fs.readFileSync(o.args[0],'utf8'));
+  const a=await call(svc||service(),'POST','/v1/activities',{kind:'publish',device_id:ALIASES.web,payload:draft,note:'fleetctl'});
+  return `P${a.id} ${a.state} (approve with: fleetctl approve P${a.id})`;
+ }
+ throw new Error('usage: fleetctl status | set <redmi|gm|web|device-id> <off|crawl|nurture|mixed> [--project NAME] [--topic WORD] [--hours N]\n'+
+  '       fleetctl activities [state] | approve <F12|P3> | reject <F12|P3> | follow <user_id> | post <draft.json>');
 }
 module.exports={main,parse,ALIASES};
 if(require.main===module)main().then(text=>console.log(text),error=>{console.error(error.message);process.exit(1);});
