@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 
 // Human activity on the web account: idle explore browsing and following a
 // chosen creator. Neither reads evidence; both stop on any access block.
+
+var userIDPattern = regexp.MustCompile(`^[a-fA-F0-9]{24}$`)
 
 const exploreURL = "https://www.xiaohongshu.com/explore"
 
@@ -128,7 +131,7 @@ const followButtonJS = `() => {
 // FollowUser opens uid's profile and follows it. It reports "followed",
 // "already" when the account follows it already, or an error.
 func FollowUser(ctx context.Context, page *rod.Page, uid, token string) (string, error) {
-	if !idPattern.MatchString(uid) {
+	if !userIDPattern.MatchString(uid) {
 		return "", errors.New("INVALID_USER_ID")
 	}
 	if _, err := NewUserProfileAction(page).UserProfile(ctx, uid, token, TabNotes); err != nil {
