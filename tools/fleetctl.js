@@ -36,7 +36,7 @@ async function call(svc,method,route,body){
  const res=await fetch(svc.url+route,{method,headers:{Authorization:'Bearer '+svc.token,'Content-Type':'application/json'},
   body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(30000)});
  const value=await res.json().catch(()=>({}));
- if(!res.ok)throw new Error(value.code||value.error||'HTTP_'+res.status);
+ if(!res.ok)throw new Error(value.error?.code||value.code||(typeof value.error==='string'?value.error:'')||'HTTP_'+res.status);
  return value;
 }
 const fmt=d=>[d.device_id.padEnd(20),d.mode.padEnd(8),String(d.health).padEnd(13),
