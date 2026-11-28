@@ -93,7 +93,9 @@ test('fleetctl sets and shows modes through the authenticated API',async t=>{
  t.after(()=>new Promise(r=>server.close(r)));
  const svc={url:`http://127.0.0.1:${server.address().port}`,token};
  assert.match(await main(['set',phone,'crawl','--project','kol-food','--hours','3'],svc),/crawl\s+.*projects=kol-food.*until=/);
- assert.match(await main(['status'],svc),new RegExp(phone+'\s+crawl'));
+ const status=await main(['status'],svc);
+ assert.ok(status.split('
+').some(line=>line.startsWith(phone)&&/ crawl /.test(line)),status);
  await assert.rejects(main(['set','web','nurture'],svc),/MODE_UNSUPPORTED/);
  await assert.rejects(main(['set','web','crawl'],{...svc,token:'wrong-token-wrong-token-wrong-token-00'}),/UNAUTHORIZED/);
  const raw=await fetch(svc.url+'/v1/devices/mode',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({device_id:phone,mode:'off',extra:1})});
