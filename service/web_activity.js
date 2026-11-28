@@ -69,13 +69,13 @@ class WebActivity {
   const day=localDay(now);
   // Follows past their notice window count as approved by silence.
   this.store.db.prepare(`UPDATE activities SET state='approved',decided=?,decided_by='notice' WHERE kind='follow' AND state='proposed' AND auto_at<=?`).run(now,now);
-  const done=kind=>this.store.db.prepare(`SELECT count(*) n,max(done_at) last FROM activities WHERE kind=? AND device_id=? AND state='done' AND done_at>=?`);
-  const posts=done('publish').get(deviceId,now-7*DAY),postsToday=done('publish').get(deviceId,day);
+  const done=(kind,since)=>this.store.db.prepare(`SELECT count(*) n,max(done_at) last FROM activities WHERE kind=? AND device_id=? AND state='done' AND done_at>=?`).get(kind,deviceId,since);
+  const posts=done('publish',now-7*DAY),postsToday=done('publish',day);
   if(posts.n<this.postsPerWeek&&!postsToday.n){
    const p=this.store.db.prepare(`SELECT id FROM activities WHERE kind='publish' AND device_id=? AND state='approved' ORDER BY id LIMIT 1`).get(deviceId);
    if(p)return {kind:'publish',activity:this.get(p.id)};
   }
-  const follows=done('follow').get(deviceId,day);
+  const follows=done('follow',day);
   if(follows.n<this.followsPerDay&&(!follows.last||now-follows.last>=this.followGapMs)){
    const f=this.store.db.prepare(`SELECT id FROM activities WHERE kind='follow' AND device_id=? AND state='approved' ORDER BY id LIMIT 1`).get(deviceId);
    if(f)return {kind:'follow',activity:this.get(f.id)};
