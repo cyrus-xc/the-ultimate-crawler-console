@@ -42,7 +42,7 @@ test('the daily plan proposes five 50k+ follows, Shanghai first, and one draft, 
  assert.equal(draft.payload.title,'上海一人食小馆');
  assert.ok(draft.payload.images[0].endsWith('a.jpg'));
  assert.match(f.sent[0],/^Crawler activity plan/);
- assert.match(f.sent[0],/reject F1/);assert.match(f.sent[0],/approve P6/);
+ assert.match(f.sent[0],/- F1 k4 /);assert.match(f.sent[0],/reject F<id>/);assert.match(f.sent[0],/needs "approve P6"/);
  assert.equal(await f.planner.daily(day+11*HOUR),null,'once a day');
  assert.equal(f.planner.photoSets().length,0,'a drafted set is not drafted again');
 });
