@@ -16,7 +16,7 @@ function fixture(t,{fail=null}={}){
  const pacer=new Pacer(store,loadProfile('human_v1'),{now:()=>now,random:()=>.5});
  const calls=[];
  const adapter={activity:async(route,body)=>{calls.push([route,body]);if(fail)throw Object.assign(Error(fail),{code:fail,scope:'platform'});
-  now+=route==='/browse'?body.seconds*1000:30000;return route==='/follow'?{state:'followed'}:{scrolls:3,opened:1};}};
+  now+=5000;return route==='/follow'?{state:'followed'}:{scrolls:3,opened:1};}};
  const activity=new WebActivity(store,new Map([[web,adapter]]),{pacer,random:()=>.5});
  t.after(async()=>{await activity.close();store.close();});
  const breakNow=()=>store.db.prepare('INSERT OR REPLACE INTO device_pacing(device_id,day,count,burst_left,next_at,break_until) VALUES (?,?,?,?,?,?)')

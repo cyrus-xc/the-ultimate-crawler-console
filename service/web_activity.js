@@ -103,6 +103,9 @@ class WebActivity {
   let lease;
   try{lease=this.store.externalLease(device.id,OWNER);}catch{return;}
   const controller=new AbortController(),started=this.now(),adapter=this.adapters.get(device.id);
+  // Keep the lease alive through a multi-minute browse; a lost lease stops it.
+  const heartbeat=setInterval(()=>{try{this.store.heartbeat(lease);}catch{controller.abort();}},Math.max(10,Math.floor(this.store.leaseMs/3)));
+  heartbeat.unref();
   const task=(async()=>{
    try{
     if(job.kind==='browse'){
@@ -134,6 +137,7 @@ class WebActivity {
      }
     }
    }finally{
+    clearInterval(heartbeat);
     try{this.store.releaseExternal(lease);}catch(e){this.onError(e);}
     this.running.delete(device.id);
    }
