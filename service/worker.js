@@ -13,7 +13,7 @@ class LocalWorker {
     const modes=this.store.modes;
     const deviceIds=[...this.adapters.keys()].filter(id=>(!this.pacer||this.pacer.ready(id))&&(!modes||modes.takesQueue(id)));
     while((claim=this.store.claim({deviceIds}))) {
-      this.pacer?.started(claim.device_id);
+      this.pacer?.started(claim.device_id,claim.payload.operation);
       const adapter=this.adapters.get(claim.device_id);
       if(!adapter){this.store.fail(claim,{code:'ADAPTER_UNAVAILABLE',scope:'device'});continue;}
       const attemptId=claim.attempt_id;
@@ -92,7 +92,7 @@ class LocalWorker {
       }catch(lost){if(lost.code==='DEVICE_COMMAND_ACTIVE'){this.store.quarantine(claim.device_id,'DEVICE_COMMAND_ACTIVE');return;}if(!['LEASE_LOST','ATTEMPT_LOST'].includes(lost.code))throw lost;}
     } finally {clearInterval(interval);clearTimeout(timeout);this.stoppers.delete(claim.attempt_id);
       if(this.pacer){try{const row=this.store.db.prepare('SELECT error FROM attempts WHERE id=?').get(claim.attempt_id);
-        this.pacer.finished(claim.device_id,row?.error?JSON.parse(row.error).code:null);}catch{/* pacing never blocks cleanup */}}}
+        this.pacer.finished(claim.device_id,row?.error?JSON.parse(row.error).code:null,undefined,claim.payload.operation);}catch{/* pacing never blocks cleanup */}}}
   }
   async close(){this.closing=true;for(const stop of this.stoppers.values())stop(Object.assign(Error('STOP_REQUESTED'),{code:'STOP_REQUESTED'}));await Promise.all(this.active.values());}
 }

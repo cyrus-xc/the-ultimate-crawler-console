@@ -32,7 +32,12 @@ class Pacer {
     next_at INTEGER NOT NULL DEFAULT 0, break_until INTEGER NOT NULL DEFAULT 0,
     brake_until INTEGER NOT NULL DEFAULT 0, slow_until INTEGER NOT NULL DEFAULT 0,
     last_brake_at INTEGER, stopped_day INTEGER, reason TEXT)`);
+  for(const [name,type] of [['run_op','TEXT'],['run_left','INTEGER']])
+   if(!store.db.pragma('table_info(device_pacing)').some(c=>c.name===name))store.db.exec(`ALTER TABLE device_pacing ADD COLUMN ${name} ${type}`);
  }
+ // Optional per-operation runs: e.g. at most 10-16 profile visits in a row,
+ // then a short break (filled by warm-up browsing on phones).
+ runFor(id,op){return op?this.settings(id).runs?.[op]||null:null;}
  between([min,max]){return min+this.random()*(max-min);}
  gap(settings){
   // Log-normal around the median, bounded; Box-Muller from the random source.
@@ -83,11 +88,15 @@ class Pacer {
  }
  ready(id,now=this.now()){return this.state(id,now).state==='ready';}
  inBreak(id,now=this.now()){return this.state(id,now).state==='break';}
- started(id,now=this.now()){
-  this.row(id,now);
+ started(id,op=null,now=this.now()){
+  const row=this.row(id,now),run=this.runFor(id,op);
   this.store.db.prepare('UPDATE device_pacing SET count=count+1,burst_left=burst_left-1 WHERE device_id=?').run(id);
+  if(run){
+   const left=row.run_op===op&&row.run_left!==null?row.run_left:Math.round(this.between(run.run));
+   this.store.db.prepare('UPDATE device_pacing SET run_op=?,run_left=? WHERE device_id=?').run(op,left-1,id);
+  }
  }
- finished(id,code=null,now=this.now()){
+ finished(id,code=null,now=this.now(),op=null){
   const settings=this.settings(id),row=this.row(id,now),brake=this.profile.brake;
   let gap=this.gap(settings.gap_s);
   if(now<row.slow_until)gap*=brake.slow_factor;
@@ -95,6 +104,11 @@ class Pacer {
   if(row.burst_left<=0){
    update.break_until=Math.round(now+this.between(settings.break_s)*1000);
    update.burst_left=Math.round(this.between(settings.burst));
+  }
+  const run=this.runFor(id,op);
+  if(run&&row.run_op===op&&row.run_left!==null&&row.run_left<=0){
+   update.break_until=Math.max(update.break_until,Math.round(now+this.between(run.break_s)*1000));
+   this.store.db.prepare('UPDATE device_pacing SET run_left=NULL WHERE device_id=?').run(id);
   }
   this.store.db.prepare('UPDATE device_pacing SET next_at=?,burst_left=?,break_until=? WHERE device_id=?').run(update.next_at,update.burst_left,update.break_until,id);
   if(code&&this.brakeCodes.has(code))this.brake(id,code,row,now);

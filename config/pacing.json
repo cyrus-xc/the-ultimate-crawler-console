@@ -4,6 +4,10 @@
       "gap_s": {"median": 8, "sigma": 0.6, "min": 3, "max": 30},
       "burst": [20, 35],
       "break_s": [90, 240],
+      "runs": {
+        "profile.posts": {"run": [10, 16], "break_s": [60, 150]},
+        "profile.get": {"run": [10, 16], "break_s": [60, 150]}
+      },
       "daily_cap": 400,
       "start_stagger_s": [5, 45],
       "sleep": {

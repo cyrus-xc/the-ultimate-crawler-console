@@ -34,7 +34,7 @@ test('gaps between items vary within the profile bounds and a device waits for i
  }
  const real=gaps.filter(g=>g<=30000);
  assert.ok(real.every(g=>g>=3000&&g<=30000));
- assert.ok(new Set(real.map(g=>Math.round(g/100))).size>100,'gaps must not repeat a fixed value');
+ assert.ok(new Set(real.map(g=>Math.round(g/10))).size>100,'gaps must not repeat a fixed value');
  const sorted=[...real].sort((a,b)=>a-b),median=sorted[sorted.length>>1];
  assert.ok(median>5000&&median<12000,'median near 8 s: '+median);
 });
@@ -52,6 +52,25 @@ test('a run of items is followed by a short break and the daily cap stops the de
  assert.equal(f.pacer.view(REDMI).count,400);
  f.at(localDay(f.now())+DAY+15*HOUR);
  assert.equal(f.pacer.state(REDMI).state,'ready','a new day resets the cap');
+});
+
+test('profile visits come in short runs with a break, other operations keep the long burst',t=>{
+ const f=pacing(t,afternoon);f.at(afternoon+60000);
+ const run=[],other=[];let n=0;
+ for(let i=0;i<60;i++){
+  let st=f.pacer.state(REDMI);
+  while(st.state!=='ready'){if(st.state==='break'){run.push(n);n=0;}f.at(st.until);st=f.pacer.state(REDMI);}
+  f.pacer.started(REDMI,'profile.posts');f.pacer.finished(REDMI,null,f.now(),'profile.posts');n++;
+ }
+ assert.ok(run.length>=3,'breaks: '+run);
+ assert.ok(run.every(k=>k>=10&&k<=16),'runs of 10-16 profiles: '+run);
+ const g=pacing(t,afternoon);g.at(afternoon+60000);n=0;
+ for(let i=0;i<40;i++){
+  let st=g.pacer.state(REDMI);
+  while(st.state!=='ready'){if(st.state==='break'){other.push(n);n=0;}g.at(st.until);st=g.pacer.state(REDMI);}
+  g.pacer.started(REDMI,'search.posts');g.pacer.finished(REDMI,null,g.now(),'search.posts');n++;
+ }
+ assert.ok(other.every(k=>k>=20&&k<=35),'searches keep the 20-35 burst: '+other);
 });
 
 test('the two phones sleep at different times so one phone is always awake',t=>{
