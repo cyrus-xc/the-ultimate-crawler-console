@@ -106,10 +106,10 @@ class Pacer {
    update.burst_left=Math.round(this.between(settings.burst));
   }
   const run=this.runFor(id,op);
-  if(run&&row.run_op===op&&row.run_left!==null&&row.run_left<=0){
-   update.break_until=Math.max(update.break_until,Math.round(now+this.between(run.break_s)*1000));
-   this.store.db.prepare('UPDATE device_pacing SET run_left=NULL WHERE device_id=?').run(id);
-  }
+  const runEnded=run&&row.run_op===op&&row.run_left!==null&&row.run_left<=0;
+  if(runEnded)update.break_until=Math.max(update.break_until,Math.round(now+this.between(run.break_s)*1000));
+  // Any break, from a run or the general burst, starts the next run afresh.
+  if(update.break_until>now&&update.break_until!==row.break_until)this.store.db.prepare('UPDATE device_pacing SET run_left=NULL WHERE device_id=?').run(id);
   this.store.db.prepare('UPDATE device_pacing SET next_at=?,burst_left=?,break_until=? WHERE device_id=?').run(update.next_at,update.burst_left,update.break_until,id);
   if(code&&this.brakeCodes.has(code))this.brake(id,code,row,now);
  }
