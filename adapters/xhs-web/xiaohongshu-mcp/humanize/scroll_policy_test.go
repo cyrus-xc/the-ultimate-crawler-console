@@ -8,17 +8,17 @@ import (
 
 func TestScrollPauseRangeAndVariation(t *testing.T) {
 	d := DefaultProvider{}.Timing()[BetweenScroll]
-	if !d.Uniform || d.Min != 0 || d.Max != 2*time.Second {
+	if !d.Uniform || d.Min != 600*time.Millisecond || d.Max != 2400*time.Millisecond {
 		t.Fatalf("unexpected scroll policy: %+v", d)
 	}
 	low, high := false, false
 	for i := 0; i < 10000; i++ {
 		pause := d.Sample()
-		if pause < 0 || pause > 2*time.Second {
+		if pause < 600*time.Millisecond || pause > 2400*time.Millisecond {
 			t.Fatalf("pause out of range: %s", pause)
 		}
-		low = low || pause < 500*time.Millisecond
-		high = high || pause > 1500*time.Millisecond
+		low = low || pause < 1000*time.Millisecond
+		high = high || pause > 2000*time.Millisecond
 	}
 	if !low || !high {
 		t.Fatal("scroll pause lacks variation across the requested range")

@@ -64,7 +64,7 @@ func (DefaultProvider) Timing() TimingProfile {
 		AfterClick:    {Mu: -0.92, Sigma: 0.35, Min: 150 * time.Millisecond, Max: 2 * time.Second},
 		AfterType:     {Mu: -0.51, Sigma: 0.40, Min: 200 * time.Millisecond, Max: 3 * time.Second},
 		AfterNavigate: {Mu: 0.41, Sigma: 0.45, Min: 600 * time.Millisecond, Max: 6 * time.Second},
-		BetweenScroll: {Min: 0, Max: 2 * time.Second, Uniform: true},
+		BetweenScroll: {Min: 600 * time.Millisecond, Max: 2400 * time.Millisecond, Uniform: true},
 		BeforeSubmit:  {Mu: 0.0, Sigma: 0.40, Min: 400 * time.Millisecond, Max: 4 * time.Second},
 		BeforeClick:   {Mu: -1.61, Sigma: 0.45, Min: 80 * time.Millisecond, Max: 1 * time.Second},
 		Reading:       {Mu: -0.36, Sigma: 0.40, Min: 300 * time.Millisecond, Max: 3 * time.Second},
@@ -84,7 +84,7 @@ func ScrollPolicy() map[string]any {
 	if d.Uniform {
 		distribution = "uniform"
 	}
-	return map[string]any{"version": "scroll_pause_v2", "min_ms": d.Min.Milliseconds(), "max_ms": d.Max.Milliseconds(), "distribution": distribution}
+	return map[string]any{"version": "scroll_pause_v3", "min_ms": d.Min.Milliseconds(), "max_ms": d.Max.Milliseconds(), "distribution": distribution}
 }
 
 func SetProvider(p Provider) {

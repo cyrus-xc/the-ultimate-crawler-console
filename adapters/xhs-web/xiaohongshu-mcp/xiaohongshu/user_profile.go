@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/xiaohongshu-mcp/humanize"
 )
 
@@ -54,6 +55,14 @@ func (u *UserProfileAction) UserProfile(ctx context.Context, userID, xsecToken s
 
 	// 顶层文档导航单独定上限：平台偶发把导航挂住（页面停在旧内容、不再发请求），
 	// 不做限制会吃掉整个 read 预算。卡住时快速失败，让上层回退。
+	if method := ""; tab == TabNotes {
+		method = moveToProfile(ctx, page, userID, xsecToken)
+		if method != "" {
+			logrus.Infof("[navigation] profile via %s", method)
+			return u.extractUserProfileData(ctx, page, tab)
+		}
+	}
+	logrus.Infof("[navigation] profile via url")
 	navCtx, navCancel := context.WithTimeout(ctx, navTimeout)
 	navErr := page.Context(navCtx).Navigate(makeUserProfileURL(userID, xsecToken, tab))
 	navCancel()

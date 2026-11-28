@@ -209,3 +209,15 @@ test('manual start runs an already queued phone despite its prior XHS fault',asy
  assert.equal(warmup.latest(phone).state,'failed');
  assert.equal(warmup.latest(phone).error,'XHS_ACCESS_RESTRICTED');
 });
+
+test('an account held for a person check is never warmed up, even by a manual start',t=>{
+ const {store,warmup,advance}=fixture(t);
+ store.db.prepare('UPDATE devices SET faults=? WHERE id=?').run(JSON.stringify({xiaohongshu:'XHS_ACCOUNT_RESTRICTED'}),phone);
+ advance(4*HOUR);
+ warmup.tick();
+ assert.throws(()=>warmup.change(phone,true),{code:'WARMUP_ACCOUNT_HELD'});
+ warmup.store.db.prepare("UPDATE phone_warmup SET manual=1,state='queued' WHERE device_id=?").run(phone);
+ warmup.tick();
+ assert.equal(warmup.active.has(phone),false);
+ assert.equal(warmup.change(phone,false).state,'stopped');
+});

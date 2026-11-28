@@ -6,6 +6,9 @@ const MIN=60000, HOUR=60*MIN, DAY=24*HOUR, OFFSET=8*HOUR;
 const localDay=now=>Math.floor((now+OFFSET)/DAY)*DAY-OFFSET;
 const OWNER='local:phone-warmup';
 const accountFaults=new Set(['ACCOUNT_REQUIRED','LOGIN_REQUIRED','VERIFICATION_REQUIRED','XHS_ACCESS_RESTRICTED']);
+// An account held for a person to check (restriction screen) is released only
+// by an operator resume, never by starting warm-up.
+const heldFaults=new Set(['XHS_ACCOUNT_RESTRICTED']);
 const readyStates=new Set(['queued','running','paused']);
 const warmupFault=code=>problem(code,409);
 
@@ -29,7 +32,7 @@ class PhoneWarmup {
   store.db.prepare("UPDATE phone_warmup SET state='paused' WHERE state='running'").run();
  }
  eligible(device){return device?.kind==='android'&&device.capabilities.some(c=>c.platform==='xiaohongshu');}
- available(device,row){return device.health==='ready'&&!device.quarantined&&(row.manual||!device.faults.xiaohongshu);}
+ available(device,row){return device.health==='ready'&&!device.quarantined&&!heldFaults.has(device.faults.xiaohongshu)&&(row.manual||!device.faults.xiaohongshu);}
  plan(deviceId,day){
   if(this.store.db.prepare("SELECT 1 FROM phone_warmup WHERE device_id=? AND day=?").get(deviceId,day))return;
   if(!this.sessions){
@@ -71,6 +74,7 @@ class PhoneWarmup {
  change(id,enable){
   const device=this.store.devices().find(d=>d.id===id);
   if(!this.eligible(device))throw problem('WARMUP_PHONE_REQUIRED',404);
+  if(enable&&heldFaults.has(device.faults.xiaohongshu))throw warmupFault('WARMUP_ACCOUNT_HELD');
   if(enable&&this.active.get(id)?.controller.signal.aborted)throw warmupFault('WARMUP_STOPPING');
   const now=this.now(), day=localDay(now);
   this.store.tx(()=>{

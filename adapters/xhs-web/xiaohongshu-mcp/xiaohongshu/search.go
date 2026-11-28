@@ -105,14 +105,19 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 	// 图片和长连接，load 被拖住时 Navigate 先超时（超时还会取消它自己绑的
 	// page ctx，后续 Eval 全是 context canceled）。这里只触发跳转，就绪与否
 	// 交给证据探针判断，load 慢不慢与结果数据无关。
-	if _, err := page.Eval(`(u) => { location.href = u }`, makeSearchURL(keyword)); err != nil {
-		return nil, err
-	}
-	readyCtx, readyCancel := context.WithTimeout(ctx, navTimeout)
-	readyErr := waitEvidenceReady(readyCtx, page, searchReadyJS)
-	readyCancel()
-	if readyErr != nil {
-		return nil, fmt.Errorf("SEARCH_STATE_UNAVAILABLE: %w", readyErr)
+	if typeSearch(ctx, page, keyword) {
+		logrus.Infof("[navigation] search via box")
+	} else {
+		logrus.Infof("[navigation] search via url")
+		if _, err := page.Eval(`(u) => { location.href = u }`, makeSearchURL(keyword)); err != nil {
+			return nil, err
+		}
+		readyCtx, readyCancel := context.WithTimeout(ctx, navTimeout)
+		readyErr := waitEvidenceReady(readyCtx, page, searchReadyJS)
+		readyCancel()
+		if readyErr != nil {
+			return nil, fmt.Errorf("SEARCH_STATE_UNAVAILABLE: %w", readyErr)
+		}
 	}
 	humanize.Delay(ctx, humanize.AfterNavigate)
 
