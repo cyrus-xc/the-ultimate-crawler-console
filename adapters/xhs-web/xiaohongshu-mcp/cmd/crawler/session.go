@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/xiaohongshu-mcp/crawler"
 	"github.com/xpzouying/xiaohongshu-mcp/xiaohongshu"
@@ -174,6 +175,69 @@ func serveSession() int {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+	})
+	// Human-activity routes run only when no read is active, one at a time.
+	activity := func(route string, limit time.Duration, run func(ctx context.Context, dec *json.Decoder) (any, error)) {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			if !authorized(w, r) {
+				return
+			}
+			if r.Method != "POST" {
+				http.Error(w, "method", 405)
+				return
+			}
+			enc := json.NewEncoder(w)
+			if strings.ToLower(os.Getenv("ENABLE_XHS_BROWSER_NETWORK")) != "true" {
+				_ = enc.Encode(map[string]any{"success": false, "error": "CRAWLER_NETWORK_DISABLED"})
+				return
+			}
+			mu.Lock()
+			if active > 0 || closing {
+				mu.Unlock()
+				http.Error(w, "collector busy", 409)
+				return
+			}
+			active++
+			mu.Unlock()
+			defer func() { mu.Lock(); active--; last = time.Now(); mu.Unlock() }()
+			runCtx, cancel := context.WithTimeout(r.Context(), limit)
+			defer cancel()
+			stop := context.AfterFunc(ctx, cancel)
+			defer stop()
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
+			dec.DisallowUnknownFields()
+			data, err := run(runCtx, dec)
+			if err != nil {
+				_ = enc.Encode(map[string]any{"success": false, "error": xiaohongshu.ActivityError(err)})
+				return
+			}
+			_ = enc.Encode(map[string]any{"success": true, "data": data})
+		})
+	}
+	activity("/browse", 16*time.Minute, func(c context.Context, dec *json.Decoder) (any, error) {
+		var req crawler.BrowseRequest
+		if dec.Decode(&req) != nil {
+			return nil, errors.New("INVALID_BROWSE")
+		}
+		return engine.Browse(c, req)
+	})
+	activity("/follow", 3*time.Minute, func(c context.Context, dec *json.Decoder) (any, error) {
+		var req crawler.FollowRequest
+		if dec.Decode(&req) != nil {
+			return nil, errors.New("INVALID_USER_ID")
+		}
+		state, err := engine.Follow(c, req)
+		return map[string]any{"state": state}, err
+	})
+	activity("/publish", 8*time.Minute, func(c context.Context, dec *json.Decoder) (any, error) {
+		var req crawler.PublishRequest
+		if dec.Decode(&req) != nil {
+			return nil, errors.New("INVALID_PUBLISH")
+		}
+		if err := req.Validate(os.Getenv("XHS_PUBLISH_ROOT")); err != nil {
+			return nil, err
+		}
+		return map[string]any{"published": true}, engine.Publish(c, req)
 	})
 	mux.HandleFunc("/read", func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r) {
