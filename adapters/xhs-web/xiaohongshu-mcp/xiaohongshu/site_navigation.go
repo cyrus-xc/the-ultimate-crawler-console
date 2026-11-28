@@ -72,8 +72,19 @@ const profileLinkJS = `(uid) => [...document.querySelectorAll('a[href*="/user/pr
  return r.width>4&&r.height>4&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth;
 })||null`
 
-const routerProfileJS = `async (uid,tok) => {
- let router=document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$router;
+// The site's Vue router, wherever the app is mounted.
+const findRouterJS = `const findRouter=()=>{
+ const fromApp=e=>e?.__vue_app__?.config?.globalProperties?.$router;
+ let r=fromApp(document.querySelector('#app'));if(r)return r;
+ for(const e of document.querySelectorAll('#app,#app>*,section.note-item,#global')){
+  for(let c=e.__vueParentComponent;c;c=c.parent){r=c.appContext?.config?.globalProperties?.$router;if(r)return r;}
+ }
+ for(const e of document.querySelectorAll('body *')){r=fromApp(e);if(r)return r;}
+ return null;
+};`
+
+const routerProfileJS = `async (uid,tok) => {` + findRouterJS + `
+ const router=findRouter();
  if(!router?.push)return 'unavailable';
  const query=tok?{xsec_token:tok,xsec_source:'pc_note'}:{};
  await router.push({path:'/user/profile/'+uid,query});
@@ -139,8 +150,18 @@ func moveToProfile(ctx context.Context, page *rod.Page, uid, token string) strin
 }
 
 func onSiteSPA(ctx context.Context, page *rod.Page) bool {
-	r, err := page.Context(ctx).Timeout(2 * time.Second).Eval(`() => location.hostname==='www.xiaohongshu.com'&&!!document.querySelector('#app')?.__vue_app__`)
-	return err == nil && r.Value.Bool()
+	r, err := page.Context(ctx).Timeout(2*time.Second).Eval(`() => {` + findRouterJS + `
+	 return location.hostname+'|'+location.pathname.split('/')[1]+'|'+(findRouter()?'router':'none');}`)
+	if err != nil {
+		logrus.Infof("[navigation] spa check failed: %v", err)
+		return false
+	}
+	state := r.Value.Str()
+	if !strings.HasPrefix(state, "www.xiaohongshu.com|") || !strings.HasSuffix(state, "|router") {
+		logrus.Infof("[navigation] no site router: %s", state)
+		return false
+	}
+	return true
 }
 
 // waitScript polls script(args...) until it returns true, the page shows an
